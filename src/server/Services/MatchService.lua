@@ -1,8 +1,9 @@
 -- The survival-games loop:
---   Waiting -> Voting (pick the next map in the lobby) -> Loading (the island is built)
---   -> Countdown on pedestals -> Grace period (no PvP, go loot!)
---   -> Battle (chest refill, mana storm closes in) -> Ended (winner) -> back to the lobby.
--- While in the lobby, players practise in the Spell Lab (see PracticeService).
+--   Waiting (nobody queued) -> Voting (queued players pick the next map in the library)
+--   -> Loading (the island is built) -> Countdown on pedestals -> Grace period (a short breather)
+--   -> Battle (chest refill, mana storm closes in) -> Ended (winner) -> back to the library.
+-- Players spawn in the hub and only join matches through the queue (see QueueService). Outside a
+-- match they practise in the Spell Lab (see PracticeService).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -24,6 +25,7 @@ local ClassService = require(script.Parent.ClassService)
 local DataService = require(script.Parent.DataService)
 local BotService = require(script.Parent.BotService)
 local VoteService = require(script.Parent.VoteService)
+local QueueService = require(script.Parent.QueueService)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -47,13 +49,9 @@ end
 -- Characters
 ---------------------------------------------------------------------------
 
-local function lobbyCFrame(): CFrame
-	local base = MapService.lobbySpawn
-	return base * CFrame.new(rng:NextNumber(-12, 12), 0, rng:NextNumber(-8, 8))
-end
-
 local function setPlayerFlags(c: Combatant)
 	if c.player then
+		c.player:SetAttribute("Queued", c.queued)
 		c.player:SetAttribute("InMatch", c.inMatch)
 		c.player:SetAttribute("Alive", c.alive and c.inMatch)
 		c.player:SetAttribute("Practice", c.practice)
@@ -131,10 +129,11 @@ local function spawnPlayer(player: Player, cframe: CFrame?)
 		if c.model ~= character then
 			watchCharacter(c, character)
 		end
-		character:PivotTo(cframe or lobbyCFrame())
+		character:PivotTo(cframe or QueueService.restCFrame(c))
 	end
 end
 
+-- Respawns a player where they belong outside a match (library if queued, otherwise the hub).
 local function sendToLobby(c: Combatant)
 	if c.player then
 		task.spawn(spawnPlayer, c.player, nil)
@@ -193,19 +192,27 @@ end
 -- Match phases
 ---------------------------------------------------------------------------
 
-local function lobbyPlayers(): { Player }
-	local list = {}
+-- Banners for everyone following the match (fighters + the library), and a toast for the hub.
+local function announceMatch(data: { [string]: any })
 	for _, player in Players:GetPlayers() do
 		local c = Combatants.forPlayer(player)
-		if c and not c.inMatch and player.Character then
-			table.insert(list, player)
+		if c and (c.queued or c.inMatch) then
+			FX.announceTo(player, "Banner", data)
 		end
 	end
-	return list
+end
+
+local function announceHub(text: string)
+	for _, player in Players:GetPlayers() do
+		local c = Combatants.forPlayer(player)
+		if c and not c.queued and not c.inMatch then
+			FX.announceTo(player, "Toast", { text = text })
+		end
+	end
 end
 
 local function canStart(): boolean
-	local n = #lobbyPlayers()
+	local n = #QueueService.waiting()
 	if Config.Bots.Enabled then
 		return n >= math.max(1, Config.Bots.MinRealPlayers)
 	end
@@ -283,6 +290,14 @@ local function cleanupMatch()
 			sendToLobby(c)
 		end
 	end
+	if not Config.Queue.StayQueuedAfterMatch then
+		for _, c in participants do
+			if c.player and c.player.Parent then
+				QueueService.leave(c.player)
+				setPlayerFlags(c)
+			end
+		end
+	end
 	table.clear(participants)
 	GameState.stormRadius = 1e5
 	GameState.setPublic("StormActive", false)
@@ -291,17 +306,29 @@ local function cleanupMatch()
 end
 
 local function runMatch()
-	-- Voting: everyone in the lobby picks the next map while practising
+	-- Voting: queued players pick the next map in the library; anyone in the hub can still join
 	local closesAt = now() + M.VoteTime
 	VoteService.begin(rng, closesAt, lastMapId)
 	GameState.setPhase("Voting", closesAt)
-	FX.announce(
-		"Banner",
-		{ title = "Vote for the next map!", subtitle = "Pick your class and practise in the Spell Lab" }
-	)
-	local completed = waitPhase(M.VoteTime, function()
-		return not canStart()
-	end)
+	announceMatch({ title = "Vote for the next map!", subtitle = "Pick your class and practise while you wait" })
+	announceHub("⚔ A match is starting in " .. M.VoteTime .. "s! Walk through the portal to join")
+	local completed, shortened = true, false
+	while now() < closesAt do
+		if not canStart() then
+			completed = false
+			break
+		end
+		-- every pedestal is spoken for: no need to wait for more players
+		local fast = Config.Queue.FullQueueVoteTime
+		if not shortened and #QueueService.waiting() >= M.MaxParticipants and closesAt - now() > fast then
+			shortened = true
+			closesAt = now() + fast
+			GameState.setPhase("Voting", closesAt)
+			VoteService.setEndsAt(closesAt)
+			announceMatch({ title = "The queue is full!", subtitle = "Voting closes in " .. fast .. " seconds" })
+		end
+		task.wait(0.25)
+	end
 	local def = VoteService.finish(rng)
 	if not completed then
 		return
@@ -310,7 +337,7 @@ local function runMatch()
 	-- Loading: build the winning island
 	GameState.setPhase("Loading", 0)
 	GameState.setPublic("NextMapName", def.name)
-	FX.announce("Banner", { title = def.icon .. "  " .. def.name, subtitle = "won the vote! Building the island..." })
+	announceMatch({ title = def.icon .. "  " .. def.name, subtitle = "won the vote! Building the island..." })
 	ChestService.clear()
 	local generated, err = pcall(MapService.generate, rng:NextInteger(1, 1e9), def)
 	if not generated then
@@ -323,16 +350,16 @@ local function runMatch()
 		return
 	end
 
-	-- Pick participants: everyone in the lobby, then bots to fill
+	-- Pick participants: the queue in order (anyone beyond 24 waits for the next round), then bots
 	local pedestals = shuffle(table.clone(arena.pedestals))
-	local players = shuffle(lobbyPlayers())
 	participants = {}
-	for i, player in players do
+	for i, player in QueueService.waiting() do
 		if i > #pedestals then
 			break
 		end
 		local c = Combatants.forPlayer(player)
 		if c then
+			QueueService.backOfLine(c)
 			table.insert(participants, c)
 		end
 	end
@@ -354,8 +381,9 @@ local function runMatch()
 	end
 	initialCount = #participants
 
-	-- Place everyone on a pedestal with a fresh inventory and their class kit
-	for i, c in participants do
+	-- Place everyone on a pedestal with a fresh inventory and their class kit. (Flags first:
+	-- spawning yields, and being in the match stops anyone picked from leaving the queue meanwhile.)
+	for _, c in participants do
 		c.practice = false
 		c.inMatch = true
 		c.alive = true
@@ -364,6 +392,8 @@ local function runMatch()
 		c.status = {}
 		c.locked = true
 		InventoryService.reset(c)
+	end
+	for i, c in participants do
 		if c.player then
 			spawnPlayer(c.player, pedestals[i])
 		end
@@ -391,7 +421,8 @@ local function runMatch()
 	publishAlive()
 
 	GameState.setPhase("Countdown", now() + M.PedestalCountdown)
-	FX.announce("Banner", { title = "Get ready...", subtitle = "Loot the cornucopia or run for the woods!" })
+	announceMatch({ title = "Get ready...", subtitle = "Loot the cornucopia or run for the woods!" })
+	announceHub("⚔ A match just started on " .. def.name .. ". Join the queue to play the next one")
 	waitPhase(M.PedestalCountdown)
 
 	for _, c in participants do
@@ -402,7 +433,7 @@ local function runMatch()
 	GameState.matchStartedAt = start
 	GameState.setPublic("MatchStartedAt", start)
 	GameState.setPhase("Grace", start + M.GracePeriod)
-	FX.announce("Banner", { title = "GO!", subtitle = "Grace period: no PvP for " .. M.GracePeriod .. " seconds" })
+	announceMatch({ title = "GO!", subtitle = "Grace period: no PvP for " .. M.GracePeriod .. " seconds" })
 	FX.all("Gong")
 
 	local refilled = false
@@ -420,20 +451,20 @@ local function runMatch()
 
 		if GameState.phase == "Grace" and elapsed >= M.GracePeriod then
 			GameState.setPhase("Battle", 0)
-			FX.announce("Banner", { title = "Grace period over", subtitle = "Spells now hurt other mages. Good luck." })
+			announceMatch({ title = "Grace period over", subtitle = "Spells now hurt other mages. Good luck." })
 		end
 
 		if not refilled and elapsed >= M.ChestRefillAt then
 			refilled = true
 			ChestService.refill()
-			FX.announce("Banner", { title = "Chests refilled!", subtitle = "Fresh loot in every chest" })
+			announceMatch({ title = "Chests refilled!", subtitle = "Fresh loot in every chest" })
 		end
 
 		if elapsed >= M.StormStartAt then
 			if not stormAnnounced then
 				stormAnnounced = true
 				GameState.setPublic("StormActive", true)
-				FX.announce("Banner", { title = "The Mana Storm is closing in", subtitle = "Stay inside the circle" })
+				announceMatch({ title = "The Mana Storm is closing in", subtitle = "Stay inside the circle" })
 			end
 			local alpha = math.clamp((elapsed - M.StormStartAt) / shrinkTime, 0, 1)
 			local radius = startRadius + (M.StormFinalRadius - startRadius) * alpha
@@ -444,7 +475,7 @@ local function runMatch()
 				dps *= 4
 				if not suddenDeath then
 					suddenDeath = true
-					FX.announce("Banner", { title = "Sudden death", subtitle = "The storm burns four times as hot" })
+					announceMatch({ title = "Sudden death", subtitle = "The storm burns four times as hot" })
 				end
 			end
 			stormAcc += dt
@@ -554,7 +585,7 @@ function MatchService.init()
 		task.spawn(onPlayerAdded, player)
 	end
 
-	-- Lobby safety net: anyone not fighting who falls out of the sky lobby is put back.
+	-- Safety net: anyone not fighting who falls off the hub or the library is put back.
 	task.spawn(function()
 		while true do
 			task.wait(1)
@@ -564,7 +595,7 @@ function MatchService.init()
 				local character = player.Character
 				local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 				if c and not c.inMatch and root and root.Position.Y < floor then
-					(character :: Model):PivotTo(lobbyCFrame())
+					(character :: Model):PivotTo(QueueService.restCFrame(c))
 				end
 			end
 		end

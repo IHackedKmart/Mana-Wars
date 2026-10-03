@@ -54,12 +54,22 @@ function State.inMatch(): boolean
 	return player:GetAttribute("InMatch") == true
 end
 
--- In the lobby Spell Lab (practising on dummies between matches).
+-- Joined the game: waiting in the library for the next match (or fighting in one).
+function State.queued(): boolean
+	return player:GetAttribute("Queued") == true
+end
+
+-- Hanging out in the hub (Arcanum Plaza): not queued and not in a match.
+function State.inHub(): boolean
+	return not State.queued() and not State.inMatch()
+end
+
+-- In the Spell Lab (practising on dummies in the hub or the library, outside a match).
 function State.practice(): boolean
 	return player:GetAttribute("Practice") == true and not State.alive()
 end
 
--- Can cast, open the spellbook and drink potions: alive in a match, or practising in the lobby.
+-- Can cast, open the spellbook and drink potions: alive in a match, or practising outside one.
 function State.canAct(): boolean
 	if not (State.alive() or State.practice()) then
 		return false

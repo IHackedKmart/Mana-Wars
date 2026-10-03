@@ -29,6 +29,7 @@ local FUNCTIONS = {
 	"ChestAction", -- (action: string, chestId: string, index: number?) -> (ok, message)
 	"ClassAction", -- (action: string, classId: string?) -> (ok, message)
 	"VoteAction", -- (action: "Vote", mapId: string) -> (ok, message)
+	"QueueAction", -- (action: "Join" | "Leave") -> (ok, message)
 }
 
 local folder: Folder

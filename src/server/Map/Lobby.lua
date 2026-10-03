@@ -3,11 +3,14 @@
 --   * a glass "scrying window" in the floor looking down at the arena below
 --   * Grimoire lecterns (open the encyclopedia) and a class altar (open the class picker)
 --   * through the north arch: the open-air Practice Terrace with training dummies
+--   * a portal on the south wall back to the hub (Arcanum Plaza) for players leaving the queue
+-- Players are only here once they've joined the queue for the next match.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Build = require(script.Parent.Build)
+local Props = require(script.Parent.Props)
 
 local Lobby = {}
 
@@ -18,6 +21,7 @@ export type LobbyInfo = {
 	spawn: CFrame,
 	dummySpots: { CFrame },
 	floorY: number,
+	exitPortal: BasePart, -- back to the hub
 }
 
 -- Library footprint
@@ -27,47 +31,23 @@ local WALL_H = 44
 local WALL_T = 4
 local HOLE = 28 -- scrying window
 local SKYLIGHT = 40
+local EXIT_X = 45 -- the portal back to the hub, between two south-wall columns
 local ARCH_HALF = 14
 local ARCH_H = 26
 -- Terrace footprint (north of the library)
 local TX0, TX1 = -60, 60
 local TZ0 = -150
 
-local BOOK_COLORS = {
-	Color3.fromRGB(140, 30, 40),
-	Color3.fromRGB(40, 70, 140),
-	Color3.fromRGB(40, 110, 60),
-	Color3.fromRGB(120, 80, 30),
-	Color3.fromRGB(90, 40, 120),
-	Color3.fromRGB(170, 140, 60),
-	Color3.fromRGB(60, 60, 70),
-	Color3.fromRGB(150, 70, 40),
-}
-local WOOD = Color3.fromRGB(92, 62, 40)
-local DARK_WOOD = Color3.fromRGB(62, 42, 30)
-local STONE = Color3.fromRGB(104, 94, 108)
-local MARBLE = Color3.fromRGB(226, 220, 210)
-local GOLD = Color3.fromRGB(212, 175, 55)
-local ARCANE = Color3.fromRGB(165, 115, 255)
-local CANDLE = Color3.fromRGB(255, 200, 120)
+local BOOK_COLORS = Props.BOOK_COLORS
+local WOOD = Props.WOOD
+local DARK_WOOD = Props.DARK_WOOD
+local STONE = Props.STONE
+local MARBLE = Props.MARBLE
+local GOLD = Props.GOLD
+local ARCANE = Props.ARCANE
+local CANDLE = Props.CANDLE
 
-local function part(
-	parent: Instance,
-	name: string,
-	size: Vector3,
-	cf: CFrame,
-	material: Enum.Material,
-	color: Color3,
-	extra: { [string]: any }?
-): Part
-	local props: { [string]: any } = { Name = name, Size = size, CFrame = cf, Material = material, Color = color }
-	if extra then
-		for k, v in extra do
-			props[k] = v
-		end
-	end
-	return Build.part(props, parent)
-end
+local part = Props.part
 
 -- A slab with a rectangular hole in the middle, built from four pieces.
 local function holedSlab(
@@ -327,44 +307,6 @@ local function floatingBooks(animated: Instance, center: Vector3, rng: Random)
 	end
 end
 
-local function lectern(parent: Instance, pos: Vector3, facing: Vector3)
-	local model = Build.model("Lectern", parent)
-	local cf = CFrame.lookAt(pos, pos + facing)
-	part(model, "Stand", Vector3.new(1.4, 3.6, 1.4), cf * CFrame.new(0, 1.8, 0), M.WoodPlanks, WOOD)
-	part(model, "Foot", Vector3.new(3, 0.4, 3), cf * CFrame.new(0, 0.2, 0), M.WoodPlanks, DARK_WOOD)
-	local desk = part(
-		model,
-		"Desk",
-		Vector3.new(3.2, 0.3, 2.4),
-		cf * CFrame.new(0, 3.8, 0) * CFrame.Angles(math.rad(-20), 0, 0),
-		M.WoodPlanks,
-		WOOD
-	)
-	for side = -1, 1, 2 do
-		part(
-			model,
-			"Page",
-			Vector3.new(1.35, 0.12, 1.8),
-			desk.CFrame * CFrame.new(side * 0.72, 0.22, 0) * CFrame.Angles(0, 0, math.rad(side * -6)),
-			M.SmoothPlastic,
-			Color3.fromRGB(248, 240, 220)
-		)
-	end
-	local glow = part(model, "Glow", Vector3.new(0.5, 0.5, 0.5), desk.CFrame * CFrame.new(0, 1.2, 0), M.Neon, ARCANE, {
-		Shape = Enum.PartType.Ball,
-		CanCollide = false,
-	})
-	Build.make("PointLight", { Color = ARCANE, Range = 10, Brightness = 1.5 }, glow)
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Read"
-	prompt.ObjectText = "The Grimoire"
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 9
-	prompt.RequiresLineOfSight = false
-	prompt:SetAttribute("LobbyAction", "Grimoire")
-	prompt.Parent = desk
-end
-
 local function readingTable(parent: Instance, center: Vector3, rng: Random)
 	local model = Build.model("ReadingTable", parent)
 	part(model, "Top", Vector3.new(18, 0.8, 6), CFrame.new(center + Vector3.new(0, 3.2, 0)), M.WoodPlanks, WOOD)
@@ -420,29 +362,6 @@ local function readingTable(parent: Instance, center: Vector3, rng: Random)
 		{ CanCollide = false }
 	)
 	Build.make("PointLight", { Color = CANDLE, Range = 14, Brightness = 1.2 }, flame)
-end
-
-local function sign(parent: Instance, cf: CFrame, size: Vector2, title: string, subtitle: string)
-	local board = part(parent, "Sign", Vector3.new(size.X, size.Y, 0.6), cf, M.WoodPlanks, DARK_WOOD)
-	part(parent, "SignTrim", Vector3.new(size.X + 1, size.Y + 1, 0.4), cf * CFrame.new(0, 0, 0.3), M.Metal, GOLD)
-	local gui = Build.make("SurfaceGui", { Face = Enum.NormalId.Front, PixelsPerStud = 20, LightInfluence = 0 }, board)
-	Build.make("TextLabel", {
-		Size = UDim2.fromScale(1, 0.62),
-		BackgroundTransparency = 1,
-		Text = title,
-		Font = Enum.Font.Fantasy,
-		TextScaled = true,
-		TextColor3 = Color3.fromRGB(230, 205, 255),
-	}, gui)
-	Build.make("TextLabel", {
-		Size = UDim2.fromScale(1, 0.32),
-		Position = UDim2.fromScale(0, 0.64),
-		BackgroundTransparency = 1,
-		Text = subtitle,
-		Font = Enum.Font.GothamBold,
-		TextScaled = true,
-		TextColor3 = Color3.fromRGB(255, 220, 140),
-	}, gui)
 end
 
 function Lobby.build(): LobbyInfo
@@ -591,7 +510,15 @@ function Lobby.build(): LobbyInfo
 	-- south and north walls (shelves face into the room)
 	for x = X0 + 10, X1 - 10, SHELF_W + 1 do
 		if not nearColumn(x, columnsX) then
-			bookshelf(model, CFrame.lookAt(Vector3.new(x, y, Z1 - 1.4), Vector3.new(x, y, 0)), SHELF_W, SHELF_H, rng)
+			if math.abs(x - EXIT_X) > 10 then
+				bookshelf(
+					model,
+					CFrame.lookAt(Vector3.new(x, y, Z1 - 1.4), Vector3.new(x, y, 0)),
+					SHELF_W,
+					SHELF_H,
+					rng
+				)
+			end
 			if math.abs(x) > ARCH_HALF + 6 then
 				bookshelf(
 					model,
@@ -629,53 +556,36 @@ function Lobby.build(): LobbyInfo
 	for i = 1, 4 do
 		local a = (i / 4) * math.pi * 2 + math.pi / 4
 		local p = Vector3.new(math.cos(a) * 25, y, math.sin(a) * 25)
-		lectern(model, p, Vector3.new(-p.X, 0, -p.Z))
+		Props.lectern(model, p, Vector3.new(-p.X, 0, -p.Z))
 	end
 
 	local animated = orrery(model, Vector3.new(0, y + 21, 0))
 	floatingBooks(animated, Vector3.new(0, y + 16, 0), rng)
 
 	-- class altar near the south wall
-	local altarPos = Vector3.new(0, y, 46)
-	Build.cylinder(
-		altarPos + Vector3.new(0, 1.5, 0),
-		7,
-		3,
-		{ Name = "ClassAltar", Material = M.Marble, Color = MARBLE },
-		model
+	Props.classAltar(model, animated, Vector3.new(0, y, 46))
+
+	-- portal back to the hub, set into the south wall
+	local exitPortal = Props.portal(
+		model,
+		CFrame.lookAt(Vector3.new(EXIT_X, y, Z1 - 2.2), Vector3.new(EXIT_X, y, 0)),
+		12,
+		18,
+		Color3.fromRGB(90, 220, 170),
+		"Leave the queue",
+		"Portal to Arcanum Plaza"
 	)
-	Build.cylinder(
-		altarPos + Vector3.new(0, 3.1, 0),
-		7.4,
-		0.3,
-		{ Name = "AltarTrim", Material = M.Metal, Color = GOLD },
-		model
+	exitPortal:SetAttribute("PortalAction", "LeaveQueue")
+	Props.sign(
+		model,
+		CFrame.lookAt(Vector3.new(EXIT_X, y + 26, Z1 - 0.8), Vector3.new(EXIT_X, y + 26, 0)),
+		Vector2.new(20, 5),
+		"ARCANUM PLAZA",
+		"Leave the queue"
 	)
-	local crystal = part(
-		animated,
-		"AltarCrystal",
-		Vector3.new(2.4, 4.5, 2.4),
-		CFrame.new(altarPos + Vector3.new(0, 7, 0)) * CFrame.Angles(0, math.rad(45), 0),
-		M.Neon,
-		Color3.fromRGB(255, 200, 90),
-		{
-			CanCollide = false,
-			Transparency = 0.1,
-		}
-	)
-	crystal:SetAttribute("Spin", 1.2)
-	Build.make("PointLight", { Color = crystal.Color, Range = 22, Brightness = 2 }, crystal)
-	local altarPrompt = Instance.new("ProximityPrompt")
-	altarPrompt.ActionText = "Choose class"
-	altarPrompt.ObjectText = "Class Altar"
-	altarPrompt.HoldDuration = 0
-	altarPrompt.MaxActivationDistance = 10
-	altarPrompt.RequiresLineOfSight = false
-	altarPrompt:SetAttribute("LobbyAction", "ClassPicker")
-	altarPrompt.Parent = model:FindFirstChild("ClassAltar")
 
 	-- (a part's Front face points along -Z, i.e. into the room for the south wall)
-	sign(
+	Props.sign(
 		model,
 		CFrame.new(0, y + 30, Z1 - 0.8),
 		Vector2.new(44, 9),
@@ -685,16 +595,11 @@ function Lobby.build(): LobbyInfo
 
 	-- spawn circle between the window and the altar
 	local spawnPos = Vector3.new(0, y + 0.5, 32)
-	local spawn = Instance.new("SpawnLocation")
-	spawn.Name = "LobbySpawn"
-	spawn.Anchored = true
-	spawn.Size = Vector3.new(10, 1, 10)
-	spawn.CFrame = CFrame.new(spawnPos)
-	spawn.Transparency = 1
-	spawn.CanCollide = false
-	spawn.Neutral = true
-	spawn.Duration = 0
-	spawn.Parent = model
+	part(model, "LobbySpawn", Vector3.new(10, 1, 10), CFrame.new(spawnPos), M.SmoothPlastic, ARCANE, {
+		Transparency = 1,
+		CanCollide = false,
+		CanQuery = false,
+	})
 	Build.cylinder(
 		Vector3.new(0, y + 0.12, 32),
 		10,
@@ -767,7 +672,7 @@ function Lobby.build(): LobbyInfo
 	end
 	-- firing line
 	part(terrace, "FiringLine", Vector3.new(TW - 8, 0.12, 1), CFrame.new(0, y + 0.08, -85), M.Neon, GOLD)
-	sign(
+	Props.sign(
 		terrace,
 		CFrame.new(0, y + 8, TZ0 + 3) * CFrame.Angles(0, math.pi, 0),
 		Vector2.new(30, 7),
@@ -777,32 +682,12 @@ function Lobby.build(): LobbyInfo
 	-- dummy platforms
 	local dummySpots: { CFrame } = {}
 	for i = -2, 2 do
-		local p = Vector3.new(i * 22, y, -132)
-		Build.cylinder(
-			p + Vector3.new(0, 0.3, 0),
-			7,
-			0.6,
-			{ Name = "DummyPad", Material = M.Marble, Color = MARBLE },
-			terrace
-		)
-		Build.cylinder(
-			p + Vector3.new(0, 0.62, 0),
-			6,
-			0.1,
-			{ Name = "DummyRune", Material = M.Neon, Color = Color3.fromRGB(255, 90, 90), CanCollide = false },
-			terrace
-		)
-		table.insert(dummySpots, CFrame.lookAt(p + Vector3.new(0, 0.6, 0), Vector3.new(i * 22, y + 0.6, 0)))
+		table.insert(dummySpots, Props.dummyPad(terrace, Vector3.new(i * 22, y, -132), Vector3.new(i * 22, y, 0)))
 	end
 
 	---------------------------------------------------------------- invisible containment
-	local barrier = { Transparency = 1, CanQuery = false }
 	local function wall(size: Vector3, pos: Vector3)
-		local props = table.clone(barrier)
-		props.Name = "Barrier"
-		props.Size = size
-		props.CFrame = CFrame.new(pos)
-		Build.part(props, terrace)
+		Props.barrier(terrace, size, CFrame.new(pos))
 	end
 	wall(Vector3.new(TW, 90, 2), Vector3.new(0, y + 45, TZ0 - 1))
 	wall(Vector3.new(2, 90, TD), Vector3.new(TX0 - 1, y + 45, tz))
@@ -834,6 +719,7 @@ function Lobby.build(): LobbyInfo
 		spawn = CFrame.new(spawnPos + Vector3.new(0, 3.5, 0)), -- facing north, toward the orrery and the arch
 		dummySpots = dummySpots,
 		floorY = y,
+		exitPortal = exitPortal,
 	}
 end
 

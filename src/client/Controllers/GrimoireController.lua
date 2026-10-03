@@ -1,6 +1,6 @@
 -- The Grimoire: an in-game encyclopedia that explains how to play and how to craft spells,
 -- and lists every spell part, premade spell and class. Open with H, the Grimoire button,
--- or by reading one of the lecterns in the lobby library.
+-- or by reading one of the lecterns in the hub or the library.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -209,14 +209,15 @@ chapter("Welcome", "📖  Welcome", function()
 	)
 	subheading("How a match plays out")
 	para(
-		"<b>1. Vote.</b> In the library lobby, vote for the next map on the right of your screen.\n"
-			.. "<b>2. Pedestals.</b> Everyone is placed around the <b>cornucopia</b>, the ring of chests in the middle. Wait for the gong!\n"
-			.. "<b>3. Grace period.</b> For "
+		"<b>1. Join.</b> Everyone starts in <b>Arcanum Plaza</b>, the hub. Practise as long as you like, then walk through the <b>portal</b> (or press <b>⚔ Join Game</b>) to join the queue.\n"
+			.. "<b>2. Vote.</b> The portal takes you to the library, the <b>Arcane Athenaeum</b>. Vote for the next map on the right of your screen.\n"
+			.. "<b>3. Pedestals.</b> Everyone is placed around the <b>cornucopia</b>, the ring of chests in the middle. Wait for the gong!\n"
+			.. "<b>4. Grace period.</b> For the first "
 			.. Config.Match.GracePeriod
-			.. " seconds nobody can hurt anybody. Rush the cornucopia for great loot, or run for the woods.\n"
-			.. "<b>4. Battle.</b> Spells now hurt. Chests are scattered across the island, and every chest <b>refills</b> halfway through.\n"
-			.. "<b>5. The Mana Storm.</b> A purple wall closes in. Stay inside it or burn.\n"
-			.. "<b>6. Last mage standing wins.</b> Fallen mages drop a satchel with everything they carried."
+			.. " seconds nobody can hurt anybody. Then it's on: fight for the cornucopia's loot, or run for the woods.\n"
+			.. "<b>5. Battle.</b> Spells now hurt. Chests are scattered across the island, and every chest <b>refills</b> halfway through.\n"
+			.. "<b>6. The Mana Storm.</b> A purple wall closes in. Stay inside it or burn.\n"
+			.. "<b>7. Last mage standing wins.</b> Fallen mages drop a satchel with everything they carried. You go back to the library, still in the queue for the next match. Use the library's portal (or <b>Leave queue</b>) to return to the Plaza."
 	)
 	subheading("What's in the chests")
 	para(
@@ -224,7 +225,7 @@ chapter("Welcome", "📖  Welcome", function()
 	)
 	subheading("Practise first!")
 	para(
-		"While you wait, walk through the big arch to the <b>Practice Terrace</b>. In the lobby you get a <b>Spell Lab</b> kit with every spell part, so you can try anything on the training dummies. Nothing you do there carries into the match."
+		"Outside a match you carry a <b>Spell Lab</b> kit with every spell part, so you can try anything on the training dummies: on the <b>Practice Range</b> east of the Plaza (some of its dummies move!), or on the library's <b>Practice Terrace</b> through its north arch. Nothing you do there carries into the match."
 	)
 end)
 
@@ -422,7 +423,7 @@ end)
 chapter("Classes", "🎓  Classes", function()
 	heading("Classes")
 	para(
-		"Your class decides the wand, spells and parts you start each match with. Pick one at the <b>Class Altar</b> in the library. Premium classes unlock with Roblox Premium."
+		"Your class decides the wand, spells and parts you start each match with. Pick one at the <b>Class Altar</b> (in the Plaza's gazebo, or in the library). Premium classes unlock with Roblox Premium."
 	)
 	for _, class in Classes.List do
 		subheading(class.icon .. "  " .. class.name .. (if class.premium then "  (Premium)" else "  (Free)"))
@@ -458,6 +459,7 @@ chapter("Controls", "🎮  Controls", function()
 			.. "<b>Switch wand:</b> 1-4, or Q to cycle (gamepad: L1/R1)\n"
 			.. "<b>Spellbook & Spellforge:</b> B (gamepad: Y)\n"
 			.. "<b>Grimoire:</b> H\n"
+			.. "<b>Join the game:</b> walk through the Plaza's portal, or press ⚔ Join Game\n"
 			.. "<b>Open chests:</b> E (hold).  <b>Take everything:</b> F\n"
 			.. "<b>Potions:</b> "
 			.. table.concat(potions, ",  ")

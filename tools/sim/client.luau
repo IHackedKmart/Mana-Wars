@@ -8,7 +8,8 @@
 	services in one process, connected through fake remotes (tools/sim/mock.luau). It then plays
 	through a match by "clicking" UI buttons: forging a spell in the Spellforge, slotting it into a
 	wand, looting a chest, casting spells with the mouse, voting for a map, picking a class, reading
-	the Grimoire and finishing the Spell Lab tutorial on a training dummy.
+	the Grimoire and finishing the Spell Lab tutorial on a training dummy, and joining / leaving the
+	queue from the hub.
 	Any runtime error or warning on either side fails the run.
 ]]
 
@@ -64,6 +65,7 @@ local server = Mock.realm({
 	RunService = Mock.runService(true),
 	Players = PlayersService,
 	TweenService = Mock.TweenService,
+	Lighting = Instance.new("Lighting"),
 	MarketplaceService = {
 		PromptGamePassPurchaseFinished = Mock.signal(),
 		UserOwnsGamePassAsync = function()
@@ -81,6 +83,7 @@ local InventoryService = server.load("Server/Services/InventoryService")
 local ChestService = server.load("Server/Services/ChestService")
 local CastingService = server.load("Server/Services/CastingService")
 local VoteService = server.load("Server/Services/VoteService")
+local QueueService = server.load("Server/Services/QueueService")
 for _, name in
 	{
 		"StatusService",
@@ -93,6 +96,7 @@ for _, name in
 		"ChestService",
 		"ClassService",
 		"VoteService",
+		"QueueService",
 	}
 do
 	local module = server.load("Server/Services/" .. name)
@@ -400,7 +404,16 @@ checkWarnings("announcements and storm")
 local storm = Mock.workspace:FindFirstChild("ClientStorm")
 check(storm and #storm:GetChildren() > 0, "storm wall segments should exist")
 
--- 8. Back in the lobby: vote for the next map and pick a class at the altar.
+-- 8. Out of the match, in the hub: the vote is for queued players only. Join Game, vote, leave and
+--    rejoin, then pick a class at the altar.
+local function hudText(prefix: string): boolean
+	for _, inst in gui("HUD"):GetDescendants() do
+		if inst.ClassName == "TextLabel" and string.sub(textOf(inst) or "", 1, #prefix) == prefix then
+			return true
+		end
+	end
+	return false
+end
 player:SetAttribute("Alive", false)
 player:SetAttribute("InMatch", false)
 me.inMatch = false
@@ -410,6 +423,19 @@ GameState.setPhase("Voting", Mock.clock.t + 25)
 Mock.step(0.5, true)
 local lobby = gui("Lobby")
 local votePanel = lobby:FindFirstChild("MapVote", true)
+local joinButton = lobby:FindFirstChild("JoinButton", true)
+local leaveButton = lobby:FindFirstChild("LeaveButton", true)
+check(State.inHub(), "a player out of the match and not queued is in the hub")
+check(joinButton and joinButton.Visible and not leaveButton.Visible, "the hub should show Join Game")
+check(string.find(joinButton.Text, "JOIN GAME", 1, true) ~= nil, "join button text")
+check(not votePanel.Visible, "players in the hub should not see the vote")
+check(not VoteService.vote(player, ballot[1].id), "players in the hub can't vote")
+check(hudText("Match starting in"), "the hub HUD should say a match is starting")
+clickNamed(lobby, "JoinButton")
+Mock.step(0.6, true)
+check(me.queued and State.queued(), "Join Game should put the player in the queue")
+check(not joinButton.Visible and leaveButton.Visible, "queued players should see Leave queue")
+check(hudText("Map vote"), "queued players should see the vote timer")
 check(votePanel and votePanel.Visible, "the map vote should be on screen")
 check(#ballot == 3, "three maps on the ballot")
 for _, def in ballot do
@@ -422,6 +448,15 @@ check(VoteService.payload().counts[pick.id] == 1, "clicking a map card should ca
 clickNamed(lobby, "Vote_" .. ballot[1].id)
 local counts = VoteService.payload().counts
 check(counts[ballot[1].id] == 1 and counts[pick.id] == 0, "a second click should move the vote")
+-- leaving the queue withdraws the vote; rejoin and vote again
+clickNamed(lobby, "LeaveButton")
+check(not me.queued and joinButton.Visible and not votePanel.Visible, "Leave queue should go back to the hub")
+check(VoteService.payload().counts[ballot[1].id] == 0, "leaving the queue should withdraw the vote")
+clickNamed(lobby, "JoinButton")
+clickNamed(lobby, "Vote_" .. ballot[1].id)
+check(VoteService.payload().counts[ballot[1].id] == 1, "voting again after rejoining")
+check(#QueueService.waiting() == 1, "one player in the queue")
+root.CFrame = CFrame.new(0, 3, 0) -- (joining moved the character to the library; put it back for the tests below)
 local winner = VoteService.finish(Mock.Random.new(1))
 check(winner.id == ballot[1].id, "the map with the most votes should win")
 Mock.step(0.2, true)
@@ -562,6 +597,41 @@ click(book, "♻ Restock Spell Lab")
 check((me.inventory.parts.Explosive or 0) == 3, "restocking should refill the parts")
 key(Enum.KeyCode.B)
 checkWarnings("tutorial")
+
+-- 12. A full queue is first come, first served: whoever just played goes to the back of the line.
+do
+	local extra = {}
+	for i = 1, 3 do
+		local p = Instance.new("Player")
+		p.Name = "Queuer" .. i
+		p.DisplayName = p.Name
+		p.Character = Instance.new("Model", Mock.workspace)
+		Combatants.create(p.Name, p)
+		table.insert(extra, p)
+	end
+	local everyone = { extra[1], extra[2], extra[3] }
+	local getPlayers = PlayersService.GetPlayers
+	PlayersService.GetPlayers = function()
+		return everyone
+	end
+	-- join in the order 2, 3, 1 (a few seconds apart)
+	for _, i in { 2, 3, 1 } do
+		QueueService.join(extra[i])
+		Mock.step(1, true)
+	end
+	local function order(): string
+		local names = {}
+		for _, p in QueueService.waiting() do
+			table.insert(names, p.Name)
+		end
+		return table.concat(names, ",")
+	end
+	check(order() == "Queuer2,Queuer3,Queuer1", "the queue should keep joining order, got " .. order())
+	QueueService.backOfLine(Combatants.forPlayer(extra[2]))
+	check(order() == "Queuer3,Queuer1,Queuer2", "a player who just got a match goes to the back, got " .. order())
+	PlayersService.GetPlayers = getPlayers
+	checkWarnings("queue order")
+end
 
 if failures > 0 then
 	print(failures .. " failure(s)")

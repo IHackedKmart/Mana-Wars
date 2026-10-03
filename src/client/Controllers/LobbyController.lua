@@ -1,5 +1,6 @@
--- Lobby UI for the Arcane Athenaeum: class selection (premium classes), the map vote,
--- spectating, the lectern/altar prompts, and the animated orrery and floating books.
+-- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
+-- Leave queue, class selection (premium classes), the map vote, spectating, the lectern/altar
+-- prompts, and the animated props (orrery, floating books, the fountain crystal, floating isles).
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -39,6 +40,8 @@ local spectateName: TextLabel
 local spectateButton: TextButton
 local spectating = false
 local spectateIndex = 1
+local joinButton: TextButton
+local leaveButton: TextButton
 local votePanel: Frame
 local voteList: Frame
 local voteTimer: TextLabel
@@ -330,6 +333,50 @@ local function buildSpectate()
 end
 
 ---------------------------------------------------------------------------
+-- Queue: Join Game (in the hub) / Leave queue (in the library)
+---------------------------------------------------------------------------
+
+local queueAction = Remotes.func("QueueAction")
+
+local function queue(action: string)
+	Sounds.play("Click")
+	local ok, success, message = pcall(function()
+		return queueAction:InvokeServer(action)
+	end)
+	if ok and type(message) == "string" then
+		State.toast(message, if success then C.Good else C.Bad)
+	end
+end
+
+local function buildQueue()
+	joinButton = Widgets.button("⚔  JOIN GAME", {
+		size = UDim2.fromOffset(280, 46),
+		position = UDim2.new(0.5, 0, 0, 74),
+		anchor = Vector2.new(0.5, 0),
+		color = Color3.fromRGB(196, 132, 36),
+		textSize = 20,
+		onClick = function()
+			queue("Join")
+		end,
+		parent = root,
+	})
+	joinButton.Name = "JoinButton"
+	Create.stroke(C.Gold, 2).Parent = joinButton
+	leaveButton = Widgets.button("↩  Leave queue (back to the Plaza)", {
+		size = UDim2.fromOffset(280, 34),
+		position = UDim2.new(0.5, 0, 0, 74),
+		anchor = Vector2.new(0.5, 0),
+		color = C.Panel3,
+		textSize = 14,
+		onClick = function()
+			queue("Leave")
+		end,
+		parent = root,
+	})
+	leaveButton.Name = "LeaveButton"
+end
+
+---------------------------------------------------------------------------
 -- Map vote
 ---------------------------------------------------------------------------
 
@@ -459,12 +506,12 @@ local function buildVote()
 end
 
 ---------------------------------------------------------------------------
--- Library ambience: spin the orrery rings and the altar crystal, bob the floating books
+-- Ambience: spin the orrery rings and the crystals, bob the floating books, runes and isles
 ---------------------------------------------------------------------------
 
-local function animateLobby()
-	local lobby = workspace:WaitForChild("Lobby", 30)
-	local animated = lobby and lobby:WaitForChild("Animated", 10)
+local function animate(placeName: string)
+	local place = workspace:WaitForChild(placeName, 30)
+	local animated = place and place:WaitForChild("Animated", 10)
 	if not animated then
 		return
 	end
@@ -514,7 +561,14 @@ function LobbyController.init()
 	buildClassPanel()
 	buildSpectate()
 	buildVote()
-	task.spawn(animateLobby)
+	buildQueue()
+	task.spawn(animate, "Lobby")
+	task.spawn(animate, "Hub")
+	player:GetAttributeChangedSignal("Queued"):Connect(function()
+		if not State.queued() then
+			myVote = nil -- the server drops your vote when you leave the queue
+		end
+	end)
 
 	-- lecterns open the Grimoire, the altar opens the class picker
 	ProximityPromptService.PromptTriggered:Connect(function(prompt, who)
@@ -567,7 +621,17 @@ function LobbyController.init()
 		end
 		spectateButton.Visible = inLobby and matchRunning and not spectating
 		spectateBar.Visible = spectating
-		votePanel.Visible = inLobby and voteState.open == true
+		votePanel.Visible = inLobby and voteState.open == true and State.queued()
+		-- Join Game in the hub, Leave queue in the library (both move down while spectating)
+		local inHub = State.inHub()
+		local buttonY = if spectating then 132 else 74
+		joinButton.Visible = inHub
+		joinButton.Position = UDim2.new(0.5, 0, 0, buttonY)
+		joinButton.Text = if phase == "Voting"
+			then "⚔  JOIN GAME  ·  " .. math.max(0, math.ceil(State.phaseEndsAt() - State.now())) .. "s"
+			else "⚔  JOIN GAME"
+		leaveButton.Visible = State.queued() and not State.inMatch()
+		leaveButton.Position = UDim2.new(0.5, 0, 0, buttonY)
 		if votePanel.Visible then
 			local left = math.max(0, math.ceil(State.phaseEndsAt() - State.now()))
 			voteTimer.Text = "Voting closes in " .. left .. "s · the most votes wins"

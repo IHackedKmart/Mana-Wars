@@ -1,6 +1,7 @@
--- Training dummies on the lobby's Practice Terrace. They take damage (with damage numbers
--- and status effects) only from players practising in the Spell Lab, never die, and heal
--- back to full a few seconds after the last hit.
+-- Training dummies on the hub's Practice Range and the library's Practice Terrace. They take
+-- damage (with damage numbers and status effects) only from players practising in the Spell Lab,
+-- never die, and heal back to full a few seconds after the last hit. A couple on the hub range
+-- slide back and forth on rails so players can practise leading their shots.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -15,11 +16,12 @@ type Combatant = Combatants.Combatant
 local PracticeService = {}
 
 local dummies: { Combatant } = {}
+local movers: { { model: Model, base: CFrame, travel: Vector3, phase: number } } = {}
 local STRAW = Color3.fromRGB(205, 175, 105)
 local BURLAP = Color3.fromRGB(170, 140, 95)
 
-local function buildDummy(spot: CFrame): Model
-	local model = Build.model("TrainingDummy", workspace:FindFirstChild("Lobby") or workspace)
+local function buildDummy(spot: CFrame, parent: Instance): Model
+	local model = Build.model("TrainingDummy", parent)
 	local function piece(
 		name: string,
 		size: Vector3,
@@ -107,22 +109,43 @@ function PracticeService.init()
 	if not Config.Practice.Enabled then
 		return
 	end
-	local lobby = MapService.lobby
-	if not lobby then
-		return
-	end
-	for _, spot in lobby.dummySpots do
-		local model = buildDummy(spot)
-		local c = Combatants.create("Training Dummy", nil)
+	local function add(spot: CFrame, parent: Instance, travel: Vector3?)
+		local model = buildDummy(spot, parent)
+		local c = Combatants.create(if travel then "Moving Dummy" else "Training Dummy", nil)
 		c.isDummy = true
 		c.inMatch = true
 		c.alive = true
 		Combatants.setModel(c, model)
 		table.insert(dummies, c)
+		if travel then
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			if hum then
+				hum.DisplayName = "Moving Dummy"
+			end
+			table.insert(movers, { model = model, base = model:GetPivot(), travel = travel, phase = #movers * 1.9 })
+		end
+	end
+	local hub = MapService.hub
+	if hub then
+		for _, spot in hub.dummySpots do
+			add(spot.cframe, hub.model, spot.travel)
+		end
+	end
+	local lobby = MapService.lobby
+	if lobby then
+		for _, spot in lobby.dummySpots do
+			add(spot, lobby.model, nil)
+		end
 	end
 
 	local acc = 0
 	RunService.Heartbeat:Connect(function(dt)
+		if #movers > 0 then
+			local t = workspace:GetServerTimeNow() * Config.Practice.MovingDummySpeed
+			for _, m in movers do
+				m.model:PivotTo(m.base + m.travel * math.sin(t + m.phase))
+			end
+		end
 		acc += dt
 		if acc < 0.5 then
 			return

@@ -1,4 +1,4 @@
--- A hands-on tutorial in the lobby Spell Lab: open the Spellbook, forge a spell from parts,
+-- A hands-on tutorial in the Spell Lab (the hub on your first visit): open the Spellbook, forge a spell from parts,
 -- slot it into a wand, blast a training dummy, then build a spell with a trigger + payload.
 -- Each step finishes itself when you do the thing, and the next UI element glows.
 -- Shown automatically on a player's first visit; replay it from the Grimoire.
@@ -86,8 +86,8 @@ end
 
 local steps: { Step } = {
 	{
-		title = "Welcome to the Arcane Athenaeum!",
-		text = "This floating library is the lobby. While you wait for a match you can practise in the <b>Spell Lab</b>: you have copies of every spell part. Let's craft your first spell!",
+		title = "Welcome to Arcanum Plaza!",
+		text = "This is the hub. Outside a match you're in the <b>Spell Lab</b>: you carry copies of every spell part, so you can practise as long as you like. Let's craft your first spell!",
 		manual = true,
 	},
 	{
@@ -143,7 +143,7 @@ local steps: { Step } = {
 	},
 	{
 		title = "6. Try it out!",
-		text = "Close the Spellbook (<b>B</b>), walk north through the big arch to the <b>Practice Terrace</b>, and <b>hold Left Click</b> on a training dummy.",
+		text = "Close the Spellbook (<b>B</b>), head east through the gate to the <b>Practice Range</b>, and <b>hold Left Click</b> on a training dummy.",
 		enter = function()
 			hitDummy = false
 		end,
@@ -165,7 +165,7 @@ local steps: { Step } = {
 	},
 	{
 		title = "You're ready, mage!",
-		text = "Open the <b>📜 Grimoire (H)</b> any time to read about every part and spell. Pick your class at the <b>Class Altar</b>, vote for a map, and good luck out there!",
+		text = "Open the <b>📜 Grimoire (H)</b> any time to read about every part and spell. Pick your class at the <b>Class Altar</b> in the gazebo. When you're ready, walk through the <b>portal</b> (or press <b>⚔ Join Game</b>) to queue for the next match. Good luck!",
 		manual = true,
 	},
 }
@@ -221,7 +221,7 @@ local function update()
 	if not running then
 		return
 	end
-	-- only in the lobby Spell Lab; hide (but remember the step) during a match
+	-- only in the Spell Lab; hide (but remember the step) during a match
 	local inLab = State.practice()
 	gui.Enabled = inLab
 	if not inLab then
@@ -271,7 +271,7 @@ function TutorialController.start()
 	showStep(1)
 	gui.Enabled = State.practice()
 	if not State.practice() then
-		State.toast("The tutorial starts when you're back in the lobby", C.Dim)
+		State.toast("The tutorial starts when you're out of the match", C.Dim)
 	end
 end
 

@@ -1,5 +1,5 @@
--- Builds the lobby once and a brand new arena for every match: the map players voted for,
--- with a fresh random layout each time.
+-- Builds the hub (Arcanum Plaza) and the library lobby once, and a brand new arena for every
+-- match: the map players voted for, with a fresh random layout each time.
 
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +11,7 @@ local MapDefs = require(Map.MapDefs)
 local TerrainGen = require(Map.TerrainGen)
 local Structures = require(Map.Structures)
 local Lobby = require(Map.Lobby)
+local Hub = require(Map.Hub)
 
 type MapDef = MapDefs.MapDef
 
@@ -31,7 +32,9 @@ export type Arena = {
 }
 
 MapService.lobbySpawn = CFrame.new(0, A.LobbyHeight + 5, 0)
+MapService.hubSpawn = CFrame.new(0, A.LobbyHeight + 5, Hub.CENTER_Z)
 MapService.lobby = nil :: Lobby.LobbyInfo?
+MapService.hub = nil :: Hub.HubInfo?
 MapService.arena = nil :: Arena?
 MapService.generating = false
 
@@ -63,6 +66,9 @@ function MapService.init()
 	local info = Lobby.build()
 	MapService.lobby = info
 	MapService.lobbySpawn = info.spawn
+	local hub = Hub.build()
+	MapService.hub = hub
+	MapService.hubSpawn = hub.spawn
 end
 
 function MapService.randomDef(rng: Random): MapDef

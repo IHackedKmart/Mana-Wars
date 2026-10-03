@@ -9,10 +9,10 @@ Config.GameName = "Mana Wars"
 Config.Match = {
 	MinPlayers = 2, -- real players needed to start when bots are disabled
 	MaxParticipants = 24, -- one per spawn pedestal
-	VoteTime = 25, -- map vote in the lobby once enough players are present
+	VoteTime = 30, -- map vote in the library once someone has joined the queue (others can still join)
 	VoteOptions = 3, -- how many maps are offered in each vote
 	PedestalCountdown = 10, -- frozen on pedestals before the gong
-	GracePeriod = 20, -- seconds of no player-vs-player damage after the gong
+	GracePeriod = 5, -- a short breather after the gong (no PvP) without making the cornucopia free loot
 	ChestRefillAt = 240, -- seconds after the gong; classic survival-games refill
 	StormStartAt = 150, -- seconds after the gong when the mana storm begins closing
 	StormShrinkTime = 300, -- seconds for the storm to reach its final radius
@@ -56,12 +56,21 @@ Config.Arena = {
 }
 
 -- Lobby practice ("Spell Lab") ------------------------------------------------
--- While waiting in the lobby every player gets a sandbox kit to try spells on dummies.
+-- Outside a match (in the hub or the library) every player gets a sandbox kit to try spells on dummies.
 Config.Practice = {
 	Enabled = true,
 	PartCopies = 3, -- copies of every spell part in the practice kit
 	DummyHealth = 500,
 	DummyRegenDelay = 3, -- seconds after the last hit before a dummy heals back up
+	MovingDummySpeed = 0.6, -- how fast the hub's moving dummies slide along their rails
+}
+
+-- Hub & queue ------------------------------------------------------------------
+-- Everyone spawns in the hub (Arcanum Plaza). Walking through its portal joins the queue and moves
+-- you to the library, where the next match's map vote happens. Only queued players are put in matches.
+Config.Queue = {
+	StayQueuedAfterMatch = true, -- after a match you wait in the library for the next one (leave any time)
+	FullQueueVoteTime = 10, -- once every pedestal is spoken for, the vote is cut down to this many seconds
 }
 
 -- Combat -----------------------------------------------------------------

@@ -34,8 +34,10 @@ export type Combatant = {
 	lastSpellName: string?,
 	status: { [string]: any },
 	locked: boolean,
-	practice: boolean, -- in the lobby Spell Lab: may cast at dummies, can't be hurt
-	isDummy: boolean, -- a training dummy on the practice terrace
+	practice: boolean, -- in the Spell Lab (hub or library): may cast at dummies, can't be hurt
+	queued: boolean, -- joined the game: waits in the library and is put in the next match
+	queuedAt: number, -- place in line when more players are queued than there are pedestals
+	isDummy: boolean, -- a training dummy on a practice range
 	bot: { [string]: any }?,
 }
 
@@ -76,6 +78,8 @@ function Combatants.create(name: string, player: Player?): Combatant
 		status = {},
 		locked = false,
 		practice = false,
+		queued = false,
+		queuedAt = 0,
 		isDummy = false,
 		bot = nil,
 	}

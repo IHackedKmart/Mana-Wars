@@ -3,7 +3,7 @@
 
 		lune run tools/sim/maps
 
-	Builds the library lobby and the training dummies, then generates every map in MapDefs
+	Builds the hub (Arcanum Plaza), the library lobby and the training dummies, then generates every map in MapDefs
 	with the REAL map code (terrain writes are counted, not simulated) and checks the results:
 	cornucopia + pedestals, chest counts and spacing, decoration, and no warnings.
 ]]
@@ -84,13 +84,70 @@ else
 		fail("lobby spawn missing")
 	end
 end
-local dummies = PracticeService.dummies()
-if #dummies ~= 5 then
-	fail("expected 5 training dummies, got " .. #dummies)
+local hub = Mock.workspace:FindFirstChild("Hub")
+if not hub then
+	fail("hub was not built")
+else
+	local parts, spawns, portals, boards = 0, 0, 0, 0
+	for _, inst in hub:GetDescendants() do
+		if inst:IsA("BasePart") then
+			parts += 1
+		end
+		if inst.ClassName == "SpawnLocation" then
+			spawns += 1
+		elseif inst.Name == "PortalSheet" and inst:GetAttribute("PortalAction") == "JoinQueue" then
+			portals += 1
+		elseif inst.ClassName == "Model" and inst.Name == "Board" then
+			boards += 1
+		end
+	end
+	print(string.format("hub: %d parts", parts))
+	if spawns ~= 1 then
+		fail("the hub should hold the place's only SpawnLocation")
+	end
+	if portals ~= 1 then
+		fail("the hub needs a portal that joins the queue")
+	end
+	if boards ~= 2 then
+		fail("the hub needs its welcome and next-match boards")
+	end
+	if parts > 3000 then
+		fail("hub is too heavy: " .. parts .. " parts")
+	end
+	if not hub:FindFirstChild("ClassAltar", true) or not hub:FindFirstChild("Lectern", true) then
+		fail("the hub needs a class altar and Grimoire lecterns")
+	end
 end
+for _, inst in Mock.workspace:GetDescendants() do
+	if inst.ClassName == "SpawnLocation" and not inst:IsDescendantOf(hub) then
+		fail("stray SpawnLocation outside the hub: " .. inst.Name)
+	end
+end
+local exit = lobby and lobby:FindFirstChild("PortalSheet", true)
+if not exit or exit:GetAttribute("PortalAction") ~= "LeaveQueue" then
+	fail("the library needs a portal back to the hub")
+end
+
+local dummies = PracticeService.dummies()
+if #dummies ~= 12 then
+	fail("expected 12 training dummies (7 in the hub, 5 in the library), got " .. #dummies)
+end
+local moving = {}
 for _, d in dummies do
 	if not d.isDummy or not Combatants.isActive(d) then
 		fail("dummies should be active combatants")
+	end
+	if d.name == "Moving Dummy" then
+		table.insert(moving, { c = d, start = d.root.Position })
+	end
+end
+if #moving ~= 2 then
+	fail("the hub range should have 2 moving dummies, got " .. #moving)
+end
+Mock.step(1.5)
+for _, m in moving do
+	if (m.c.root.Position - m.start).Magnitude < 1 then
+		fail("moving dummies should slide along their rails")
 	end
 end
 

@@ -540,19 +540,44 @@ local function refreshHotbar()
 	end
 end
 
+local function plural(n: number, word: string): string
+	return n .. " " .. word .. (if n == 1 then "" else "s")
+end
+
 local function updatePhase()
 	local phase = State.phase()
 	local now = State.now()
 	local remaining = State.phaseEndsAt() - now
 	local alive = ReplicatedStorage:GetAttribute("AliveCount") or 0
+	local queued = tonumber(ReplicatedStorage:GetAttribute("QueueCount")) or 0
 	local start = ReplicatedStorage:GetAttribute("MatchStartedAt") or now
+	local running = phase == "Countdown" or phase == "Grace" or phase == "Battle"
 	bigCount.Visible = false
+
+	-- In the hub: what's going on, and whether it's worth joining right now
+	if State.inHub() then
+		if phase == "Voting" then
+			phaseTitle.Text = "Match starting in " .. fmtTime(remaining)
+			phaseSub.Text = plural(queued, "mage") .. " in the queue · join through the portal!"
+		elseif phase == "Loading" or running then
+			phaseTitle.Text = "Match in progress"
+			phaseSub.Text = plural(alive, "mage") .. " alive · join the queue for the next one"
+		elseif phase == "Ended" then
+			phaseTitle.Text = "Match over"
+			phaseSub.Text = "Join the queue for the next one"
+		else
+			phaseTitle.Text = "Arcanum Plaza"
+			phaseSub.Text = "Practise freely · walk through the portal to start a match"
+		end
+		return
+	end
+
 	if phase == "Waiting" then
-		phaseTitle.Text = "Waiting for players"
-		phaseSub.Text = "Practise in the Spell Lab while you wait"
+		phaseTitle.Text = "In the queue"
+		phaseSub.Text = "Waiting for more players to join"
 	elseif phase == "Voting" then
 		phaseTitle.Text = "Map vote  " .. fmtTime(remaining)
-		phaseSub.Text = "Vote on the right · practise on the terrace"
+		phaseSub.Text = "Vote on the right · " .. plural(queued, "mage") .. " in the queue"
 	elseif phase == "Loading" then
 		phaseTitle.Text = "Building "
 			.. tostring(ReplicatedStorage:GetAttribute("NextMapName") or "the island")
@@ -567,7 +592,7 @@ local function updatePhase()
 		end
 	elseif phase == "Grace" then
 		phaseTitle.Text = "Grace period " .. fmtTime(remaining)
-		phaseSub.Text = alive .. " mages alive · loot fast!"
+		phaseSub.Text = alive .. " mages alive · no PvP yet!"
 	elseif phase == "Battle" then
 		local stormIn = start + Config.Match.StormStartAt - now
 		local refillIn = start + Config.Match.ChestRefillAt - now
@@ -580,7 +605,11 @@ local function updatePhase()
 		phaseSub.Text = alive .. " mages alive" .. extra
 	elseif phase == "Ended" then
 		phaseTitle.Text = "Match over"
-		phaseSub.Text = "Back to the sanctum in " .. fmtTime(remaining)
+		phaseSub.Text = "Back to the library in " .. fmtTime(remaining)
+	end
+	if running and not State.inMatch() then
+		-- queued, but this match started without you
+		phaseSub.Text = plural(alive, "mage") .. " alive · waiting for the next match"
 	end
 end
 

@@ -1,4 +1,4 @@
--- The map vote held in the lobby before every match.
+-- The map vote held in the library before every match. Only players in the queue can vote.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local MapDefs = require(script.Parent.Parent.Map.MapDefs)
+local Combatants = require(script.Parent.Combatants)
 
 type MapDef = MapDefs.MapDef
 
@@ -94,6 +95,10 @@ function VoteService.vote(player: Player, mapId: any): (boolean, string?)
 	if type(mapId) ~= "string" then
 		return false, "Bad map"
 	end
+	local c = Combatants.forPlayer(player)
+	if not c or not c.queued then
+		return false, "Join the game through the portal to vote"
+	end
 	for _, def in options do
 		if def.id == mapId then
 			votes[player] = mapId
@@ -102,6 +107,24 @@ function VoteService.vote(player: Player, mapId: any): (boolean, string?)
 		end
 	end
 	return false, "That map isn't on the ballot"
+end
+
+-- Moves the closing time (the vote is cut short when the queue fills up).
+function VoteService.setEndsAt(t: number)
+	endsAt = t
+	if open then
+		broadcast()
+	end
+end
+
+-- Drops a player's vote (they left the queue).
+function VoteService.withdraw(player: Player)
+	if votes[player] then
+		votes[player] = nil
+		if open then
+			broadcast()
+		end
+	end
 end
 
 function VoteService.init()
@@ -114,14 +137,7 @@ function VoteService.init()
 	Players.PlayerAdded:Connect(function(player)
 		stateEvent:FireClient(player, VoteService.payload())
 	end)
-	Players.PlayerRemoving:Connect(function(player)
-		if votes[player] then
-			votes[player] = nil
-			if open then
-				broadcast()
-			end
-		end
-	end)
+	Players.PlayerRemoving:Connect(VoteService.withdraw)
 end
 
 return VoteService
