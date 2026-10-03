@@ -85,6 +85,7 @@ Config.Combat = {
 	CastTolerance = 0.06, -- seconds of latency forgiveness on cast cooldowns
 	MaxProjectiles = 400, -- hard cap on simultaneous server projectiles
 	MaxTriggerFanout = 24, -- cap on payload casts spawned by one trigger event
+	MaxSplits = 40, -- cap on Hydra / Fractal copies spawned by one cast
 }
 
 -- Inventory ----------------------------------------------------------------
@@ -103,14 +104,40 @@ Config.Spell = {
 	PayloadDelayFactor = 0.5, -- payload cast delay is partially added to the parent
 }
 
--- Premium classes ------------------------------------------------------------
--- A player can pick a premium class if ANY of these are true:
---   * they have Roblox Premium (when UseRobloxPremium = true)
---   * they own the game pass with id ClassesGamePassId (when it is not 0)
---   * the game is running in Studio and StudioUnlocksAll = true
-Config.Premium = {
-	UseRobloxPremium = true,
-	ClassesGamePassId = 0, -- put your game pass id here after you create one
+-- Kits (classes) for sale ---------------------------------------------------------
+-- Every paid kit in src/shared/Classes.lua is its own game pass. Create the passes on the Creator
+-- Dashboard (Monetization -> Passes) at the tier's price, then paste each pass id here.
+-- A kit with id 0 can't be bought yet (the shop says "coming soon").
+-- A player owns a kit if ANY of these are true:
+--   * they own its game pass
+--   * they have Roblox Premium and the kit's tier is <= PremiumFreeTier (0 turns this off)
+--   * the game is running in Studio and StudioUnlocksAll = true (so you can test every kit)
+Config.Kits = {
+	GamePassIds = {
+		-- Copper ($0.99, 80 R$)
+		Cryomancer = 0,
+		Geomancer = 0,
+		Windwalker = 0,
+		-- Silver ($2.99, 240 R$)
+		Pyromancer = 0,
+		Plaguebringer = 0,
+		Stormcaller = 0,
+		-- Gold ($4.99, 400 R$)
+		Voidwalker = 0,
+		Bloodmage = 0,
+		Lightbringer = 0,
+		-- Arcane ($9.99, 800 R$)
+		Artificer = 0,
+		Chronomancer = 0,
+		Swarmlord = 0,
+		-- Astral ($14.99, 1200 R$)
+		Stormlord = 0,
+		VoidArchon = 0,
+		-- Archmage ($24.99, 2000 R$)
+		Archmage = 0,
+		Harbinger = 0,
+	} :: { [string]: number },
+	PremiumFreeTier = 1, -- Roblox Premium members get every Copper kit for free
 	StudioUnlocksAll = true,
 }
 

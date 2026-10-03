@@ -38,6 +38,9 @@ export type Combatant = {
 	queued: boolean, -- joined the game: waits in the library and is put in the next match
 	queuedAt: number, -- place in line when more players are queued than there are pedestals
 	isDummy: boolean, -- a training dummy on a practice range
+	history: { { t: number, cf: CFrame } }, -- recent positions, for Chrono's rewind
+	lastRewind: number,
+	lastSwap: number,
 	bot: { [string]: any }?,
 }
 
@@ -81,6 +84,9 @@ function Combatants.create(name: string, player: Player?): Combatant
 		queued = false,
 		queuedAt = 0,
 		isDummy = false,
+		history = {},
+		lastRewind = 0,
+		lastSwap = 0,
 		bot = nil,
 	}
 	byId[c.id] = c
@@ -208,6 +214,38 @@ function Combatants.nearest(position: Vector3, maxRange: number, exclude: { [Com
 		end
 	end
 	return best
+end
+
+-- Position history (sampled a few times a second by StatusService) so Chrono spells can rewind.
+local HISTORY_SECONDS = 4.5
+
+function Combatants.recordHistory(t: number)
+	for _, c in byId do
+		local root = c.root
+		if root and Combatants.isActive(c) and not c.isDummy then
+			local h = c.history
+			table.insert(h, { t = t, cf = root.CFrame })
+			while #h > 0 and t - h[1].t > HISTORY_SECONDS do
+				table.remove(h, 1)
+			end
+		elseif #c.history > 0 then
+			table.clear(c.history)
+		end
+	end
+end
+
+-- Where this combatant stood `seconds` ago (nil if we don't know).
+function Combatants.cframeAgo(c: Combatant, seconds: number, t: number): CFrame?
+	local want = t - seconds
+	local best: CFrame? = nil
+	for _, entry in c.history do
+		if entry.t <= want then
+			best = entry.cf
+		else
+			break
+		end
+	end
+	return best or (if c.history[1] then c.history[1].cf else nil)
 end
 
 -- Approximate body as a vertical capsule around the root part.

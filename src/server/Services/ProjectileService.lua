@@ -14,6 +14,7 @@ local Geometry = require(Shared.Util.Geometry)
 local SpellTypes = require(Shared.Spells.SpellTypes)
 local Combatants = require(script.Parent.Combatants)
 local WorldQuery = require(script.Parent.WorldQuery)
+local DamageService = require(script.Parent.DamageService)
 local FX = require(script.Parent.FX)
 
 type Spec = SpellTypes.Spec
@@ -24,8 +25,8 @@ export type CastCtx = {
 	wandUid: string?,
 	siphon: number,
 	vampiric: number,
-	budget: { n: number },
-	aimPoint: Vector3?, -- where the caster clicked (used by Meteor)
+	budget: { n: number, splits: number? }, -- payload casts / Hydra + Fractal copies left for this cast
+	aimPoint: Vector3?, -- where the caster clicked (used by Meteor and Skyfall)
 }
 
 type Proj = {
@@ -46,6 +47,10 @@ type Proj = {
 	lastSync: number,
 	target: Combatant?,
 	targetTime: number,
+	nextShot: number, -- sentry fire time (projectile age)
+	nextField: number, -- pull / aura tick (projectile age)
+	proxFired: boolean,
+	bounceTriggers: number,
 }
 
 local ProjectileService = {}
@@ -56,9 +61,9 @@ type Executor = {
 	hitCombatant: (Spec, CastCtx, Combatant, Vector3, Vector3, number?) -> (),
 	onImpact: (Spec, CastCtx, Vector3, Vector3, Vector3, Combatant?) -> (),
 	onPierce: (Spec, CastCtx, Vector3, Vector3) -> (),
-	onEnd: (Spec, CastCtx, Vector3, Vector3) -> (),
+	onEnd: (Spec, CastCtx, Vector3, Vector3, Vector3?) -> (),
 	explode: (Spec, CastCtx, Vector3) -> (),
-	castPayload: (Spec, CastCtx, Vector3, Vector3) -> (),
+	castPayload: (Spec, CastCtx, Vector3, Vector3, Vector3?) -> (),
 	zoneAt: (Spec, CastCtx, Vector3) -> (),
 }
 local executor: Executor
@@ -73,6 +78,9 @@ local MAX_PULSES = 6
 local PULSE_INTERVAL = 0.6
 local TIMER_DELAY = 0.5
 local SYNC_INTERVAL = 0.1
+local FIELD_TICK = 0.2
+local PROXIMITY_RADIUS = 9
+local MAX_BOUNCE_TRIGGERS = 8
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -102,12 +110,31 @@ local function visualOf(spec: Spec): { [string]: any }
 		or_ = spec.orbitRadius,
 		b = spec.boomerangAt,
 		l = spec.lifetime,
+		d = spec.hold,
+		hv = spec.hover,
 	}
 	(spec :: any)._vis = vis
 	return vis
 end
 
-export type SpawnOptions = { orbitAngle: number? }
+export type SpawnOptions = {
+	orbitAngle: number?,
+	bouncesLeft: number?, -- Hydra copies keep the bounces their parent had left
+	noHold: boolean?, -- split-off copies don't freeze again (Stasis)
+}
+
+-- Hydra and Fractal copies come out of a per-cast budget so they can't run away forever.
+function ProjectileService.takeSplit(ctx: CastCtx): boolean
+	local left = ctx.budget.splits
+	if left == nil then
+		left = Config.Combat.MaxSplits
+	end
+	if left <= 0 then
+		return false
+	end
+	ctx.budget.splits = left - 1
+	return true
+end
 
 function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, opts: SpawnOptions?): boolean
 	if #active >= Config.Combat.MaxProjectiles then
@@ -128,6 +155,8 @@ function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir:
 		orbitRadius = spec.orbitRadius,
 		orbitAngle = orbitAngle,
 		boomerangAt = spec.boomerangAt,
+		hold = if opts and opts.noHold then 0 else spec.hold,
+		hover = spec.hover,
 		seed = seed,
 	})
 	local p: Proj = {
@@ -138,7 +167,7 @@ function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir:
 		radius = math.max(0.25, spec.size * 0.5),
 		hit = {},
 		pierceLeft = spec.pierce,
-		bouncesLeft = spec.bounces,
+		bouncesLeft = if opts and opts.bouncesLeft then opts.bouncesLeft else spec.bounces,
 		timerFired = false,
 		nextPulse = PULSE_INTERVAL,
 		pulses = 0,
@@ -148,9 +177,18 @@ function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir:
 		lastSync = now(),
 		target = nil,
 		targetTime = 0,
+		nextShot = state.hold + spec.hover,
+		nextField = 0,
+		proxFired = false,
+		bounceTriggers = 0,
 	}
 	table.insert(active, p)
-	FX.all("P+", p.id, origin, state.vel, seed, orbitAngle, ctx.caster.model, visualOf(spec))
+	local vis = visualOf(spec)
+	if state.hold ~= spec.hold then
+		vis = table.clone(vis)
+		vis.d = state.hold
+	end
+	FX.all("P+", p.id, origin, state.vel, seed, orbitAngle, ctx.caster.model, vis)
 	return true
 end
 
@@ -165,6 +203,67 @@ end
 local function syncNow(p: Proj)
 	p.lastSync = now()
 	table.insert(syncBatch, { p.id, p.state.pos, p.state.vel, p.state.stuck })
+end
+
+-- The nearest enemy this projectile can see (sentries, auto-aimed payloads, proximity fuses).
+local function nearestVisible(p: Proj, range: number): Combatant?
+	local pos = p.state.pos
+	local best, bestDist = nil, range
+	for _, c in Combatants.active() do
+		if c ~= p.ctx.caster and DamageService.canHurt(c, p.ctx.caster) then
+			local center = Combatants.centerOf(c)
+			local dist = (center - pos).Magnitude
+			if dist < bestDist and (p.spec.phasing or WorldQuery.lineOfSight(pos, center)) then
+				best, bestDist = c, dist
+			end
+		end
+	end
+	return best
+end
+
+-- A hovering sentry aims its payloads at the nearest enemy (and tells meteors / walls where).
+local function aimDir(p: Proj, fallback: Vector3): (Vector3, Vector3?)
+	if p.spec.hover > 0 then
+		local target = nearestVisible(p, math.max(p.spec.turretRange, 40))
+		if target then
+			local at = Combatants.centerOf(target)
+			return Geometry.safeUnit(at - p.state.pos, fallback), at
+		end
+	end
+	return fallback, nil
+end
+
+-- Magnetic pull and damaging auras (Tornado, Black Hole) while the projectile flies.
+local function fieldTick(p: Proj)
+	local spec = p.spec
+	local pos = p.state.pos
+	local caster = p.ctx.caster
+	local reach = math.max(spec.auraRadius, if spec.pull > 0 then 14 + spec.size * 2 else 0)
+	for _, c in Combatants.withinRadius(pos, reach + 1.5, caster) do
+		if DamageService.canHurt(c, caster) then
+			local center = Combatants.centerOf(c)
+			local to = pos - center
+			local flat = Vector3.new(to.X, 0, to.Z)
+			if spec.pull > 0 and flat.Magnitude > 1.5 then
+				DamageService.knock(c, flat.Unit * spec.pull * 0.6 + Vector3.new(0, 4, 0))
+			end
+			if spec.auraDps > 0 and to.Magnitude <= spec.auraRadius + 1.5 then
+				local swirl = Vector3.new(-flat.Z, 0, flat.X)
+				DamageService.apply(c, spec.auraDps * FIELD_TICK, {
+					attacker = caster,
+					element = spec.element,
+					noCrit = true,
+					status = spec.status,
+					knockDir = if swirl.Magnitude > 1e-3 then swirl.Unit else nil,
+					knockback = if spec.auraLift > 0 then 10 else 0,
+					lift = spec.auraLift,
+					lifesteal = spec.lifesteal + p.ctx.vampiric,
+					spellName = spec.name,
+					hitPos = center,
+				})
+			end
+		end
+	end
 end
 
 local function findTarget(p: Proj): Combatant?
@@ -194,7 +293,7 @@ end
 local function impact(p: Proj, pos: Vector3, normal: Vector3, hitC: Combatant?)
 	local dir = Geometry.safeUnit(p.state.vel, -normal)
 	executor.onImpact(p.spec, p.ctx, pos, normal, dir, hitC)
-	executor.onEnd(p.spec, p.ctx, pos, dir)
+	executor.onEnd(p.spec, p.ctx, pos, dir, if hitC then nil else normal)
 	kill(p, pos, "impact")
 end
 
@@ -217,8 +316,8 @@ local function onCombatantHit(p: Proj, c: Combatant, pos: Vector3)
 	local spec = p.spec
 	local dir = Geometry.safeUnit(p.state.vel)
 	executor.hitCombatant(spec, p.ctx, c, pos, dir, nil)
-	-- bombs, mines and flasks burst on contact with a body
-	if spec.directMult == 0 and (spec.explodeRadius > 0 or spec.zoneOnImpact) then
+	-- bombs, mines and flasks burst on contact with a body (black holes and tornadoes don't)
+	if spec.directMult == 0 and spec.pierce < 50 and (spec.explodeRadius > 0 or spec.zoneOnImpact) then
 		impact(p, pos, -dir, c)
 		return
 	end
@@ -251,6 +350,19 @@ local function onWorldHit(p: Proj, result: RaycastResult)
 		s.vel = v
 		s.pos = result.Position + n * (p.radius + 0.05)
 		syncNow(p)
+		if spec.trigger == "OnBounce" and p.bounceTriggers < MAX_BOUNCE_TRIGGERS then
+			p.bounceTriggers += 1
+			executor.castPayload(spec, p.ctx, s.pos, Geometry.safeUnit(v, n))
+		end
+		-- Hydra: every bounce splits off more copies, each with the bounces this one has left
+		for k = 1, spec.hydra do
+			if v.Magnitude < 1 or not ProjectileService.takeSplit(p.ctx) then
+				break
+			end
+			local yaw = (if k % 2 == 1 then 1 else -1) * (18 + 10 * k)
+			local d = Geometry.fan(v.Unit, yaw, seedRng:NextNumber(-6, 6))
+			ProjectileService.spawn(spec, p.ctx, s.pos, d, { bouncesLeft = p.bouncesLeft, noHold = true })
+		end
 		return
 	end
 	impact(p, result.Position, n, nil)
@@ -331,14 +443,43 @@ local function stepProjectile(p: Proj, dt: number)
 		end
 	end
 
-	-- timed triggers
-	if spec.trigger == "Timer" and not p.timerFired and s.age >= TIMER_DELAY then
+	-- sentries shoot at the nearest enemy they can see
+	local shot = spec.turretShot
+	if shot and s.age >= p.nextShot then
+		p.nextShot += spec.turretRate
+		local target = nearestVisible(p, spec.turretRange)
+		if target then
+			local d = Geometry.safeUnit(Combatants.centerOf(target) - s.pos, Vector3.new(0, 0, -1))
+			ProjectileService.spawn(shot, p.ctx, s.pos + d * (p.radius + 0.6), d)
+		end
+	end
+
+	-- magnetic pull and damaging auras
+	if (spec.pull > 0 or spec.auraDps > 0) and s.age >= p.nextField then
+		p.nextField += FIELD_TICK
+		fieldTick(p)
+	end
+
+	-- proximity fuse
+	if spec.trigger == "Proximity" and not p.proxFired then
+		local near = nearestVisible(p, PROXIMITY_RADIUS)
+		if near then
+			p.proxFired = true
+			local d = Geometry.safeUnit(Combatants.centerOf(near) - s.pos, Geometry.safeUnit(s.vel))
+			executor.castPayload(spec, p.ctx, s.pos, d)
+		end
+	end
+
+	-- timed triggers (a hovering sentry aims them at enemies)
+	if spec.trigger == "Timer" and not p.timerFired and s.age >= s.hold + TIMER_DELAY then
 		p.timerFired = true
-		executor.castPayload(spec, p.ctx, s.pos, Geometry.safeUnit(s.vel))
-	elseif spec.trigger == "Pulse" and s.age >= p.nextPulse and p.pulses < MAX_PULSES then
+		local d, at = aimDir(p, Geometry.safeUnit(s.vel))
+		executor.castPayload(spec, p.ctx, s.pos, d, at)
+	elseif spec.trigger == "Pulse" and s.age >= s.hold + p.nextPulse and p.pulses < MAX_PULSES then
 		p.pulses += 1
 		p.nextPulse += PULSE_INTERVAL
-		executor.castPayload(spec, p.ctx, s.pos, Geometry.safeUnit(s.vel, Vector3.new(0, 0, -1)))
+		local d, at = aimDir(p, Geometry.safeUnit(s.vel, Vector3.new(0, 0, -1)))
+		executor.castPayload(spec, p.ctx, s.pos, d, at)
 	end
 
 	if s.age >= spec.lifetime then

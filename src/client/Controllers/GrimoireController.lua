@@ -420,30 +420,52 @@ chapter("Library", "📚  Spell Library", function()
 	end
 end)
 
-chapter("Classes", "🎓  Classes", function()
-	heading("Classes")
+chapter("Classes", "🎓  Kits", function()
+	heading("Kits")
 	para(
-		"Your class decides the wand, spells and parts you start each match with. Pick one at the <b>Class Altar</b> (in the Plaza's gazebo, or in the library). Premium classes unlock with Roblox Premium."
+		"Your kit (class) decides the wands, spells, parts and potions you start each match with. Pick one at the <b>Class Altar</b> (in the Plaza's gazebo, or in the library). The Apprentice is free; the others are sold in tiers. Cheap tiers are mostly flavour, the top tiers are a real head start. The best gear is still in the chests."
 	)
+	para(
+		"<b>Bonus part:</b> every kit also gives you <b>one random spell part</b> each match. The higher the tier, the rarer it can be:"
+	)
+	for tier = 0, #Classes.Tiers - 1 do
+		local info = Classes.tierInfo(tier)
+		para(
+			"<b>"
+				.. info.name
+				.. "</b> ("
+				.. (if info.robux > 0 then "R$" .. info.robux .. ", about " .. info.usd else "free")
+				.. "): "
+				.. Classes.oddsText(tier)
+		)
+	end
 	for _, class in Classes.List do
-		subheading(class.icon .. "  " .. class.name .. (if class.premium then "  (Premium)" else "  (Free)"))
+		local info = Classes.tierInfo(class.tier)
+		subheading(class.icon .. "  " .. class.name .. "  (" .. info.name .. ")")
 		local spells = {}
-		for _, id in class.kit.wands[1].spells do
-			table.insert(spells, PremadeSpells.ById[id].name)
+		for _, w in class.kit.wands do
+			for _, id in w.spells do
+				table.insert(spells, PremadeSpells.ById[id].name)
+			end
 		end
 		local parts = {}
 		for id, n in (class.kit.parts or {}) :: { [string]: number } do
 			table.insert(parts, SpellParts.ById[id].name .. (if n > 1 then " x" .. n else ""))
 		end
 		table.sort(parts)
+		local wands = {}
+		for _, w in class.kit.wands do
+			table.insert(wands, w.template.name .. " (" .. w.template.rarity .. ")")
+		end
 		para(
 			class.tagline
-				.. "\n<b>Wand:</b> "
-				.. class.kit.wands[1].template.name
-				.. "   <b>Spells:</b> "
+				.. "\n<b>Wands:</b> "
+				.. table.concat(wands, ", ")
+				.. "\n<b>Spells:</b> "
 				.. table.concat(spells, ", ")
-				.. "   <b>Parts:</b> "
+				.. "\n<b>Parts:</b> "
 				.. table.concat(parts, ", ")
+				.. " + 1 random"
 		)
 	end
 end)

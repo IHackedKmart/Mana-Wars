@@ -11,6 +11,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
+local SpellParts = require(Shared.Spells.SpellParts)
 local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
 local MapService = require(script.Parent.MapService)
@@ -401,7 +402,21 @@ local function runMatch()
 	ChestService.spawnArenaChests(arena.chestSpots)
 	for _, c in participants do
 		local classId = if c.player then ClassService.classFor(c.player) else ClassService.randomClass(rng)
-		InventoryService.giveKit(c, classId)
+		local bonus = InventoryService.giveKit(c, classId)
+		local part = SpellParts.ById[bonus]
+		if c.player and part then
+			FX.announceTo(c.player, "Toast", {
+				text = "Kit bonus: "
+					.. part.icon
+					.. " "
+					.. part.name
+					.. " ("
+					.. part.rarity
+					.. " "
+					.. part.category
+					.. ")",
+			})
+		end
 		StatusService.updateMovement(c)
 		setPlayerFlags(c)
 	end
@@ -542,7 +557,7 @@ end
 local function onPlayerAdded(player: Player)
 	local c = Combatants.create(player.DisplayName, player)
 	player:SetAttribute("Class", "Apprentice")
-	ClassService.refresh(player)
+	task.spawn(ClassService.refresh, player)
 	task.spawn(DataService.load, player)
 	player.CharacterAdded:Connect(function(character)
 		task.spawn(watchCharacter, c, character)

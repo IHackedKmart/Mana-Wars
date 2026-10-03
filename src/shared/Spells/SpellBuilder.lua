@@ -69,6 +69,22 @@ local function newSpec(): Spec
 		vortex = 0,
 		echo = 0,
 		shatter = 0,
+		hold = 0,
+		hover = 0,
+		turretRate = 0,
+		turretRange = 0,
+		pull = 0,
+		auraDps = 0,
+		auraRadius = 0,
+		auraLift = 0,
+		hydra = 0,
+		fractal = 0,
+		skyfall = false,
+		swap = false,
+		chaos = false,
+		rewind = 0,
+		wallWidth = 0,
+		wallHeight = 0,
 		knockback = 0,
 		lift = 0,
 		crit = 0,
@@ -79,6 +95,8 @@ local function newSpec(): Spec
 		trigger = nil,
 		payload = nil,
 		shard = nil,
+		turretShot = nil,
+		fractalChild = nil,
 		color = { 255, 255, 255 },
 		color2 = { 255, 255, 255 },
 	}
@@ -289,7 +307,64 @@ local function compileInner(recipe: Recipe, ctx: WandContext?, depth: number): S
 	spec.echo = math.clamp(spec.echo, 0, 3)
 	spec.size = math.clamp(spec.size, 0.2, 12)
 	spec.lifetime = math.clamp(spec.lifetime, 0.1, 30)
+	spec.hold = math.clamp(spec.hold, 0, 4)
+	spec.hydra = math.clamp(spec.hydra, 0, 3)
+	spec.fractal = math.clamp(spec.fractal, 0, 3)
+	spec.rewind = math.clamp(spec.rewind, 0, 4)
 	spec.name = SpellNames.generate(recipe)
+
+	-- 10. Derived sub-spells
+	if spec.turretRate > 0 then
+		-- a sentry's shots inherit the sentry's element and modifiers, as a fast spark
+		local shot = table.clone(spec)
+		shot.form = "Spark"
+		shot.kind = "Projectile"
+		shot.speed = 200
+		shot.lifetime = 1.1
+		shot.size = math.clamp(spec.size * 0.3, 0.35, 1.2)
+		shot.directMult = 1
+		shot.pierce = math.max(0, spec.pierce - 99)
+		shot.hover = 0
+		shot.hold = 0
+		shot.turretRate = 0
+		shot.turretShot = nil
+		shot.pull = 0
+		shot.auraDps = 0
+		shot.count = 1
+		shot.echo = 0
+		shot.fractal = 0
+		shot.fractalChild = nil
+		shot.orbit = false
+		shot.skyfall = false
+		shot.trigger = nil
+		shot.payload = nil
+		shot.mana = 0
+		shot.name = spec.name
+		spec.turretShot = shot
+	end
+	if spec.fractal > 0 then
+		-- each generation is a smaller, weaker copy that splits again
+		local function child(parent: Spec): Spec
+			local c = table.clone(parent)
+			c.fractal = parent.fractal - 1
+			c.damage *= 0.55
+			c.size = math.max(0.25, c.size * 0.7)
+			c.radius *= 0.7
+			c.explodeRadius *= 0.75
+			c.zoneRadius *= 0.75
+			c.range *= 0.7
+			c.lifetime = math.max(0.25, c.lifetime * 0.7)
+			c.speed *= 0.9
+			c.count = 1
+			c.echo = 0
+			c.hold = 0
+			c.skyfall = false
+			c.mana = 0
+			c.fractalChild = if c.fractal > 0 then child(c) else nil
+			return c
+		end
+		spec.fractalChild = child(spec)
+	end
 	return spec
 end
 
@@ -323,7 +398,18 @@ function SpellBuilder.describe(spec: Spec): { { string } }
 		add("Teleport", round(spec.blinkDistance) .. " studs")
 	elseif spec.kind == "Aegis" then
 		add("Shield", round(spec.shieldAmount) .. " for " .. round(spec.shieldDuration, 1) .. "s")
+	elseif spec.kind == "Wall" then
+		add(
+			"Wall",
+			round(spec.wallWidth) .. " x " .. round(spec.wallHeight) .. " for " .. round(spec.lifetime, 1) .. "s"
+		)
 	else
+		if spec.turretRate > 0 then
+			add("Sentry shots", round(spec.damage, 1) .. " every " .. round(spec.turretRate, 2) .. "s")
+		end
+		if spec.auraDps > 0 then
+			add("Aura", round(spec.auraDps, 1) .. "/s in " .. round(spec.auraRadius) .. " studs")
+		end
 		if spec.damage > 0 and spec.directMult > 0 then
 			add("Damage", round(spec.damage * spec.directMult, 1) .. hits)
 		end
@@ -351,6 +437,30 @@ function SpellBuilder.describe(spec: Spec): { { string } }
 	end
 	if spec.kind == "Chain" then
 		add("Jumps", round(spec.chainJumps))
+	end
+	if spec.skyfall then
+		add("Skyfall", "falls onto your aim")
+	end
+	if spec.hold > 0 then
+		add("Stasis", round(spec.hold, 1) .. "s")
+	end
+	if spec.pull > 0 then
+		add("Pull", round(spec.pull))
+	end
+	if spec.hydra > 0 then
+		add("Hydra", "+" .. round(spec.hydra) .. " per bounce")
+	end
+	if spec.fractal > 0 then
+		add("Fractal", round(spec.fractal) .. " generations")
+	end
+	if spec.swap then
+		add("Transpose", "swap places on hit")
+	end
+	if spec.chaos then
+		add("Chaos", "25%-250% damage")
+	end
+	if spec.rewind > 0 then
+		add("Rewind", round(spec.rewind, 1) .. "s")
 	end
 	if spec.crit > 0 then
 		add("Crit", round(spec.crit * 100) .. "%")

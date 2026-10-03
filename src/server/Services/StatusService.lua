@@ -293,6 +293,7 @@ end
 
 local function tick()
 	local t = now()
+	Combatants.recordHistory(t)
 	for _, c in Combatants.all() do
 		local hum = c.humanoid
 		if hum and c.alive and hum.Health > 0 then

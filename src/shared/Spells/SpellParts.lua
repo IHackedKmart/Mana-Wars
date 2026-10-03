@@ -327,6 +327,137 @@ form("Meteor", {
 	},
 })
 
+form("Sawblade", {
+	rarity = "Rare",
+	icon = "🪚",
+	kind = "Projectile",
+	noun = "Saw",
+	description = "A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path.",
+	base = {
+		damage = 13,
+		speed = 85,
+		gravity = 0.7,
+		lifetime = 3,
+		size = 1.6,
+		bounces = 6,
+		pierce = 99,
+		mana = 20,
+		castDelay = 0.25,
+		knockback = 10,
+	},
+})
+
+form("Swarm", {
+	rarity = "Rare",
+	icon = "🐝",
+	kind = "Projectile",
+	description = "Releases six angry little sprites that wobble off and hunt down enemies.",
+	base = {
+		damage = 3.5,
+		speed = 60,
+		lifetime = 3.5,
+		size = 0.4,
+		count = 6,
+		spread = 70,
+		homing = 4,
+		erratic = 1.4,
+		mana = 24,
+		castDelay = 0.3,
+		knockback = 2,
+	},
+})
+
+form("Rampart", {
+	rarity = "Rare",
+	icon = "🧱",
+	kind = "Wall",
+	noun = "Wall",
+	description = "Raises a solid wall where you aim that blocks movement and spells for 6 seconds. Impact effects go off at its base; expiry triggers fire when it crumbles.",
+	base = {
+		damage = 10,
+		directMult = 0,
+		range = 45,
+		size = 1,
+		lifetime = 6,
+		wallWidth = 16,
+		wallHeight = 10,
+		mana = 24,
+		castDelay = 0.4,
+		knockback = 30,
+	},
+})
+
+form("Tornado", {
+	rarity = "Epic",
+	icon = "🌪️",
+	kind = "Projectile",
+	description = "A slow, wandering twister that drags enemies in, tosses them into the air and grinds them up.",
+	base = {
+		damage = 9,
+		directMult = 0,
+		speed = 22,
+		lifetime = 4.5,
+		size = 4,
+		pierce = 99,
+		erratic = 0.5,
+		pull = 22,
+		auraDps = 9,
+		auraRadius = 6,
+		auraLift = 26,
+		mana = 34,
+		castDelay = 0.45,
+		knockback = 6,
+	},
+})
+
+form("BlackHole", {
+	name = "Black Hole",
+	rarity = "Epic",
+	icon = "⚫",
+	kind = "Projectile",
+	noun = "Singularity",
+	description = "A tiny black hole drifts forward, dragging everyone nearby into its crushing core, then collapses with a bang.",
+	base = {
+		damage = 12,
+		directMult = 0,
+		speed = 18,
+		lifetime = 4,
+		size = 3.2,
+		pierce = 99,
+		pull = 55,
+		auraDps = 12,
+		auraRadius = 5,
+		explodeRadius = 9,
+		explodeMult = 1.6,
+		explodeOnExpire = true,
+		mana = 45,
+		castDelay = 0.5,
+		knockback = 0,
+	},
+})
+
+form("Sentry", {
+	rarity = "Legendary",
+	icon = "🧿",
+	kind = "Projectile",
+	noun = "Sentry",
+	description = "Deploys a floating eye that hovers in place for 8 seconds and shoots sparks at the nearest enemy. Its shots inherit its element and modifiers; Pulse and Timer payloads are aimed at enemies too.",
+	base = {
+		damage = 6,
+		directMult = 0,
+		speed = 30,
+		hover = 0.35,
+		lifetime = 8,
+		size = 1.6,
+		pierce = 99,
+		turretRate = 0.55,
+		turretRange = 70,
+		mana = 50,
+		castDelay = 0.5,
+		knockback = 4,
+	},
+})
+
 ---------------------------------------------------------------------------
 -- ELEMENTS
 ---------------------------------------------------------------------------
@@ -459,6 +590,32 @@ element("Blood", {
 	apply = function(s: Spec)
 		s.damage *= 1.5
 		s.hpCost += 4
+	end,
+})
+
+element("Chaos", {
+	rarity = "Epic",
+	icon = "🃏",
+	color = { 255, 80, 200 },
+	color2 = { 80, 255, 220 },
+	description = "Every hit rolls the dice: anywhere from 25% to 250% damage, plus a random burn, chill or venom. +10% speed.",
+	apply = function(s: Spec)
+		s.chaos = true
+		s.speed *= 1.1
+	end,
+})
+
+element("Chrono", {
+	rarity = "Legendary",
+	icon = "🕰️",
+	adjective = "Temporal",
+	color = { 255, 215, 140 },
+	color2 = { 120, 200, 255 },
+	description = "Hits rewind the target to where they stood 2 seconds ago and slow them by 50%. -15% damage.",
+	apply = function(s: Spec)
+		s.rewind = math.max(s.rewind, 2)
+		s.status = { kind = "Chill", slow = 0.5, duration = 2.5, maxStacks = 99 }
+		s.damage *= 0.85
 	end,
 })
 
@@ -773,6 +930,128 @@ modifier("Echo", {
 	end,
 })
 
+modifier("Stasis", {
+	rarity = "Uncommon",
+	icon = "⏸️",
+	adjective = "Suspended",
+	description = "Hangs frozen in the air for 1 second, then flies on. Instant spells go off 1 second late. Stack for traps.",
+	apply = function(s: Spec)
+		s.hold += 1
+		s.lifetime += 1
+		s.mana += 3
+	end,
+})
+
+modifier("Returning", {
+	rarity = "Uncommon",
+	icon = "🪃",
+	adjective = "Returning",
+	description = "Flies out, then curves back to you, hitting things both ways. +1 pierce.",
+	apply = function(s: Spec)
+		if s.boomerangAt <= 0 then
+			s.boomerangAt = math.max(0.3, s.lifetime * 0.45)
+		end
+		s.lifetime *= 1.5
+		s.pierce += 1
+		s.mana += 4
+	end,
+})
+
+modifier("Magnetic", {
+	rarity = "Rare",
+	icon = "🧲",
+	adjective = "Magnetic",
+	description = "While it flies, it drags nearby enemies toward itself.",
+	apply = function(s: Spec)
+		s.pull += 30
+		s.mana += 10
+	end,
+})
+
+modifier("Gigantic", {
+	rarity = "Epic",
+	icon = "🐘",
+	adjective = "Colossal",
+	description = "Triples the size of everything: projectiles, explosions, novas and zones. +50% damage, much slower and pricier.",
+	apply = function(s: Spec)
+		s.size *= 3
+		s.radius *= 1.8
+		s.explodeRadius *= 1.8
+		s.zoneRadius *= 1.7
+		s.auraRadius *= 1.8
+		s.wallWidth *= 1.8
+		s.wallHeight *= 1.5
+		s.damage *= 1.5
+		s.speed *= 0.55
+		s.knockback += 20
+		s.castDelay += 0.1
+		s.mana += 28
+	end,
+})
+
+modifier("Skyfall", {
+	rarity = "Epic",
+	icon = "🌧️",
+	adjective = "Heavenly",
+	description = "The spell comes down from the sky onto your aim point instead of leaving your wand. Novas erupt there, beams strike straight down, blinks land there.",
+	apply = function(s: Spec)
+		s.skyfall = true
+		s.castDelay += 0.08
+		s.mana += 12
+	end,
+})
+
+modifier("Transpose", {
+	rarity = "Epic",
+	icon = "🔀",
+	adjective = "Swapping",
+	description = "When it hits an enemy, you swap places with them.",
+	apply = function(s: Spec)
+		s.swap = true
+		s.mana += 18
+	end,
+})
+
+modifier("Barrage", {
+	rarity = "Epic",
+	icon = "✴️",
+	adjective = "Barrage",
+	description = "Casts the spell five times at once in a wide fan, each at 55% damage.",
+	apply = function(s: Spec)
+		s.mana += 12 + s.mana * 1.6
+		s.count *= 5
+		s.spread += 40
+		s.damage *= 0.55
+	end,
+})
+
+modifier("Hydra", {
+	rarity = "Legendary",
+	icon = "🐉",
+	adjective = "Hydra",
+	description = "Every time it bounces, it splits in two. +1 bounce. Pair it with Bounce and watch it get out of hand.",
+	apply = function(s: Spec)
+		s.hydra += 1
+		s.bounces += 1
+	end,
+	post = function(s: Spec)
+		s.mana = s.mana * 1.4 + 6
+	end,
+})
+
+modifier("Fractal", {
+	rarity = "Legendary",
+	icon = "🧬",
+	adjective = "Fractal",
+	description = "When it ends, it splits into 3 smaller copies of itself, which split again. Each Fractal adds a generation (up to 3).",
+	apply = function(s: Spec)
+		s.fractal += 1
+	end,
+	post = function(s: Spec)
+		s.mana = s.mana * 1.6 + 10
+	end,
+})
+
 ---------------------------------------------------------------------------
 -- TRIGGERS (must be paired with a payload spell)
 ---------------------------------------------------------------------------
@@ -807,6 +1086,29 @@ trigger("Pulse", {
 	icon = "💓",
 	mana = 22,
 	description = "Casts the payload spell every 0.6 seconds while this spell is alive (up to 6 times).",
+})
+
+trigger("Proximity", {
+	rarity = "Epic",
+	icon = "📡",
+	mana = 8,
+	description = "A proximity fuse: casts the payload at the first enemy that comes within 9 studs of this spell.",
+})
+
+trigger("OnBounce", {
+	name = "On Bounce",
+	rarity = "Epic",
+	icon = "🏓",
+	mana = 9,
+	description = "Casts the payload every time this spell bounces (up to 8 times).",
+})
+
+trigger("OnKill", {
+	name = "On Kill",
+	rarity = "Legendary",
+	icon = "💀",
+	mana = 6,
+	description = "Casts the payload from the spot where this spell kills someone. Kill chains! (Knocking a training dummy down to 1 HP counts.)",
 })
 
 -- The implicit element used when a spell has no element part slotted.

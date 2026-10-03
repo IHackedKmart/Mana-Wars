@@ -149,6 +149,57 @@ test("modifiers do what they say", function()
 	expect(burn.status and burn.status.kind == "Burn", "fire burns")
 end)
 
+test("the wilder parts compile to what they promise", function()
+	local base = SpellBuilder.compile({ form = "Orb" })
+	local giant = SpellBuilder.compile({ form = "Orb", mods = { "Gigantic" } })
+	expect(math.abs(giant.size - base.size * 3) < 0.01, "Gigantic should triple the size")
+	expect(giant.damage > base.damage, "Gigantic should hit harder")
+
+	local barrage = SpellBuilder.compile({ form = "Bolt", mods = { "Barrage" } })
+	expect(barrage.count == 5, "Barrage should cast 5 copies")
+
+	local fractal = SpellBuilder.compile({ form = "Spark", element = "Fire", mods = { "Fractal", "Fractal" } })
+	expect(fractal.fractal == 2, "two Fractals = two generations")
+	local child = fractal.fractalChild
+	expect(child ~= nil and child.fractal == 1 and child.damage < fractal.damage, "fractal child is weaker")
+	expect(
+		child and child.fractalChild and child.fractalChild.fractalChild == nil,
+		"fractal stops after its generations"
+	)
+	expect(child and child.element == "Fire", "fractal copies keep the element")
+
+	local sentry = SpellBuilder.compile({ form = "Sentry", element = "Frost", mods = { "Explosive" } })
+	local shot = sentry.turretShot
+	expect(shot ~= nil and shot.element == "Frost", "sentry shots inherit the element")
+	expect(shot and shot.explodeRadius > 0, "sentry shots inherit modifiers")
+	expect(shot and shot.turretShot == nil and shot.payload == nil, "sentry shots don't recurse")
+
+	local wall = SpellBuilder.compile({ form = "Rampart", element = "Earth" })
+	expect(wall.kind == "Wall" and wall.wallWidth > 0 and wall.wallHeight > 0, "Rampart makes a wall")
+	local described = false
+	for _, line in SpellBuilder.describe(wall) do
+		if line[1] == "Wall" then
+			described = true
+		end
+	end
+	expect(described, "the tooltip should describe the wall")
+
+	local chrono = SpellBuilder.compile({ form = "Bolt", element = "Chrono" })
+	expect(chrono.rewind == 2 and chrono.status ~= nil, "Chrono rewinds and slows")
+	local chaos = SpellBuilder.compile({ form = "Bolt", element = "Chaos" })
+	expect(chaos.chaos == true, "Chaos rolls the dice")
+	local sky = SpellBuilder.compile({ form = "Nova", mods = { "Skyfall", "Stasis", "Transpose", "Magnetic" } })
+	expect(sky.skyfall and sky.hold == 1 and sky.swap and sky.pull > 0, "Skyfall / Stasis / Transpose / Magnetic flags")
+	local hydra = SpellBuilder.compile({ form = "Bolt", mods = { "Bounce", "Hydra" } })
+	expect(hydra.hydra == 1 and hydra.bounces == 4, "Hydra splits and adds a bounce")
+	local back = SpellBuilder.compile({ form = "Bolt", mods = { "Returning" } })
+	expect(back.boomerangAt > 0 and back.pierce >= 1, "Returning makes it come back")
+	for _, trig in { "Proximity", "OnBounce", "OnKill" } do
+		local ok = SpellBuilder.validate({ form = "Bolt", trigger = trig, payload = { form = "Nova" } })
+		expect(ok, trig .. " should be a valid trigger")
+	end
+end)
+
 test("trigger payload mana is paid up front", function()
 	local payload = SpellBuilder.compile({ form = "Nova", element = "Frost" })
 	local parent = SpellBuilder.compile({ form = "Bolt", element = "Fire" })

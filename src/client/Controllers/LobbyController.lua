@@ -1,5 +1,5 @@
 -- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
--- Leave queue, class selection (premium classes), the map vote, spectating, the lectern/altar
+-- Leave queue, the kit shop / class picker, the map vote, spectating, the lectern/altar
 -- prompts, and the animated props (orrery, floating books, the fountain crystal, floating isles).
 
 local Players = game:GetService("Players")
@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Remotes = require(Shared.Remotes)
+local Config = require(Shared.Config)
 local Classes = require(Shared.Classes)
 local Consumables = require(Shared.Consumables)
 local SpellParts = require(Shared.Spells.SpellParts)
@@ -32,8 +33,7 @@ local classAction = Remotes.func("ClassAction")
 local gui: ScreenGui
 local root: Frame
 local classPanel: Frame
-local classGrid: Frame
-local unlockButton: TextButton
+local classGrid: ScrollingFrame
 local classButton: TextButton
 local spectateBar: Frame
 local spectateName: TextLabel
@@ -75,94 +75,163 @@ local function kitInfo(class: Classes.ClassDef): ItemInfo.Info
 	if #potions > 0 then
 		table.insert(lines, "Potions: " .. table.concat(potions, ", "))
 	end
+	local tier = Classes.tierInfo(class.tier)
+	table.insert(lines, "Bonus: 1 random spell part each match (" .. Classes.oddsText(class.tier) .. ")")
 	return {
 		title = class.icon .. " " .. class.name,
 		color = Theme.rgb(class.color),
-		subtitle = if class.premium then "Premium class" else "Free class",
+		subtitle = if class.tier == 0
+			then "Free kit"
+			else tier.name .. " kit · R$" .. tier.robux .. " (about " .. tier.usd .. ")",
 		body = class.tagline .. "\n\nStarting kit:\n" .. table.concat(lines, "\n"),
 	}
 end
 
+local function ownedKits(): { [string]: boolean }
+	local set: { [string]: boolean } = {}
+	for id in string.gmatch(tostring(player:GetAttribute("OwnedKits") or ""), "[^,]+") do
+		set[id] = true
+	end
+	set[Classes.Default] = true
+	return set
+end
+
+local function kitCard(class: Classes.ClassDef, owned: boolean, isCurrent: boolean, order: number, parent: Instance)
+	local tier = Classes.tierInfo(class.tier)
+	local card = Create("TextButton", {
+		Name = "Kit_" .. class.id,
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundColor3 = if isCurrent then C.Panel3 else C.Panel2,
+		Size = UDim2.fromOffset(210, 112),
+		LayoutOrder = order,
+		Parent = parent,
+	}, {
+		Create.corner(10),
+		Create.stroke(
+			if isCurrent then C.Gold else Theme.rgb(class.color),
+			if isCurrent then 3 else 1.5,
+			if owned then 0 else 0.5
+		),
+	})
+	Widgets.label({
+		Text = class.icon,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromOffset(40, 40),
+		Position = UDim2.fromOffset(8, 8),
+		Parent = card,
+	})
+	Widgets.label({
+		Text = class.name,
+		Font = Theme.Black,
+		TextSize = 16,
+		TextColor3 = Theme.rgb(class.color),
+		Size = UDim2.new(1, -60, 0, 20),
+		Position = UDim2.fromOffset(54, 8),
+		Parent = card,
+	})
+	Widgets.label({
+		Name = "Status",
+		Text = if isCurrent
+			then "✔ SELECTED"
+			elseif owned then (if class.tier == 0 then "FREE" else "OWNED · click to pick")
+			else "🛒 R$" .. tier.robux .. "  (" .. tier.usd .. ")",
+		Font = Theme.Bold,
+		TextSize = 12,
+		TextColor3 = if isCurrent then C.Gold elseif owned then C.Good else Theme.rgb(tier.color),
+		Size = UDim2.new(1, -60, 0, 16),
+		Position = UDim2.fromOffset(54, 30),
+		Parent = card,
+	})
+	Widgets.label({
+		Text = class.tagline,
+		TextSize = 12,
+		TextWrapped = true,
+		TextColor3 = if owned then C.Text else C.Dim,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Size = UDim2.new(1, -16, 0, 52),
+		Position = UDim2.fromOffset(8, 54),
+		Parent = card,
+	})
+	Widgets.attachTooltip(card, function()
+		return kitInfo(class)
+	end)
+	card.Activated:Connect(function()
+		Sounds.play("Click")
+		local ok, success, message = pcall(function()
+			return classAction:InvokeServer(if owned then "Select" else "Buy", class.id)
+		end)
+		if ok and message then
+			State.toast(message, if success then C.Good else C.Bad)
+		end
+	end)
+end
+
 local function renderClasses()
 	Widgets.clear(classGrid, true)
-	local access = player:GetAttribute("PremiumAccess") == true
+	local owned = ownedKits()
 	local current = player:GetAttribute("Class")
-	for i, class in Classes.List do
-		local locked = class.premium and not access
-		local isCurrent = current == class.id
-		local card = Create("TextButton", {
-			Text = "",
-			AutoButtonColor = false,
-			BackgroundColor3 = if isCurrent then C.Panel3 else C.Panel2,
-			LayoutOrder = i,
+	local order = 0
+	for tierIndex = 0, #Classes.Tiers - 1 do
+		local tier = Classes.tierInfo(tierIndex)
+		order += 1
+		local row = Create("Frame", {
+			Name = "Tier_" .. tier.name,
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -12, 0, 116),
+			LayoutOrder = order,
 			Parent = classGrid,
-		}, {
-			Create.corner(10),
-			Create.stroke(
-				if isCurrent then C.Gold else Theme.rgb(class.color),
-				if isCurrent then 3 else 1.5,
-				if locked then 0.6 else 0
-			),
 		})
 		Widgets.label({
-			Text = class.icon,
-			TextScaled = true,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			Size = UDim2.fromOffset(44, 44),
-			Position = UDim2.fromOffset(10, 10),
-			Parent = card,
-		})
-		Widgets.label({
-			Text = class.name,
+			Text = string.upper(tier.name) .. (if tier.id == 0 then "" else " CIRCLE"),
 			Font = Theme.Black,
-			TextSize = 16,
-			TextColor3 = if locked then C.Dim else Theme.rgb(class.color),
-			Size = UDim2.new(1, -66, 0, 20),
-			Position = UDim2.fromOffset(60, 10),
-			Parent = card,
+			TextSize = 18,
+			TextColor3 = Theme.rgb(tier.color),
+			Size = UDim2.fromOffset(220, 22),
+			Position = UDim2.fromOffset(4, 6),
+			Parent = row,
 		})
 		Widgets.label({
-			Text = if class.premium then (if locked then "🔒 PREMIUM" else "⭐ PREMIUM") else "FREE",
+			Text = if tier.robux > 0
+				then "R$" .. tier.robux .. " each  ·  about " .. tier.usd
+				else "Free for everyone",
 			Font = Theme.Bold,
-			TextSize = 11,
-			TextColor3 = if class.premium then C.Gold else C.Good,
-			Size = UDim2.new(1, -66, 0, 14),
-			Position = UDim2.fromOffset(60, 32),
-			Parent = card,
+			TextSize = 13,
+			TextColor3 = C.Text,
+			Size = UDim2.fromOffset(220, 18),
+			Position = UDim2.fromOffset(4, 30),
+			Parent = row,
 		})
 		Widgets.label({
-			Text = class.tagline,
-			TextSize = 12,
+			Text = "Bonus part each match:\n" .. Classes.oddsText(tier.id),
+			TextSize = 11,
 			TextWrapped = true,
-			TextColor3 = if locked then C.Dim else C.Text,
+			TextColor3 = C.Dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
-			Size = UDim2.new(1, -20, 0, 44),
-			Position = UDim2.fromOffset(10, 60),
-			Parent = card,
+			Size = UDim2.fromOffset(220, 60),
+			Position = UDim2.fromOffset(4, 52),
+			Parent = row,
 		})
-		Widgets.attachTooltip(card, function()
-			return kitInfo(class)
-		end)
-		card.Activated:Connect(function()
-			if locked then
-				State.toast("Premium class - unlock it with Roblox Premium", C.Gold)
-				return
+		local cards = Create("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -236, 1, 0),
+			Position = UDim2.fromOffset(232, 0),
+			Parent = row,
+		}, { Create.list(Enum.FillDirection.Horizontal, 10) })
+		local n = 0
+		for _, class in Classes.List do
+			if class.tier == tierIndex then
+				n += 1
+				kitCard(class, owned[class.id] == true, current == class.id, n, cards)
 			end
-			Sounds.play("Click")
-			local ok, success, message = pcall(function()
-				return classAction:InvokeServer("Select", class.id)
-			end)
-			if ok and message then
-				State.toast(message, if success then C.Good else C.Bad)
-			end
-		end)
+		end
 	end
-	unlockButton.Visible = not access
 end
 
 local function buildClassPanel()
 	classPanel = Widgets.panel({
-		Size = UDim2.fromOffset(1000, 470),
+		Size = UDim2.fromOffset(940, 540),
 		Position = UDim2.fromScale(0.5, 0.52),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundColor3 = C.Background,
@@ -171,7 +240,7 @@ local function buildClassPanel()
 		Parent = root,
 	})
 	Widgets.label({
-		Text = "CHOOSE YOUR CLASS",
+		Text = "CHOOSE YOUR KIT",
 		Font = Theme.Black,
 		TextSize = 24,
 		TextColor3 = C.Gold,
@@ -180,10 +249,11 @@ local function buildClassPanel()
 		Parent = classPanel,
 	})
 	Widgets.label({
-		Text = "Your class decides the wand, spells and parts you start with. Everything else is in the chests!",
+		Text = "Your kit decides the wands, spells and parts you start with, plus a random bonus part each match. Hover a kit to see everything in it.",
 		TextSize = 13,
 		TextColor3 = C.Dim,
-		Size = UDim2.new(1, -40, 0, 18),
+		TextWrapped = true,
+		Size = UDim2.new(1, -80, 0, 18),
 		Position = UDim2.fromOffset(20, 42),
 		Parent = classPanel,
 	})
@@ -196,29 +266,28 @@ local function buildClassPanel()
 		end,
 		parent = classPanel,
 	})
-	classGrid = Create("Frame", {
+	classGrid = Create("ScrollingFrame", {
+		Name = "KitList",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -40, 0, 330),
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -30, 1, -110),
 		Position = UDim2.fromOffset(20, 70),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 8,
 		Parent = classPanel,
-	}, {
-		Create("UIGridLayout", {
-			CellSize = UDim2.fromOffset(184, 112),
-			CellPadding = UDim2.fromOffset(10, 10),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	})
-	unlockButton = Widgets.button("⭐  Unlock every class with Premium", {
-		size = UDim2.fromOffset(360, 40),
-		position = UDim2.new(0.5, 0, 1, -54),
-		anchor = Vector2.new(0.5, 0),
-		color = Color3.fromRGB(200, 150, 40),
-		onClick = function()
-			pcall(function()
-				classAction:InvokeServer("Unlock")
-			end)
-		end,
-		parent = classPanel,
+	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+	local premiumNote = if Config.Kits.PremiumFreeTier > 0
+		then "  ·  Roblox Premium members get every " .. Classes.tierInfo(Config.Kits.PremiumFreeTier).name .. " kit free"
+		else ""
+	Widgets.label({
+		Text = "Prices are in Robux; dollar amounts are approximate." .. premiumNote,
+		TextSize = 12,
+		TextColor3 = C.Dim,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.new(1, -40, 0, 18),
+		Position = UDim2.new(0, 20, 1, -30),
+		Parent = classPanel,
 	})
 end
 
@@ -607,7 +676,7 @@ function LobbyController.init()
 		end
 	end
 	player:GetAttributeChangedSignal("Class"):Connect(updateClassButton)
-	player:GetAttributeChangedSignal("PremiumAccess"):Connect(updateClassButton)
+	player:GetAttributeChangedSignal("OwnedKits"):Connect(updateClassButton)
 	updateClassButton()
 
 	local lastTarget = 0

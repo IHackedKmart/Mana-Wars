@@ -24,6 +24,8 @@ export type State = {
 	boomerangAt: number,
 	returning: boolean,
 	stuck: boolean,
+	hold: number, -- frozen in place until this age (Stasis)
+	hover: number, -- comes to a stop at this age and floats there (Sentry)
 	rng: Random,
 }
 
@@ -39,6 +41,8 @@ export type Params = {
 	orbitRadius: number?,
 	orbitAngle: number?,
 	boomerangAt: number?,
+	hold: number?,
+	hover: number?,
 	seed: number?,
 }
 
@@ -59,6 +63,8 @@ function ProjectileSim.new(p: Params): State
 		boomerangAt = p.boomerangAt or 0,
 		returning = false,
 		stuck = false,
+		hold = p.hold or 0,
+		hover = p.hover or 0,
 		rng = Random.new(p.seed or 1),
 	}
 end
@@ -66,7 +72,13 @@ end
 -- casterPos: needed for orbit / boomerang. targetPos: current homing target, if any.
 function ProjectileSim.step(s: State, dt: number, casterPos: Vector3?, targetPos: Vector3?)
 	s.age += dt
-	if s.stuck then
+	if s.stuck or s.age < s.hold then
+		return
+	end
+	if s.hover > 0 and s.age >= s.hold + s.hover then
+		-- a sentry glides to a stop and floats in place
+		s.vel *= math.clamp(1 - 9 * dt, 0, 1)
+		s.pos += s.vel * dt
 		return
 	end
 

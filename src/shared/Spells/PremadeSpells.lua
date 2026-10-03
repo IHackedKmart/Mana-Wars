@@ -256,6 +256,41 @@ PremadeSpells.List = {
 
 	-- Epic -------------------------------------------------------------------
 	{
+		id = "Ripper",
+		name = "Ripper",
+		rarity = "Rare",
+		flavor = "A stone sawblade that just keeps bouncing.",
+		recipe = { form = "Sawblade", element = "Earth", mods = { "Bounce" } },
+	},
+	{
+		id = "Hive",
+		name = "The Hive",
+		rarity = "Rare",
+		flavor = "Six venomous sprites with a grudge.",
+		recipe = { form = "Swarm", element = "Poison" },
+	},
+	{
+		id = "EarthenRampart",
+		name = "Earthen Rampart",
+		rarity = "Rare",
+		flavor = "Hide behind it. Or wall someone in.",
+		recipe = { form = "Rampart", element = "Earth" },
+	},
+	{
+		id = "Boomerbomb",
+		name = "Boomerbomb",
+		rarity = "Rare",
+		flavor = "It comes back. That's the problem.",
+		recipe = { form = "Grenade", element = "Fire", mods = { "Returning" } },
+	},
+	{
+		id = "TimeBomb",
+		name = "Time Bomb",
+		rarity = "Rare",
+		flavor = "Hangs in the air for a second. Then it doesn't.",
+		recipe = { form = "Grenade", element = "Arcane", mods = { "Stasis", "Explosive" } },
+	},
+	{
 		id = "ClusterBomb",
 		name = "Cluster Bomb",
 		rarity = "Epic",
@@ -334,6 +369,67 @@ PremadeSpells.List = {
 		recipe = { form = "Meteor", element = "Poison", mods = { "Lingering" } },
 	},
 
+	{
+		id = "Twister",
+		name = "Twister",
+		rarity = "Epic",
+		flavor = "Picks people up. Puts them down somewhere else. Hard.",
+		recipe = { form = "Tornado", element = "Wind", mods = { "Magnetic" } },
+	},
+	{
+		id = "BlackHole",
+		name = "Black Hole",
+		rarity = "Epic",
+		flavor = "Everything goes in. Nothing comes out.",
+		recipe = { form = "BlackHole", element = "Void" },
+	},
+	{
+		id = "ArcaneRain",
+		name = "Arcane Rain",
+		rarity = "Epic",
+		flavor = "Five bolts fall out of a clear sky.",
+		recipe = { form = "Bolt", element = "Arcane", mods = { "Skyfall", "Barrage" } },
+	},
+	{
+		id = "Switcheroo",
+		name = "Switcheroo",
+		rarity = "Epic",
+		flavor = "Now you're over there, and they're over here.",
+		recipe = { form = "Bolt", element = "Arcane", mods = { "Transpose", "Haste" } },
+	},
+	{
+		id = "FlakCannon",
+		name = "Flak Cannon",
+		rarity = "Epic",
+		flavor = "Bursts into burning shrapnel next to anyone who gets close.",
+		recipe = {
+			form = "Bolt",
+			element = "Fire",
+			trigger = "Proximity",
+			payload = { form = "Spray", element = "Fire" },
+		},
+	},
+	{
+		id = "BouncingBetty",
+		name = "Bouncing Betty",
+		rarity = "Epic",
+		flavor = "Every bounce sets off a blast.",
+		recipe = {
+			form = "Grenade",
+			element = "Earth",
+			mods = { "Bounce" },
+			trigger = "OnBounce",
+			payload = { form = "Nova", element = "Fire" },
+		},
+	},
+	{
+		id = "ChaosOrb",
+		name = "Chaos Orb",
+		rarity = "Epic",
+		flavor = "Nobody knows what it'll do. Including you.",
+		recipe = { form = "Orb", element = "Chaos", mods = { "Gigantic" } },
+	},
+
 	-- Legendary --------------------------------------------------------------
 	{
 		id = "Starfall",
@@ -382,6 +478,47 @@ PremadeSpells.List = {
 		recipe = { form = "Chain", element = "Lightning", mods = { "Echo", "Pierce" } },
 	},
 
+	{
+		id = "HydraStorm",
+		name = "Hydra Storm",
+		rarity = "Legendary",
+		flavor = "One bolt. Then two. Then four. Then eight.",
+		recipe = { form = "Bolt", element = "Lightning", mods = { "Bounce", "Hydra" } },
+	},
+	{
+		id = "Fireworks",
+		name = "Fireworks",
+		rarity = "Legendary",
+		flavor = "It splits, and splits, and splits again.",
+		recipe = { form = "Spark", element = "Fire", mods = { "Fractal", "Fractal" } },
+	},
+	{
+		id = "WatchfulEye",
+		name = "Watchful Eye",
+		rarity = "Legendary",
+		flavor = "A floating eye that shoots at anyone it sees, and makes them glow.",
+		recipe = { form = "Sentry", element = "Radiant" },
+	},
+	{
+		id = "RewindLance",
+		name = "Rewind Lance",
+		rarity = "Legendary",
+		flavor = "Undo the last two seconds of their escape.",
+		recipe = { form = "Lance", element = "Chrono" },
+	},
+	{
+		id = "ReapersChain",
+		name = "Reaper's Chain",
+		rarity = "Legendary",
+		flavor = "Every death feeds the next.",
+		recipe = {
+			form = "Chain",
+			element = "Void",
+			trigger = "OnKill",
+			payload = { form = "Chain", element = "Void", mods = { "Pierce" } },
+		},
+	},
+
 	-- Mythic -----------------------------------------------------------------
 	{
 		id = "Doombringer",
@@ -408,6 +545,38 @@ PremadeSpells.List = {
 			trigger = "Pulse",
 			payload = { form = "Lance", element = "Radiant" },
 		},
+	},
+	{
+		id = "EventHorizon",
+		name = "Event Horizon",
+		rarity = "Mythic",
+		flavor = "A colossal black hole that ends in a void supernova.",
+		recipe = {
+			form = "BlackHole",
+			element = "Void",
+			mods = { "Gigantic" },
+			trigger = "OnExpire",
+			payload = { form = "Nova", element = "Void", mods = { "Empower", "Enlarge" } },
+		},
+	},
+	{
+		id = "DoomTurret",
+		name = "Doom Turret",
+		rarity = "Mythic",
+		flavor = "A burning eye that calls meteors down on whoever it sees.",
+		recipe = {
+			form = "Sentry",
+			element = "Fire",
+			trigger = "Pulse",
+			payload = { form = "Meteor", element = "Fire" },
+		},
+	},
+	{
+		id = "Kaleidoscope",
+		name = "Kaleidoscope",
+		rarity = "Mythic",
+		flavor = "Bounces, splits and splits again. Good luck counting them.",
+		recipe = { form = "Spark", element = "Arcane", mods = { "Fractal", "Hydra", "Bounce", "Bounce" } },
 	},
 } :: { Premade }
 

@@ -1,4 +1,5 @@
--- Lingering ground effects left by Cloud spells and the Lingering modifier.
+-- Lingering ground effects left by Cloud spells and the Lingering modifier, and the solid
+-- walls conjured by Rampart spells.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -25,10 +26,28 @@ type Zone = {
 
 local ZoneService = {}
 
+type Wall = {
+	part: BasePart,
+	untilT: number,
+	onEnd: ((Vector3) -> ())?,
+}
+
 local zones: { Zone } = {}
+local walls: { Wall } = {}
 local nextId = 0
 local MAX_ZONES = 60
+local MAX_WALLS = 40
 local TICK = 0.5
+
+-- What a conjured wall is made of, by element.
+local WALL_LOOKS: { [string]: { Enum.Material | number } } = {
+	Earth = { Enum.Material.Slate, 0 },
+	Frost = { Enum.Material.Ice, 0.15 },
+	Fire = { Enum.Material.CrackedLava, 0 },
+	Poison = { Enum.Material.Glass, 0.35 },
+	Void = { Enum.Material.Glass, 0.3 },
+	Chaos = { Enum.Material.Neon, 0.4 },
+}
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -54,12 +73,67 @@ function ZoneService.create(spec: Spec, caster: Combatant, position: Vector3)
 	FX.all("Zone", zone.id, ground, zone.radius, spec.zoneDuration, spec.color, spec.color2, spec.element)
 end
 
+-- A solid wall standing on `ground`, its face turned toward `facing`. Blocks movement and spells
+-- until it crumbles, then calls onEnd with its centre.
+function ZoneService.createWall(spec: Spec, ground: Vector3, facing: Vector3, onEnd: ((Vector3) -> ())?): BasePart
+	if #walls >= MAX_WALLS then
+		local oldest = table.remove(walls, 1) :: Wall
+		oldest.part:Destroy()
+	end
+	local folder = workspace:FindFirstChild("SpellWalls")
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = "SpellWalls"
+		folder.Parent = workspace
+	end
+	local flat = Vector3.new(facing.X, 0, facing.Z)
+	local look = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	local style = WALL_LOOKS[spec.element] or { Enum.Material.Glass, 0.3 }
+	local center = ground + Vector3.new(0, spec.wallHeight / 2 - 0.5, 0)
+	local part = Instance.new("Part")
+	part.Name = "SpellWall"
+	part.Anchored = true
+	part.CanTouch = false
+	part.Size = Vector3.new(spec.wallWidth, spec.wallHeight, 2)
+	part.CFrame = CFrame.lookAt(center, center + look)
+	part.Material = style[1] :: Enum.Material
+	part.Transparency = style[2] :: number
+	part.Color = Color3.fromRGB(spec.color[1], spec.color[2], spec.color[3])
+	part.Parent = folder
+	table.insert(walls, { part = part, untilT = now() + spec.lifetime, onEnd = onEnd })
+	return part
+end
+
 function ZoneService.clear()
 	table.clear(zones)
+	for _, wall in walls do
+		wall.part:Destroy()
+	end
+	table.clear(walls)
+end
+
+local function tickWalls(t: number)
+	local i = 1
+	while i <= #walls do
+		local wall = walls[i]
+		if t >= wall.untilT then
+			table.remove(walls, i)
+			local center = wall.part.Position
+			wall.part:Destroy()
+			if wall.onEnd then
+				task.spawn(wall.onEnd, center)
+			end
+		else
+			i += 1
+		end
+	end
 end
 
 function ZoneService.init()
 	RunService.Heartbeat:Connect(function()
+		if #walls > 0 then
+			tickWalls(now())
+		end
 		if #zones == 0 then
 			return
 		end

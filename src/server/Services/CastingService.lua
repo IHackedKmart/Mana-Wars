@@ -262,7 +262,7 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 		wandUid = wand.uid,
 		siphon = Items.perkValue(wand, "Siphon"),
 		vampiric = Items.perkValue(wand, "Vampiric"),
-		budget = { n = Config.Combat.MaxTriggerFanout },
+		budget = { n = Config.Combat.MaxTriggerFanout, splits = Config.Combat.MaxSplits },
 		aimPoint = target,
 	}
 	FX.all("Cast", c.model, drawn[1].color)

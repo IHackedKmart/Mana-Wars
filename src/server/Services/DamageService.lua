@@ -60,32 +60,39 @@ function DamageService.heal(target: Combatant, amount: number)
 	end
 end
 
--- Returns the damage actually dealt to health.
-function DamageService.apply(target: Combatant, amount: number, info: DamageInfo): number
+-- Whether `attacker` may affect `target` right now (damage, pulls, swaps, rewinds).
+function DamageService.canHurt(target: Combatant, attacker: Combatant?, isStorm: boolean?): boolean
 	local hum = target.humanoid
 	if not hum or hum.Health <= 0 or not target.alive or not target.inMatch then
-		return 0
+		return false
 	end
+	if target.isDummy then
+		-- training dummies only react to spells from the Spell Lab
+		return attacker ~= nil and attacker.practice
+	end
+	-- practice spells never hurt anyone real, even if they somehow reach the arena
+	if attacker and attacker.practice then
+		return false
+	end
+	if not GameState.combatAllowed() then
+		return false
+	end
+	-- grace period: players (and bots) cannot hurt each other yet
+	if GameState.phase == "Grace" and attacker and attacker ~= target and not isStorm then
+		return false
+	end
+	return true
+end
+
+-- Returns the damage actually dealt to health, and whether the hit was a kill
+-- (for a training dummy: knocked down to its last hit point).
+function DamageService.apply(target: Combatant, amount: number, info: DamageInfo): (number, boolean)
 	local attacker = info.attacker
 	local isSelf = attacker == target
-	if target.isDummy then
-		-- training dummies only react to spells from the lobby Spell Lab
-		if not attacker or not attacker.practice then
-			return 0
-		end
-	else
-		-- lobby practice spells never hurt anyone real, even if they somehow reach the arena
-		if attacker and attacker.practice then
-			return 0
-		end
-		if not GameState.combatAllowed() then
-			return 0
-		end
-		-- grace period: players (and bots) cannot hurt each other yet
-		if GameState.phase == "Grace" and attacker and not isSelf and not info.isStorm then
-			return 0
-		end
+	if not DamageService.canHurt(target, attacker, info.isStorm) then
+		return 0, false
 	end
+	local hum = target.humanoid :: Humanoid
 
 	local crit = false
 	if isSelf then
@@ -167,12 +174,14 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 			damageNumber:FireClient(target.player, pos, math.floor(dealt + 0.5), crit, info.element or "Neutral", true)
 		end
 	end
-	return dealt
+	local killed = dealt > 0 and (hum.Health <= 0 or (target.isDummy and hum.Health <= 1))
+	return dealt, killed
 end
 
 function DamageService.init()
 	StatusService.dealDamage = function(c, amount, info)
-		return DamageService.apply(c, amount, info :: any)
+		local dealt = DamageService.apply(c, amount, info :: any)
+		return dealt
 	end
 end
 

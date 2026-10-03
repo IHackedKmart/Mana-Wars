@@ -36,11 +36,18 @@
         <Properties>
           <string name="Name">Classes</string>
           <string name="Source"><![CDATA[--!strict
--- Starting kits. "Apprentice" is free; every other class is a premium perk
--- (Roblox Premium or the classes game pass, see Config.Premium).
--- Kits are a head start, not a win button: the best gear is always in the chests.
+-- Starting kits, sold in tiers from a free Apprentice up to $25 Archmage kits.
+--   * Every paid kit is its own game pass (ids in Config.Kits.GamePassIds). Prices are set on the
+--     Creator Dashboard; the Robux amounts below are what the shop shows and what we recommend.
+--   * Every kit also hands out ONE random spell part each match. Higher tiers roll rarer parts;
+--     the odds are listed below and shown to players before they buy (Roblox requires that for
+--     paid random items).
+-- Cheap tiers are mostly flavour. The top tiers are a real head start, but the chests still hold
+-- the best gear in the game.
 
 local WandGenerator = require(script.Parent.WandGenerator)
+local Rarity = require(script.Parent.Rarity)
+local SpellParts = require(script.Parent.Spells.SpellParts)
 
 export type ClassKit = {
 	wands: { { template: WandGenerator.WandTemplate, spells: { string } } },
@@ -53,39 +60,114 @@ export type ClassDef = {
 	id: string,
 	name: string,
 	icon: string,
-	premium: boolean,
+	tier: number, -- 0 = free, 1-6 = paid tiers (see Classes.Tiers)
 	color: { number },
 	tagline: string,
 	kit: ClassKit,
 }
 
+export type Tier = {
+	id: number,
+	name: string,
+	robux: number, -- recommended game pass price
+	usd: string, -- what that roughly costs a player
+	color: { number },
+	bonusOdds: { [string]: number }, -- rarity -> % chance for the random bonus spell part
+}
+
 local Classes = {}
 
+-- (~80 Robux per $0.99 at the standard Robux pack price)
+Classes.Tiers = {
+	{
+		id = 0,
+		name = "Novice",
+		robux = 0,
+		usd = "Free",
+		color = { 200, 200, 210 },
+		bonusOdds = { Common = 100 },
+	},
+	{
+		id = 1,
+		name = "Copper",
+		robux = 80,
+		usd = "$0.99",
+		color = { 200, 125, 70 },
+		bonusOdds = { Common = 75, Uncommon = 25 },
+	},
+	{
+		id = 2,
+		name = "Silver",
+		robux = 240,
+		usd = "$2.99",
+		color = { 200, 210, 225 },
+		bonusOdds = { Common = 30, Uncommon = 55, Rare = 15 },
+	},
+	{
+		id = 3,
+		name = "Gold",
+		robux = 400,
+		usd = "$4.99",
+		color = { 255, 205, 90 },
+		bonusOdds = { Uncommon = 40, Rare = 50, Epic = 10 },
+	},
+	{
+		id = 4,
+		name = "Arcane",
+		robux = 800,
+		usd = "$9.99",
+		color = { 165, 115, 255 },
+		bonusOdds = { Rare = 55, Epic = 40, Legendary = 5 },
+	},
+	{
+		id = 5,
+		name = "Astral",
+		robux = 1200,
+		usd = "$14.99",
+		color = { 120, 200, 255 },
+		bonusOdds = { Rare = 20, Epic = 60, Legendary = 20 },
+	},
+	{
+		id = 6,
+		name = "Archmage",
+		robux = 2000,
+		usd = "$24.99",
+		color = { 255, 120, 90 },
+		bonusOdds = { Epic = 55, Legendary = 45 },
+	},
+} :: { Tier }
+
+local function wand(
+	name: string,
+	rarity: string,
+	wandType: string,
+	color: { number },
+	stats: { [string]: any },
+	perks: { any }?
+): WandGenerator.WandTemplate
+	return { name = name, rarity = rarity, wandType = wandType, color = color, stats = stats, perks = perks }
+end
+
 Classes.List = {
+	---------------------------------------------------------------- Free
 	{
 		id = "Apprentice",
 		name = "Apprentice",
 		icon = "📖",
-		premium = false,
+		tier = 0,
 		color = { 200, 200, 210 },
 		tagline = "A humble student with a basic wand. Loot fast!",
 		kit = {
 			wands = {
 				{
-					template = {
-						name = "Apprentice's Wand",
-						rarity = "Common",
-						wandType = "Wand",
-						color = { 140, 100, 60 },
-						stats = {
-							capacity = 3,
-							castDelay = 0.16,
-							rechargeTime = 0.45,
-							manaMax = 140,
-							manaRegen = 45,
-							spread = 2,
-						},
-					},
+					template = wand("Apprentice's Wand", "Common", "Wand", { 140, 100, 60 }, {
+						capacity = 3,
+						castDelay = 0.16,
+						rechargeTime = 0.45,
+						manaMax = 140,
+						manaRegen = 45,
+						spread = 2,
+					}),
 					spells = { "SparkBolt", "MagicBolt" },
 				},
 			},
@@ -93,163 +175,30 @@ Classes.List = {
 			consumables = { HealingDraught = 1 },
 		},
 	},
-	{
-		id = "Pyromancer",
-		name = "Pyromancer",
-		icon = "🔥",
-		premium = true,
-		color = { 255, 120, 40 },
-		tagline = "Burns everything. Fire spells deal +20% damage.",
-		kit = {
-			wands = {
-				{
-					template = {
-						name = "Emberheart Rod",
-						rarity = "Uncommon",
-						wandType = "Rod",
-						color = { 120, 40, 20 },
-						stats = {
-							capacity = 4,
-							castDelay = 0.18,
-							rechargeTime = 0.55,
-							manaMax = 220,
-							manaRegen = 55,
-							spread = 2,
-						},
-						perks = { { kind = "Affinity", element = "Fire", amount = 0.2 } },
-					},
-					spells = { "Firebolt", "Firebomb" },
-				},
-			},
-			parts = { Fire = 2, Explosive = 1 },
-			consumables = { HealingDraught = 1 },
-		},
-	},
+
+	---------------------------------------------------------------- Copper ($0.99): flavour
 	{
 		id = "Cryomancer",
 		name = "Cryomancer",
 		icon = "❄️",
-		premium = true,
+		tier = 1,
 		color = { 140, 220, 255 },
-		tagline = "Slows, freezes and shatters. Control the fight.",
+		tagline = "Starts with frost: slow them down, then freeze them solid.",
 		kit = {
 			wands = {
 				{
-					template = {
-						name = "Glacial Wand",
-						rarity = "Uncommon",
-						wandType = "Wand",
-						color = { 180, 230, 255 },
-						stats = {
-							capacity = 3,
-							castDelay = 0.14,
-							rechargeTime = 0.5,
-							manaMax = 180,
-							manaRegen = 55,
-							spread = 1,
-						},
-						perks = { { kind = "Affinity", element = "Frost", amount = 0.2 } },
-					},
-					spells = { "Frostbolt", "IceShard" },
+					template = wand("Frosted Wand", "Common", "Wand", { 180, 230, 255 }, {
+						capacity = 3,
+						castDelay = 0.15,
+						rechargeTime = 0.45,
+						manaMax = 150,
+						manaRegen = 48,
+						spread = 1,
+					}, { { kind = "Affinity", element = "Frost", amount = 0.1 } }),
+					spells = { "Frostbolt", "SparkBolt" },
 				},
 			},
-			parts = { Frost = 2, Pierce = 1 },
-			consumables = { HealingDraught = 1 },
-		},
-	},
-	{
-		id = "Stormcaller",
-		name = "Stormcaller",
-		icon = "⚡",
-		premium = true,
-		color = { 255, 235, 90 },
-		tagline = "Casts two spells at once with a twin-cast scepter.",
-		kit = {
-			wands = {
-				{
-					template = {
-						name = "Tempest Scepter",
-						rarity = "Uncommon",
-						wandType = "Scepter",
-						color = { 70, 80, 120 },
-						stats = {
-							capacity = 4,
-							spellsPerCast = 2,
-							castDelay = 0.22,
-							rechargeTime = 0.6,
-							manaMax = 200,
-							manaRegen = 60,
-							spread = 3,
-						},
-					},
-					spells = { "QuickSpark", "TwinSparks" },
-				},
-			},
-			parts = { Lightning = 1, Haste = 1, Twin = 1 },
-			consumables = { ManaTonic = 1 },
-		},
-	},
-	{
-		id = "Plaguebringer",
-		name = "Plaguebringer",
-		icon = "☠️",
-		premium = true,
-		color = { 120, 230, 60 },
-		tagline = "Stacks venom with homing wisps. Patience kills.",
-		kit = {
-			wands = {
-				{
-					template = {
-						name = "Rotwood Staff",
-						rarity = "Uncommon",
-						wandType = "Staff",
-						color = { 70, 90, 40 },
-						stats = {
-							capacity = 4,
-							castDelay = 0.24,
-							rechargeTime = 0.7,
-							manaMax = 260,
-							manaRegen = 60,
-							spread = 2,
-						},
-						perks = { { kind = "Affinity", element = "Poison", amount = 0.2 } },
-					},
-					spells = { "VenomWisp", "MagicBolt" },
-				},
-			},
-			parts = { Poison = 2, Lingering = 1 },
-			consumables = { HealingDraught = 1 },
-		},
-	},
-	{
-		id = "Voidwalker",
-		name = "Voidwalker",
-		icon = "🌌",
-		premium = true,
-		color = { 150, 70, 210 },
-		tagline = "Drains life from enemies. Starts with lifesteal.",
-		kit = {
-			wands = {
-				{
-					template = {
-						name = "Abyssal Focus",
-						rarity = "Uncommon",
-						wandType = "Focus",
-						color = { 40, 20, 60 },
-						stats = {
-							capacity = 2,
-							castDelay = 0.1,
-							rechargeTime = 0.35,
-							manaMax = 160,
-							manaRegen = 75,
-							spread = 1,
-						},
-						perks = { { kind = "Vampiric", amount = 0.06 } },
-					},
-					spells = { "SparkBolt", "MagicBolt" },
-				},
-			},
-			parts = { Void = 1, Leech = 1, Blink = 1 },
+			parts = { Frost = 1 },
 			consumables = { HealingDraught = 1 },
 		},
 	},
@@ -257,60 +206,176 @@ Classes.List = {
 		id = "Geomancer",
 		name = "Geomancer",
 		icon = "⛰️",
-		premium = true,
+		tier = 1,
 		color = { 170, 125, 80 },
-		tagline = "Hits like a landslide. Starts with a shield part.",
+		tagline = "Throws rocks. Heavy ones.",
 		kit = {
 			wands = {
 				{
-					template = {
-						name = "Bedrock Staff",
-						rarity = "Uncommon",
-						wandType = "Staff",
-						color = { 100, 85, 70 },
-						stats = {
-							capacity = 4,
-							castDelay = 0.26,
-							rechargeTime = 0.7,
-							manaMax = 280,
-							manaRegen = 55,
-							spread = 2,
-						},
-						perks = { { kind = "Affinity", element = "Earth", amount = 0.2 } },
-					},
-					spells = { "PebbleToss", "Boulder" },
+					template = wand("Pebble Rod", "Common", "Rod", { 100, 85, 70 }, {
+						capacity = 3,
+						castDelay = 0.17,
+						rechargeTime = 0.45,
+						manaMax = 160,
+						manaRegen = 45,
+						spread = 2,
+					}, { { kind = "Affinity", element = "Earth", amount = 0.1 } }),
+					spells = { "PebbleToss", "MagicBolt" },
 				},
 			},
-			parts = { Earth = 1, Bounce = 1, Aegis = 1 },
-			consumables = { StoneskinPotion = 1 },
+			parts = { Earth = 1 },
+			consumables = { HealingDraught = 1 },
+		},
+	},
+	{
+		id = "Windwalker",
+		name = "Windwalker",
+		icon = "🌪️",
+		tier = 1,
+		color = { 180, 255, 220 },
+		tagline = "A breezy wand that blows enemies off their feet.",
+		kit = {
+			wands = {
+				{
+					template = wand("Breeze Wand", "Common", "Wand", { 220, 240, 230 }, {
+						capacity = 3,
+						castDelay = 0.13,
+						rechargeTime = 0.4,
+						manaMax = 140,
+						manaRegen = 50,
+						spread = 3,
+					}),
+					spells = { "Gust", "SparkBolt" },
+				},
+			},
+			parts = { Wind = 1 },
+			consumables = { SwiftnessElixir = 1 },
+		},
+	},
+
+	---------------------------------------------------------------- Silver ($2.99): a better wand
+	{
+		id = "Pyromancer",
+		name = "Pyromancer",
+		icon = "🔥",
+		tier = 2,
+		color = { 255, 120, 40 },
+		tagline = "Burns everything. Fire spells deal +20% damage.",
+		kit = {
+			wands = {
+				{
+					template = wand("Emberheart Rod", "Uncommon", "Rod", { 120, 40, 20 }, {
+						capacity = 4,
+						castDelay = 0.18,
+						rechargeTime = 0.55,
+						manaMax = 220,
+						manaRegen = 55,
+						spread = 2,
+					}, { { kind = "Affinity", element = "Fire", amount = 0.2 } }),
+					spells = { "Firebolt", "Firebomb" },
+				},
+			},
+			parts = { Fire = 2, Heavy = 1 },
+			consumables = { HealingDraught = 1 },
+		},
+	},
+	{
+		id = "Plaguebringer",
+		name = "Plaguebringer",
+		icon = "☠️",
+		tier = 2,
+		color = { 120, 230, 60 },
+		tagline = "Stacks venom with homing wisps. Patience kills.",
+		kit = {
+			wands = {
+				{
+					template = wand("Rotwood Staff", "Uncommon", "Staff", { 70, 90, 40 }, {
+						capacity = 4,
+						castDelay = 0.24,
+						rechargeTime = 0.7,
+						manaMax = 260,
+						manaRegen = 60,
+						spread = 2,
+					}, { { kind = "Affinity", element = "Poison", amount = 0.2 } }),
+					spells = { "VenomWisp", "MagicBolt" },
+				},
+			},
+			parts = { Poison = 2, Extend = 1 },
+			consumables = { HealingDraught = 1 },
+		},
+	},
+	{
+		id = "Stormcaller",
+		name = "Stormcaller",
+		icon = "⚡",
+		tier = 2,
+		color = { 255, 235, 90 },
+		tagline = "Casts two spells at once with a twin-cast scepter.",
+		kit = {
+			wands = {
+				{
+					template = wand("Tempest Scepter", "Uncommon", "Scepter", { 70, 80, 120 }, {
+						capacity = 4,
+						spellsPerCast = 2,
+						castDelay = 0.22,
+						rechargeTime = 0.6,
+						manaMax = 200,
+						manaRegen = 60,
+						spread = 3,
+					}),
+					spells = { "QuickSpark", "TwinSparks" },
+				},
+			},
+			parts = { Lightning = 1, Haste = 1 },
+			consumables = { ManaTonic = 1 },
+		},
+	},
+
+	---------------------------------------------------------------- Gold ($4.99): rare gear
+	{
+		id = "Voidwalker",
+		name = "Voidwalker",
+		icon = "🌌",
+		tier = 3,
+		color = { 150, 70, 210 },
+		tagline = "Drains life with every hit, and can blink away.",
+		kit = {
+			wands = {
+				{
+					template = wand("Abyssal Focus", "Rare", "Focus", { 40, 20, 60 }, {
+						capacity = 3,
+						castDelay = 0.1,
+						rechargeTime = 0.35,
+						manaMax = 200,
+						manaRegen = 85,
+						spread = 1,
+					}, { { kind = "Vampiric", amount = 0.06 } }),
+					spells = { "VoidSeeker", "SparkBolt", "MagicBolt" },
+				},
+			},
+			parts = { Void = 1, Leech = 1, Blink = 1 },
+			consumables = { HealingDraught = 1, ManaTonic = 1 },
 		},
 	},
 	{
 		id = "Bloodmage",
 		name = "Bloodmage",
 		icon = "🩸",
-		premium = true,
+		tier = 3,
 		color = { 210, 30, 50 },
 		tagline = "Trades health for raw power. High risk, high reward.",
 		kit = {
 			wands = {
 				{
-					template = {
-						name = "Sanguine Rod",
-						rarity = "Uncommon",
-						wandType = "Rod",
-						color = { 90, 10, 20 },
-						stats = {
-							capacity = 3,
-							castDelay = 0.16,
-							rechargeTime = 0.5,
-							manaMax = 200,
-							manaRegen = 60,
-							spread = 1,
-						},
-						perks = { { kind = "Vampiric", amount = 0.05 } },
-					},
-					spells = { "MagicBolt", "Scattershot" },
+					template = wand("Sanguine Rod", "Rare", "Rod", { 90, 10, 20 }, {
+						capacity = 4,
+						castDelay = 0.16,
+						rechargeTime = 0.5,
+						manaMax = 240,
+						manaRegen = 65,
+						spread = 1,
+					}, { { kind = "Vampiric", amount = 0.05 } }),
+					spells = { "BloodGlaive", "Scattershot", "MagicBolt" },
 				},
 			},
 			parts = { Blood = 1, Critical = 1, Empower = 1 },
@@ -321,64 +386,245 @@ Classes.List = {
 		id = "Lightbringer",
 		name = "Lightbringer",
 		icon = "☀️",
-		premium = true,
+		tier = 3,
 		color = { 255, 230, 140 },
-		tagline = "Reveals enemies through walls and hunts them down.",
+		tagline = "Every spell homes in. Reveals enemies through walls.",
 		kit = {
 			wands = {
 				{
-					template = {
-						name = "Sunlit Scepter",
-						rarity = "Uncommon",
-						wandType = "Scepter",
-						color = { 230, 200, 120 },
-						stats = {
-							capacity = 3,
-							castDelay = 0.18,
-							rechargeTime = 0.55,
-							manaMax = 210,
-							manaRegen = 55,
-							spread = 1,
-						},
-						perks = { { kind = "AlwaysCast", modifier = "Homing" } },
-					},
-					spells = { "SparkBolt", "MagicBolt" },
+					template = wand("Sunlit Scepter", "Rare", "Scepter", { 230, 200, 120 }, {
+						capacity = 3,
+						castDelay = 0.18,
+						rechargeTime = 0.5,
+						manaMax = 240,
+						manaRegen = 60,
+						spread = 1,
+					}, { { kind = "AlwaysCast", modifier = "Homing" } }),
+					spells = { "Sunlance", "SparkBolt", "MagicBolt" },
 				},
 			},
 			parts = { Radiant = 1, Critical = 1 },
-			consumables = { HealingDraught = 1 },
+			consumables = { HealingDraught = 1, StoneskinPotion = 1 },
 		},
 	},
+
+	---------------------------------------------------------------- Arcane ($9.99): signature spells
 	{
-		id = "Windwalker",
-		name = "Windwalker",
-		icon = "🌪️",
-		premium = true,
-		color = { 180, 255, 220 },
-		tagline = "The fastest wand in the game. Blows enemies away.",
+		id = "Artificer",
+		name = "Artificer",
+		icon = "🔧",
+		tier = 4,
+		color = { 210, 160, 90 },
+		tagline = "Builds walls, throws sawblades and blows things up.",
 		kit = {
 			wands = {
 				{
-					template = {
-						name = "Zephyr Wand",
-						rarity = "Uncommon",
-						wandType = "Wand",
-						color = { 220, 240, 230 },
-						stats = {
-							capacity = 3,
-							castDelay = 0.08,
-							rechargeTime = 0.3,
-							manaMax = 150,
-							manaRegen = 70,
-							spread = 3,
-							speedMult = 1.15,
-						},
-					},
-					spells = { "Gust", "SparkBolt" },
+					template = wand("Tinkerer's Rod", "Rare", "Rod", { 150, 110, 60 }, {
+						capacity = 4,
+						castDelay = 0.17,
+						rechargeTime = 0.5,
+						manaMax = 320,
+						manaRegen = 80,
+						spread = 1,
+					}, { { kind = "Affinity", element = "Earth", amount = 0.2 } }),
+					spells = { "Ripper", "EarthenRampart", "Fireball", "PebbleToss" },
 				},
 			},
-			parts = { Wind = 1, Haste = 1 },
-			consumables = { SwiftnessElixir = 1 },
+			parts = { Sawblade = 1, Rampart = 1, Bounce = 1, Explosive = 1 },
+			consumables = { HealingDraught = 2, StoneskinPotion = 1 },
+		},
+	},
+	{
+		id = "Chronomancer",
+		name = "Chronomancer",
+		icon = "⏳",
+		tier = 4,
+		color = { 255, 215, 140 },
+		tagline = "Bends time: delayed bombs, frozen foes and swapped places.",
+		kit = {
+			wands = {
+				{
+					template = wand("Hourglass Wand", "Rare", "Wand", { 200, 170, 110 }, {
+						capacity = 4,
+						castDelay = 0.12,
+						rechargeTime = 0.4,
+						manaMax = 300,
+						manaRegen = 90,
+						spread = 1,
+					}, { { kind = "Affinity", element = "Frost", amount = 0.15 } }),
+					spells = { "TimeBomb", "IceShard", "Switcheroo", "Frostbolt" },
+				},
+			},
+			parts = { Stasis = 2, Frost = 1, Quicken = 1 },
+			consumables = { HealingDraught = 1, SwiftnessElixir = 1, ManaTonic = 1 },
+		},
+	},
+	{
+		id = "Swarmlord",
+		name = "Swarmlord",
+		icon = "🐝",
+		tier = 4,
+		color = { 230, 200, 60 },
+		tagline = "Never fights alone. Clouds of homing sprites do the work.",
+		kit = {
+			wands = {
+				{
+					template = wand("Hive Staff", "Rare", "Staff", { 140, 110, 40 }, {
+						capacity = 4,
+						castDelay = 0.22,
+						rechargeTime = 0.55,
+						manaMax = 360,
+						manaRegen = 85,
+						spread = 2,
+					}, { { kind = "Affinity", element = "Poison", amount = 0.2 } }),
+					spells = { "Hive", "SeekerSwarm", "VenomWisp", "MagicBolt" },
+				},
+			},
+			parts = { Swarm = 1, Poison = 2, Homing = 1 },
+			consumables = { HealingDraught = 2 },
+		},
+	},
+
+	---------------------------------------------------------------- Astral ($14.99): epic gear
+	{
+		id = "Stormlord",
+		name = "Stormlord",
+		icon = "⛈️",
+		tier = 5,
+		color = { 150, 200, 255 },
+		tagline = "Lightning that splits, chains and never stops bouncing.",
+		kit = {
+			wands = {
+				{
+					template = wand("Thunderhead Scepter", "Epic", "Scepter", { 60, 70, 110 }, {
+						capacity = 4,
+						spellsPerCast = 2,
+						castDelay = 0.16,
+						rechargeTime = 0.45,
+						manaMax = 420,
+						manaRegen = 120,
+						spread = 2,
+					}, { { kind = "Affinity", element = "Lightning", amount = 0.2 } }),
+					spells = { "HydraStorm", "ChainLightning", "ThunderLance", "TwinSparks" },
+				},
+			},
+			parts = { Lightning = 2, Bounce = 2, Pierce = 1 },
+			consumables = { HealingDraught = 2, SwiftnessElixir = 1 },
+		},
+	},
+	{
+		id = "VoidArchon",
+		name = "Void Archon",
+		icon = "🕳️",
+		tier = 5,
+		color = { 120, 50, 170 },
+		tagline = "Opens black holes and swaps places with whatever's inside.",
+		kit = {
+			wands = {
+				{
+					template = wand("Event Staff", "Epic", "Staff", { 30, 10, 50 }, {
+						capacity = 4,
+						castDelay = 0.22,
+						rechargeTime = 0.55,
+						manaMax = 480,
+						manaRegen = 120,
+						spread = 1,
+					}, { { kind = "Vampiric", amount = 0.06 } }),
+					spells = { "BlackHole", "VoidSeeker", "Switcheroo", "MagicBolt" },
+				},
+				{
+					template = wand("Phase Focus", "Rare", "Focus", { 80, 40, 120 }, {
+						capacity = 2,
+						castDelay = 0.1,
+						rechargeTime = 0.3,
+						manaMax = 200,
+						manaRegen = 90,
+						spread = 1,
+					}),
+					spells = { "EscapeStep", "SparkBolt" },
+				},
+			},
+			parts = { Void = 2, Magnetic = 1, Leech = 1 },
+			consumables = { HealingDraught = 2, ManaTonic = 1 },
+		},
+	},
+
+	---------------------------------------------------------------- Archmage ($24.99): legendary gear
+	{
+		id = "Archmage",
+		name = "Archmage",
+		icon = "🌟",
+		tier = 6,
+		color = { 255, 210, 120 },
+		tagline = "A legendary twin-cast staff that rains stars and fireworks.",
+		kit = {
+			wands = {
+				{
+					template = wand("Staff of the Archmage", "Legendary", "Staff", { 255, 240, 200 }, {
+						capacity = 5,
+						spellsPerCast = 2,
+						castDelay = 0.15,
+						rechargeTime = 0.45,
+						manaMax = 600,
+						manaRegen = 160,
+						spread = 1,
+					}, { { kind = "Affinity", element = "Arcane", amount = 0.25 } }),
+					spells = { "ArcaneRain", "Fireworks", "Starfall", "MagicMissile" },
+				},
+				{
+					template = wand("Warding Focus", "Epic", "Focus", { 170, 230, 255 }, {
+						capacity = 2,
+						castDelay = 0.1,
+						rechargeTime = 0.3,
+						manaMax = 260,
+						manaRegen = 110,
+						spread = 1,
+					}),
+					spells = { "EscapeStep", "Bulwark" },
+				},
+			},
+			parts = { Fractal = 1, Skyfall = 1, Arcane = 2, Triple = 1 },
+			consumables = { HealingDraught = 2, ManaTonic = 2, StoneskinPotion = 1 },
+		},
+	},
+	{
+		id = "Harbinger",
+		name = "Harbinger",
+		icon = "☄️",
+		tier = 6,
+		color = { 255, 90, 60 },
+		tagline = "A watching eye, falling meteors and pure chaos.",
+		kit = {
+			wands = {
+				{
+					template = wand("Harbinger's Rod", "Legendary", "Rod", { 255, 120, 50 }, {
+						capacity = 4,
+						castDelay = 0.2,
+						rechargeTime = 0.5,
+						manaMax = 650,
+						manaRegen = 150,
+						spread = 1,
+					}, {
+						{ kind = "Affinity", element = "Fire", amount = 0.25 },
+						{ kind = "Siphon", amount = 10 } :: any,
+					}),
+					spells = { "WatchfulEye", "Meteor", "SeekingInferno", "Fireball" },
+				},
+				{
+					template = wand("Chaos Scepter", "Epic", "Scepter", { 255, 80, 200 }, {
+						capacity = 2,
+						spellsPerCast = 2,
+						castDelay = 0.25,
+						rechargeTime = 0.6,
+						manaMax = 300,
+						manaRegen = 100,
+						spread = 3,
+					}),
+					spells = { "ChaosOrb", "Sparkler" },
+				},
+			},
+			parts = { Sentry = 1, Chaos = 1, Gigantic = 1, Explosive = 2 },
+			consumables = { HealingDraught = 2, StoneskinPotion = 1, ManaTonic = 1 },
 		},
 	},
 } :: { ClassDef }
@@ -389,6 +635,59 @@ for _, c in Classes.List do
 end
 
 Classes.Default = "Apprentice"
+
+function Classes.tierInfo(tier: number): Tier
+	return Classes.Tiers[tier + 1] or Classes.Tiers[1]
+end
+
+function Classes.isFree(class: ClassDef): boolean
+	return class.tier == 0
+end
+
+-- "75% Common · 25% Uncommon", rarest last.
+function Classes.oddsText(tier: number): string
+	local odds = Classes.tierInfo(tier).bonusOdds
+	local parts = {}
+	for _, rarity in Rarity.Order do
+		local pct = odds[rarity]
+		if pct and pct > 0 then
+			table.insert(parts, pct .. "% " .. rarity)
+		end
+	end
+	return table.concat(parts, " · ")
+end
+
+-- The random bonus spell part a kit hands out each match: roll a rarity with the tier's odds,
+-- then pick any part of that rarity.
+function Classes.rollBonusPart(class: ClassDef, rng: any): string
+	local odds = Classes.tierInfo(class.tier).bonusOdds
+	local total = 0
+	for _, pct in odds do
+		total += pct
+	end
+	local pick = rng:NextNumber(0, total)
+	local rarity = "Common"
+	for _, name in Rarity.Order do
+		local pct = odds[name]
+		if pct then
+			rarity = name
+			pick -= pct
+			if pick <= 0 then
+				break
+			end
+		end
+	end
+	local pool = {}
+	for _, part in SpellParts.List do
+		if part.rarity == rarity then
+			table.insert(pool, part.id)
+		end
+	end
+	if #pool == 0 then
+		return "Bolt"
+	end
+	return pool[rng:NextInteger(1, #pool)]
+end
 
 return Classes
 ]]></string>
@@ -484,6 +783,7 @@ Config.Combat = {
 	CastTolerance = 0.06, -- seconds of latency forgiveness on cast cooldowns
 	MaxProjectiles = 400, -- hard cap on simultaneous server projectiles
 	MaxTriggerFanout = 24, -- cap on payload casts spawned by one trigger event
+	MaxSplits = 40, -- cap on Hydra / Fractal copies spawned by one cast
 }
 
 -- Inventory ----------------------------------------------------------------
@@ -502,14 +802,40 @@ Config.Spell = {
 	PayloadDelayFactor = 0.5, -- payload cast delay is partially added to the parent
 }
 
--- Premium classes ------------------------------------------------------------
--- A player can pick a premium class if ANY of these are true:
---   * they have Roblox Premium (when UseRobloxPremium = true)
---   * they own the game pass with id ClassesGamePassId (when it is not 0)
---   * the game is running in Studio and StudioUnlocksAll = true
-Config.Premium = {
-	UseRobloxPremium = true,
-	ClassesGamePassId = 0, -- put your game pass id here after you create one
+-- Kits (classes) for sale ---------------------------------------------------------
+-- Every paid kit in src/shared/Classes.lua is its own game pass. Create the passes on the Creator
+-- Dashboard (Monetization -> Passes) at the tier's price, then paste each pass id here.
+-- A kit with id 0 can't be bought yet (the shop says "coming soon").
+-- A player owns a kit if ANY of these are true:
+--   * they own its game pass
+--   * they have Roblox Premium and the kit's tier is <= PremiumFreeTier (0 turns this off)
+--   * the game is running in Studio and StudioUnlocksAll = true (so you can test every kit)
+Config.Kits = {
+	GamePassIds = {
+		-- Copper ($0.99, 80 R$)
+		Cryomancer = 0,
+		Geomancer = 0,
+		Windwalker = 0,
+		-- Silver ($2.99, 240 R$)
+		Pyromancer = 0,
+		Plaguebringer = 0,
+		Stormcaller = 0,
+		-- Gold ($4.99, 400 R$)
+		Voidwalker = 0,
+		Bloodmage = 0,
+		Lightbringer = 0,
+		-- Arcane ($9.99, 800 R$)
+		Artificer = 0,
+		Chronomancer = 0,
+		Swarmlord = 0,
+		-- Astral ($14.99, 1200 R$)
+		Stormlord = 0,
+		VoidArchon = 0,
+		-- Archmage ($24.99, 2000 R$)
+		Archmage = 0,
+		Harbinger = 0,
+	} :: { [string]: number },
+	PremiumFreeTier = 1, -- Roblox Premium members get every Copper kit for free
 	StudioUnlocksAll = true,
 }
 
@@ -1008,6 +1334,8 @@ export type State = {
 	boomerangAt: number,
 	returning: boolean,
 	stuck: boolean,
+	hold: number, -- frozen in place until this age (Stasis)
+	hover: number, -- comes to a stop at this age and floats there (Sentry)
 	rng: Random,
 }
 
@@ -1023,6 +1351,8 @@ export type Params = {
 	orbitRadius: number?,
 	orbitAngle: number?,
 	boomerangAt: number?,
+	hold: number?,
+	hover: number?,
 	seed: number?,
 }
 
@@ -1043,6 +1373,8 @@ function ProjectileSim.new(p: Params): State
 		boomerangAt = p.boomerangAt or 0,
 		returning = false,
 		stuck = false,
+		hold = p.hold or 0,
+		hover = p.hover or 0,
 		rng = Random.new(p.seed or 1),
 	}
 end
@@ -1050,7 +1382,13 @@ end
 -- casterPos: needed for orbit / boomerang. targetPos: current homing target, if any.
 function ProjectileSim.step(s: State, dt: number, casterPos: Vector3?, targetPos: Vector3?)
 	s.age += dt
-	if s.stuck then
+	if s.stuck or s.age < s.hold then
+		return
+	end
+	if s.hover > 0 and s.age >= s.hold + s.hover then
+		-- a sentry glides to a stop and floats in place
+		s.vel *= math.clamp(1 - 9 * dt, 0, 1)
+		s.pos += s.vel * dt
 		return
 	end
 
@@ -1529,6 +1867,41 @@ PremadeSpells.List = {
 
 	-- Epic -------------------------------------------------------------------
 	{
+		id = "Ripper",
+		name = "Ripper",
+		rarity = "Rare",
+		flavor = "A stone sawblade that just keeps bouncing.",
+		recipe = { form = "Sawblade", element = "Earth", mods = { "Bounce" } },
+	},
+	{
+		id = "Hive",
+		name = "The Hive",
+		rarity = "Rare",
+		flavor = "Six venomous sprites with a grudge.",
+		recipe = { form = "Swarm", element = "Poison" },
+	},
+	{
+		id = "EarthenRampart",
+		name = "Earthen Rampart",
+		rarity = "Rare",
+		flavor = "Hide behind it. Or wall someone in.",
+		recipe = { form = "Rampart", element = "Earth" },
+	},
+	{
+		id = "Boomerbomb",
+		name = "Boomerbomb",
+		rarity = "Rare",
+		flavor = "It comes back. That's the problem.",
+		recipe = { form = "Grenade", element = "Fire", mods = { "Returning" } },
+	},
+	{
+		id = "TimeBomb",
+		name = "Time Bomb",
+		rarity = "Rare",
+		flavor = "Hangs in the air for a second. Then it doesn't.",
+		recipe = { form = "Grenade", element = "Arcane", mods = { "Stasis", "Explosive" } },
+	},
+	{
 		id = "ClusterBomb",
 		name = "Cluster Bomb",
 		rarity = "Epic",
@@ -1607,6 +1980,67 @@ PremadeSpells.List = {
 		recipe = { form = "Meteor", element = "Poison", mods = { "Lingering" } },
 	},
 
+	{
+		id = "Twister",
+		name = "Twister",
+		rarity = "Epic",
+		flavor = "Picks people up. Puts them down somewhere else. Hard.",
+		recipe = { form = "Tornado", element = "Wind", mods = { "Magnetic" } },
+	},
+	{
+		id = "BlackHole",
+		name = "Black Hole",
+		rarity = "Epic",
+		flavor = "Everything goes in. Nothing comes out.",
+		recipe = { form = "BlackHole", element = "Void" },
+	},
+	{
+		id = "ArcaneRain",
+		name = "Arcane Rain",
+		rarity = "Epic",
+		flavor = "Five bolts fall out of a clear sky.",
+		recipe = { form = "Bolt", element = "Arcane", mods = { "Skyfall", "Barrage" } },
+	},
+	{
+		id = "Switcheroo",
+		name = "Switcheroo",
+		rarity = "Epic",
+		flavor = "Now you're over there, and they're over here.",
+		recipe = { form = "Bolt", element = "Arcane", mods = { "Transpose", "Haste" } },
+	},
+	{
+		id = "FlakCannon",
+		name = "Flak Cannon",
+		rarity = "Epic",
+		flavor = "Bursts into burning shrapnel next to anyone who gets close.",
+		recipe = {
+			form = "Bolt",
+			element = "Fire",
+			trigger = "Proximity",
+			payload = { form = "Spray", element = "Fire" },
+		},
+	},
+	{
+		id = "BouncingBetty",
+		name = "Bouncing Betty",
+		rarity = "Epic",
+		flavor = "Every bounce sets off a blast.",
+		recipe = {
+			form = "Grenade",
+			element = "Earth",
+			mods = { "Bounce" },
+			trigger = "OnBounce",
+			payload = { form = "Nova", element = "Fire" },
+		},
+	},
+	{
+		id = "ChaosOrb",
+		name = "Chaos Orb",
+		rarity = "Epic",
+		flavor = "Nobody knows what it'll do. Including you.",
+		recipe = { form = "Orb", element = "Chaos", mods = { "Gigantic" } },
+	},
+
 	-- Legendary --------------------------------------------------------------
 	{
 		id = "Starfall",
@@ -1655,6 +2089,47 @@ PremadeSpells.List = {
 		recipe = { form = "Chain", element = "Lightning", mods = { "Echo", "Pierce" } },
 	},
 
+	{
+		id = "HydraStorm",
+		name = "Hydra Storm",
+		rarity = "Legendary",
+		flavor = "One bolt. Then two. Then four. Then eight.",
+		recipe = { form = "Bolt", element = "Lightning", mods = { "Bounce", "Hydra" } },
+	},
+	{
+		id = "Fireworks",
+		name = "Fireworks",
+		rarity = "Legendary",
+		flavor = "It splits, and splits, and splits again.",
+		recipe = { form = "Spark", element = "Fire", mods = { "Fractal", "Fractal" } },
+	},
+	{
+		id = "WatchfulEye",
+		name = "Watchful Eye",
+		rarity = "Legendary",
+		flavor = "A floating eye that shoots at anyone it sees, and makes them glow.",
+		recipe = { form = "Sentry", element = "Radiant" },
+	},
+	{
+		id = "RewindLance",
+		name = "Rewind Lance",
+		rarity = "Legendary",
+		flavor = "Undo the last two seconds of their escape.",
+		recipe = { form = "Lance", element = "Chrono" },
+	},
+	{
+		id = "ReapersChain",
+		name = "Reaper's Chain",
+		rarity = "Legendary",
+		flavor = "Every death feeds the next.",
+		recipe = {
+			form = "Chain",
+			element = "Void",
+			trigger = "OnKill",
+			payload = { form = "Chain", element = "Void", mods = { "Pierce" } },
+		},
+	},
+
 	-- Mythic -----------------------------------------------------------------
 	{
 		id = "Doombringer",
@@ -1681,6 +2156,38 @@ PremadeSpells.List = {
 			trigger = "Pulse",
 			payload = { form = "Lance", element = "Radiant" },
 		},
+	},
+	{
+		id = "EventHorizon",
+		name = "Event Horizon",
+		rarity = "Mythic",
+		flavor = "A colossal black hole that ends in a void supernova.",
+		recipe = {
+			form = "BlackHole",
+			element = "Void",
+			mods = { "Gigantic" },
+			trigger = "OnExpire",
+			payload = { form = "Nova", element = "Void", mods = { "Empower", "Enlarge" } },
+		},
+	},
+	{
+		id = "DoomTurret",
+		name = "Doom Turret",
+		rarity = "Mythic",
+		flavor = "A burning eye that calls meteors down on whoever it sees.",
+		recipe = {
+			form = "Sentry",
+			element = "Fire",
+			trigger = "Pulse",
+			payload = { form = "Meteor", element = "Fire" },
+		},
+	},
+	{
+		id = "Kaleidoscope",
+		name = "Kaleidoscope",
+		rarity = "Mythic",
+		flavor = "Bounces, splits and splits again. Good luck counting them.",
+		recipe = { form = "Spark", element = "Arcane", mods = { "Fractal", "Hydra", "Bounce", "Bounce" } },
 	},
 } :: { Premade }
 
@@ -1768,6 +2275,22 @@ local function newSpec(): Spec
 		vortex = 0,
 		echo = 0,
 		shatter = 0,
+		hold = 0,
+		hover = 0,
+		turretRate = 0,
+		turretRange = 0,
+		pull = 0,
+		auraDps = 0,
+		auraRadius = 0,
+		auraLift = 0,
+		hydra = 0,
+		fractal = 0,
+		skyfall = false,
+		swap = false,
+		chaos = false,
+		rewind = 0,
+		wallWidth = 0,
+		wallHeight = 0,
 		knockback = 0,
 		lift = 0,
 		crit = 0,
@@ -1778,6 +2301,8 @@ local function newSpec(): Spec
 		trigger = nil,
 		payload = nil,
 		shard = nil,
+		turretShot = nil,
+		fractalChild = nil,
 		color = { 255, 255, 255 },
 		color2 = { 255, 255, 255 },
 	}
@@ -1988,7 +2513,64 @@ local function compileInner(recipe: Recipe, ctx: WandContext?, depth: number): S
 	spec.echo = math.clamp(spec.echo, 0, 3)
 	spec.size = math.clamp(spec.size, 0.2, 12)
 	spec.lifetime = math.clamp(spec.lifetime, 0.1, 30)
+	spec.hold = math.clamp(spec.hold, 0, 4)
+	spec.hydra = math.clamp(spec.hydra, 0, 3)
+	spec.fractal = math.clamp(spec.fractal, 0, 3)
+	spec.rewind = math.clamp(spec.rewind, 0, 4)
 	spec.name = SpellNames.generate(recipe)
+
+	-- 10. Derived sub-spells
+	if spec.turretRate > 0 then
+		-- a sentry's shots inherit the sentry's element and modifiers, as a fast spark
+		local shot = table.clone(spec)
+		shot.form = "Spark"
+		shot.kind = "Projectile"
+		shot.speed = 200
+		shot.lifetime = 1.1
+		shot.size = math.clamp(spec.size * 0.3, 0.35, 1.2)
+		shot.directMult = 1
+		shot.pierce = math.max(0, spec.pierce - 99)
+		shot.hover = 0
+		shot.hold = 0
+		shot.turretRate = 0
+		shot.turretShot = nil
+		shot.pull = 0
+		shot.auraDps = 0
+		shot.count = 1
+		shot.echo = 0
+		shot.fractal = 0
+		shot.fractalChild = nil
+		shot.orbit = false
+		shot.skyfall = false
+		shot.trigger = nil
+		shot.payload = nil
+		shot.mana = 0
+		shot.name = spec.name
+		spec.turretShot = shot
+	end
+	if spec.fractal > 0 then
+		-- each generation is a smaller, weaker copy that splits again
+		local function child(parent: Spec): Spec
+			local c = table.clone(parent)
+			c.fractal = parent.fractal - 1
+			c.damage *= 0.55
+			c.size = math.max(0.25, c.size * 0.7)
+			c.radius *= 0.7
+			c.explodeRadius *= 0.75
+			c.zoneRadius *= 0.75
+			c.range *= 0.7
+			c.lifetime = math.max(0.25, c.lifetime * 0.7)
+			c.speed *= 0.9
+			c.count = 1
+			c.echo = 0
+			c.hold = 0
+			c.skyfall = false
+			c.mana = 0
+			c.fractalChild = if c.fractal > 0 then child(c) else nil
+			return c
+		end
+		spec.fractalChild = child(spec)
+	end
 	return spec
 end
 
@@ -2022,7 +2604,18 @@ function SpellBuilder.describe(spec: Spec): { { string } }
 		add("Teleport", round(spec.blinkDistance) .. " studs")
 	elseif spec.kind == "Aegis" then
 		add("Shield", round(spec.shieldAmount) .. " for " .. round(spec.shieldDuration, 1) .. "s")
+	elseif spec.kind == "Wall" then
+		add(
+			"Wall",
+			round(spec.wallWidth) .. " x " .. round(spec.wallHeight) .. " for " .. round(spec.lifetime, 1) .. "s"
+		)
 	else
+		if spec.turretRate > 0 then
+			add("Sentry shots", round(spec.damage, 1) .. " every " .. round(spec.turretRate, 2) .. "s")
+		end
+		if spec.auraDps > 0 then
+			add("Aura", round(spec.auraDps, 1) .. "/s in " .. round(spec.auraRadius) .. " studs")
+		end
 		if spec.damage > 0 and spec.directMult > 0 then
 			add("Damage", round(spec.damage * spec.directMult, 1) .. hits)
 		end
@@ -2050,6 +2643,30 @@ function SpellBuilder.describe(spec: Spec): { { string } }
 	end
 	if spec.kind == "Chain" then
 		add("Jumps", round(spec.chainJumps))
+	end
+	if spec.skyfall then
+		add("Skyfall", "falls onto your aim")
+	end
+	if spec.hold > 0 then
+		add("Stasis", round(spec.hold, 1) .. "s")
+	end
+	if spec.pull > 0 then
+		add("Pull", round(spec.pull))
+	end
+	if spec.hydra > 0 then
+		add("Hydra", "+" .. round(spec.hydra) .. " per bounce")
+	end
+	if spec.fractal > 0 then
+		add("Fractal", round(spec.fractal) .. " generations")
+	end
+	if spec.swap then
+		add("Transpose", "swap places on hit")
+	end
+	if spec.chaos then
+		add("Chaos", "25%-250% damage")
+	end
+	if spec.rewind > 0 then
+		add("Rewind", round(spec.rewind, 1) .. "s")
 	end
 	if spec.crit > 0 then
 		add("Crit", round(spec.crit * 100) .. "%")
@@ -2480,6 +3097,137 @@ form("Meteor", {
 	},
 })
 
+form("Sawblade", {
+	rarity = "Rare",
+	icon = "🪚",
+	kind = "Projectile",
+	noun = "Saw",
+	description = "A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path.",
+	base = {
+		damage = 13,
+		speed = 85,
+		gravity = 0.7,
+		lifetime = 3,
+		size = 1.6,
+		bounces = 6,
+		pierce = 99,
+		mana = 20,
+		castDelay = 0.25,
+		knockback = 10,
+	},
+})
+
+form("Swarm", {
+	rarity = "Rare",
+	icon = "🐝",
+	kind = "Projectile",
+	description = "Releases six angry little sprites that wobble off and hunt down enemies.",
+	base = {
+		damage = 3.5,
+		speed = 60,
+		lifetime = 3.5,
+		size = 0.4,
+		count = 6,
+		spread = 70,
+		homing = 4,
+		erratic = 1.4,
+		mana = 24,
+		castDelay = 0.3,
+		knockback = 2,
+	},
+})
+
+form("Rampart", {
+	rarity = "Rare",
+	icon = "🧱",
+	kind = "Wall",
+	noun = "Wall",
+	description = "Raises a solid wall where you aim that blocks movement and spells for 6 seconds. Impact effects go off at its base; expiry triggers fire when it crumbles.",
+	base = {
+		damage = 10,
+		directMult = 0,
+		range = 45,
+		size = 1,
+		lifetime = 6,
+		wallWidth = 16,
+		wallHeight = 10,
+		mana = 24,
+		castDelay = 0.4,
+		knockback = 30,
+	},
+})
+
+form("Tornado", {
+	rarity = "Epic",
+	icon = "🌪️",
+	kind = "Projectile",
+	description = "A slow, wandering twister that drags enemies in, tosses them into the air and grinds them up.",
+	base = {
+		damage = 9,
+		directMult = 0,
+		speed = 22,
+		lifetime = 4.5,
+		size = 4,
+		pierce = 99,
+		erratic = 0.5,
+		pull = 22,
+		auraDps = 9,
+		auraRadius = 6,
+		auraLift = 26,
+		mana = 34,
+		castDelay = 0.45,
+		knockback = 6,
+	},
+})
+
+form("BlackHole", {
+	name = "Black Hole",
+	rarity = "Epic",
+	icon = "⚫",
+	kind = "Projectile",
+	noun = "Singularity",
+	description = "A tiny black hole drifts forward, dragging everyone nearby into its crushing core, then collapses with a bang.",
+	base = {
+		damage = 12,
+		directMult = 0,
+		speed = 18,
+		lifetime = 4,
+		size = 3.2,
+		pierce = 99,
+		pull = 55,
+		auraDps = 12,
+		auraRadius = 5,
+		explodeRadius = 9,
+		explodeMult = 1.6,
+		explodeOnExpire = true,
+		mana = 45,
+		castDelay = 0.5,
+		knockback = 0,
+	},
+})
+
+form("Sentry", {
+	rarity = "Legendary",
+	icon = "🧿",
+	kind = "Projectile",
+	noun = "Sentry",
+	description = "Deploys a floating eye that hovers in place for 8 seconds and shoots sparks at the nearest enemy. Its shots inherit its element and modifiers; Pulse and Timer payloads are aimed at enemies too.",
+	base = {
+		damage = 6,
+		directMult = 0,
+		speed = 30,
+		hover = 0.35,
+		lifetime = 8,
+		size = 1.6,
+		pierce = 99,
+		turretRate = 0.55,
+		turretRange = 70,
+		mana = 50,
+		castDelay = 0.5,
+		knockback = 4,
+	},
+})
+
 ---------------------------------------------------------------------------
 -- ELEMENTS
 ---------------------------------------------------------------------------
@@ -2612,6 +3360,32 @@ element("Blood", {
 	apply = function(s: Spec)
 		s.damage *= 1.5
 		s.hpCost += 4
+	end,
+})
+
+element("Chaos", {
+	rarity = "Epic",
+	icon = "🃏",
+	color = { 255, 80, 200 },
+	color2 = { 80, 255, 220 },
+	description = "Every hit rolls the dice: anywhere from 25% to 250% damage, plus a random burn, chill or venom. +10% speed.",
+	apply = function(s: Spec)
+		s.chaos = true
+		s.speed *= 1.1
+	end,
+})
+
+element("Chrono", {
+	rarity = "Legendary",
+	icon = "🕰️",
+	adjective = "Temporal",
+	color = { 255, 215, 140 },
+	color2 = { 120, 200, 255 },
+	description = "Hits rewind the target to where they stood 2 seconds ago and slow them by 50%. -15% damage.",
+	apply = function(s: Spec)
+		s.rewind = math.max(s.rewind, 2)
+		s.status = { kind = "Chill", slow = 0.5, duration = 2.5, maxStacks = 99 }
+		s.damage *= 0.85
 	end,
 })
 
@@ -2926,6 +3700,128 @@ modifier("Echo", {
 	end,
 })
 
+modifier("Stasis", {
+	rarity = "Uncommon",
+	icon = "⏸️",
+	adjective = "Suspended",
+	description = "Hangs frozen in the air for 1 second, then flies on. Instant spells go off 1 second late. Stack for traps.",
+	apply = function(s: Spec)
+		s.hold += 1
+		s.lifetime += 1
+		s.mana += 3
+	end,
+})
+
+modifier("Returning", {
+	rarity = "Uncommon",
+	icon = "🪃",
+	adjective = "Returning",
+	description = "Flies out, then curves back to you, hitting things both ways. +1 pierce.",
+	apply = function(s: Spec)
+		if s.boomerangAt <= 0 then
+			s.boomerangAt = math.max(0.3, s.lifetime * 0.45)
+		end
+		s.lifetime *= 1.5
+		s.pierce += 1
+		s.mana += 4
+	end,
+})
+
+modifier("Magnetic", {
+	rarity = "Rare",
+	icon = "🧲",
+	adjective = "Magnetic",
+	description = "While it flies, it drags nearby enemies toward itself.",
+	apply = function(s: Spec)
+		s.pull += 30
+		s.mana += 10
+	end,
+})
+
+modifier("Gigantic", {
+	rarity = "Epic",
+	icon = "🐘",
+	adjective = "Colossal",
+	description = "Triples the size of everything: projectiles, explosions, novas and zones. +50% damage, much slower and pricier.",
+	apply = function(s: Spec)
+		s.size *= 3
+		s.radius *= 1.8
+		s.explodeRadius *= 1.8
+		s.zoneRadius *= 1.7
+		s.auraRadius *= 1.8
+		s.wallWidth *= 1.8
+		s.wallHeight *= 1.5
+		s.damage *= 1.5
+		s.speed *= 0.55
+		s.knockback += 20
+		s.castDelay += 0.1
+		s.mana += 28
+	end,
+})
+
+modifier("Skyfall", {
+	rarity = "Epic",
+	icon = "🌧️",
+	adjective = "Heavenly",
+	description = "The spell comes down from the sky onto your aim point instead of leaving your wand. Novas erupt there, beams strike straight down, blinks land there.",
+	apply = function(s: Spec)
+		s.skyfall = true
+		s.castDelay += 0.08
+		s.mana += 12
+	end,
+})
+
+modifier("Transpose", {
+	rarity = "Epic",
+	icon = "🔀",
+	adjective = "Swapping",
+	description = "When it hits an enemy, you swap places with them.",
+	apply = function(s: Spec)
+		s.swap = true
+		s.mana += 18
+	end,
+})
+
+modifier("Barrage", {
+	rarity = "Epic",
+	icon = "✴️",
+	adjective = "Barrage",
+	description = "Casts the spell five times at once in a wide fan, each at 55% damage.",
+	apply = function(s: Spec)
+		s.mana += 12 + s.mana * 1.6
+		s.count *= 5
+		s.spread += 40
+		s.damage *= 0.55
+	end,
+})
+
+modifier("Hydra", {
+	rarity = "Legendary",
+	icon = "🐉",
+	adjective = "Hydra",
+	description = "Every time it bounces, it splits in two. +1 bounce. Pair it with Bounce and watch it get out of hand.",
+	apply = function(s: Spec)
+		s.hydra += 1
+		s.bounces += 1
+	end,
+	post = function(s: Spec)
+		s.mana = s.mana * 1.4 + 6
+	end,
+})
+
+modifier("Fractal", {
+	rarity = "Legendary",
+	icon = "🧬",
+	adjective = "Fractal",
+	description = "When it ends, it splits into 3 smaller copies of itself, which split again. Each Fractal adds a generation (up to 3).",
+	apply = function(s: Spec)
+		s.fractal += 1
+	end,
+	post = function(s: Spec)
+		s.mana = s.mana * 1.6 + 10
+	end,
+})
+
 ---------------------------------------------------------------------------
 -- TRIGGERS (must be paired with a payload spell)
 ---------------------------------------------------------------------------
@@ -2960,6 +3856,29 @@ trigger("Pulse", {
 	icon = "💓",
 	mana = 22,
 	description = "Casts the payload spell every 0.6 seconds while this spell is alive (up to 6 times).",
+})
+
+trigger("Proximity", {
+	rarity = "Epic",
+	icon = "📡",
+	mana = 8,
+	description = "A proximity fuse: casts the payload at the first enemy that comes within 9 studs of this spell.",
+})
+
+trigger("OnBounce", {
+	name = "On Bounce",
+	rarity = "Epic",
+	icon = "🏓",
+	mana = 9,
+	description = "Casts the payload every time this spell bounces (up to 8 times).",
+})
+
+trigger("OnKill", {
+	name = "On Kill",
+	rarity = "Legendary",
+	icon = "💀",
+	mana = 6,
+	description = "Casts the payload from the spot where this spell kills someone. Kill chains! (Knocking a training dummy down to 1 HP counts.)",
 })
 
 -- The implicit element used when a spell has no element part slotted.
@@ -3013,7 +3932,7 @@ export type Spec = {
 	name: string,
 	form: string,
 	element: string,
-	kind: string, -- "Projectile" | "Beam" | "Nova" | "Chain" | "Meteor" | "Blink" | "Aegis"
+	kind: string, -- "Projectile" | "Beam" | "Nova" | "Chain" | "Meteor" | "Blink" | "Aegis" | "Wall"
 	depth: number,
 
 	-- economy
@@ -3063,6 +3982,22 @@ export type Spec = {
 	vortex: number,
 	echo: number,
 	shatter: number,
+	hold: number, -- seconds frozen in place before moving (Stasis); instant forms are delayed instead
+	hover: number, -- projectile stops and hovers after this many seconds (Sentry)
+	turretRate: number, -- a hovering sentry shoots `turretShot` at the nearest enemy this often
+	turretRange: number,
+	pull: number, -- drags nearby enemies toward the projectile while it flies (Magnetic, Black Hole)
+	auraDps: number, -- damages enemies near the projectile while it flies (Tornado, Black Hole)
+	auraRadius: number,
+	auraLift: number, -- upward kick on each aura tick (Tornado)
+	hydra: number, -- extra copies spawned every time it bounces
+	fractal: number, -- generations of self-copies spawned when it ends
+	skyfall: boolean, -- comes down from the sky onto the aim point instead of leaving the wand
+	swap: boolean, -- the caster swaps places with whoever it hits
+	chaos: boolean, -- every hit rolls a random damage multiplier and a random status
+	rewind: number, -- sends whoever it hits back to where they were this many seconds ago
+	wallWidth: number, -- Wall form: size of the conjured wall
+	wallHeight: number,
 
 	-- on-hit effects
 	knockback: number,
@@ -3077,6 +4012,8 @@ export type Spec = {
 	trigger: string?,
 	payload: Spec?,
 	shard: Spec?,
+	turretShot: Spec?,
+	fractalChild: Spec?,
 
 	-- visuals
 	color: { number },
@@ -7724,7 +8661,7 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 		wandUid = wand.uid,
 		siphon = Items.perkValue(wand, "Siphon"),
 		vampiric = Items.perkValue(wand, "Vampiric"),
-		budget = { n = Config.Combat.MaxTriggerFanout },
+		budget = { n = Config.Combat.MaxTriggerFanout, splits = Config.Combat.MaxSplits },
 		aimPoint = target,
 	}
 	FX.all("Cast", c.model, drawn[1].color)
@@ -8110,9 +9047,9 @@ return ChestService
         <Item class="ModuleScript" referent="36">
           <Properties>
             <string name="Name">ClassService</string>
-            <string name="Source"><![CDATA[-- Class selection and premium access.
--- Premium access = Roblox Premium membership OR owning the classes game pass
--- (or playing in Studio, so you can test every class). See Config.Premium.
+            <string name="Source"><![CDATA[-- Kit (class) selection and ownership. Every paid kit is its own game pass (Config.Kits);
+-- Roblox Premium members get the cheapest tier(s) free, and Studio unlocks everything for testing.
+-- Owned kits are published to the client as the "OwnedKits" attribute (comma separated ids).
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
@@ -8126,83 +9063,133 @@ local Classes = require(Shared.Classes)
 
 local ClassService = {}
 
-local function computeAccess(player: Player): boolean
-	local P = Config.Premium
-	if P.StudioUnlocksAll and RunService:IsStudio() then
-		return true
-	end
-	if P.UseRobloxPremium and player.MembershipType == Enum.MembershipType.Premium then
-		return true
-	end
-	if P.ClassesGamePassId ~= 0 then
-		local ok, owns = pcall(function()
-			return MarketplaceService:UserOwnsGamePassAsync(player.UserId, P.ClassesGamePassId)
-		end)
-		if ok and owns then
-			return true
-		end
-	end
-	return false
+local owned: { [Player]: { [string]: boolean } } = setmetatable({}, { __mode = "k" }) :: any
+
+local function passFor(classId: string): number
+	return Config.Kits.GamePassIds[classId] or 0
 end
 
+local function kitForPass(passId: number): string?
+	for classId, id in Config.Kits.GamePassIds do
+		if id == passId and id ~= 0 then
+			return classId
+		end
+	end
+	return nil
+end
+
+local function publish(player: Player)
+	local list = {}
+	for _, class in Classes.List do
+		if ClassService.owns(player, class.id) then
+			table.insert(list, class.id)
+		end
+	end
+	player:SetAttribute("OwnedKits", table.concat(list, ","))
+end
+
+function ClassService.owns(player: Player, classId: string): boolean
+	local class = Classes.ById[classId]
+	if not class then
+		return false
+	end
+	if class.tier == 0 then
+		return true
+	end
+	local K = Config.Kits
+	if K.StudioUnlocksAll and RunService:IsStudio() then
+		return true
+	end
+	if class.tier <= K.PremiumFreeTier and player.MembershipType == Enum.MembershipType.Premium then
+		return true
+	end
+	local set = owned[player]
+	return set ~= nil and set[classId] == true
+end
+
+-- Looks up which kit game passes the player owns (yields: one web call per configured pass).
 function ClassService.refresh(player: Player)
-	local access = computeAccess(player)
-	player:SetAttribute("PremiumAccess", access)
-	local class = Classes.ById[tostring(player:GetAttribute("Class"))]
-	if not class or (class.premium and not access) then
+	local set = owned[player] or {}
+	owned[player] = set
+	for _, class in Classes.List do
+		local passId = passFor(class.id)
+		if passId ~= 0 and not set[class.id] then
+			local ok, has = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
+			end)
+			if ok and has then
+				set[class.id] = true
+			end
+		end
+	end
+	publish(player)
+	if not ClassService.owns(player, tostring(player:GetAttribute("Class"))) then
 		player:SetAttribute("Class", Classes.Default)
 	end
 end
 
-function ClassService.hasAccess(player: Player): boolean
-	return player:GetAttribute("PremiumAccess") == true
-end
-
 -- The class this player will actually start the match with.
 function ClassService.classFor(player: Player): string
-	local class = Classes.ById[tostring(player:GetAttribute("Class"))]
-	if class and (not class.premium or ClassService.hasAccess(player)) then
-		return class.id
+	local id = tostring(player:GetAttribute("Class"))
+	if Classes.ById[id] and ClassService.owns(player, id) then
+		return id
 	end
 	return Classes.Default
 end
 
+-- Bots pick a random kit, but never the top tiers (a bot with a $25 kit isn't fun to meet).
 function ClassService.randomClass(rng: Random): string
-	local list = Classes.List
-	return list[rng:NextInteger(1, #list)].id
+	local list = {}
+	for _, class in Classes.List do
+		if class.tier <= 3 then
+			table.insert(list, class.id)
+		end
+	end
+	return list[rng:NextInteger(1, #list)]
 end
 
 function ClassService.init()
 	Players.PlayerMembershipChanged:Connect(function(player)
-		ClassService.refresh(player)
+		publish(player)
 	end)
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
-		if purchased and passId == Config.Premium.ClassesGamePassId then
-			player:SetAttribute("PremiumAccess", true)
+		local classId = kitForPass(passId)
+		if purchased and classId then
+			local set = owned[player] or {}
+			owned[player] = set
+			set[classId] = true
+			publish(player)
+			player:SetAttribute("Class", classId)
 		end
 	end)
 
 	Remotes.func("ClassAction").OnServerInvoke = function(player, action, classId)
+		if type(classId) ~= "string" then
+			return false, "Bad kit"
+		end
+		local class = Classes.ById[classId]
+		if not class then
+			return false, "Unknown kit"
+		end
 		if action == "Select" then
-			if type(classId) ~= "string" then
-				return false, "Bad class"
-			end
-			local class = Classes.ById[classId]
-			if not class then
-				return false, "Unknown class"
-			end
-			if class.premium and not ClassService.hasAccess(player) then
-				return false, "This class needs Premium"
+			if not ClassService.owns(player, class.id) then
+				return false, "You don't own the " .. class.name .. " kit yet"
 			end
 			player:SetAttribute("Class", class.id)
 			return true, class.name .. " selected"
-		elseif action == "Unlock" then
-			if Config.Premium.ClassesGamePassId ~= 0 then
-				MarketplaceService:PromptGamePassPurchase(player, Config.Premium.ClassesGamePassId)
-			elseif Config.Premium.UseRobloxPremium then
-				MarketplaceService:PromptPremiumPurchase(player)
+		elseif action == "Buy" then
+			if ClassService.owns(player, class.id) then
+				return true, "You already own " .. class.name
 			end
-			return true, nil
+			local passId = passFor(class.id)
+			if passId ~= 0 then
+				MarketplaceService:PromptGamePassPurchase(player, passId)
+				return true, nil
+			elseif class.tier <= Config.Kits.PremiumFreeTier then
+				MarketplaceService:PromptPremiumPurchase(player)
+				return true, nil
+			end
+			return false, "The " .. class.name .. " kit isn't on sale yet"
 		end
 		return false, "Unknown action"
 	end
@@ -8255,6 +9242,9 @@ export type Combatant = {
 	queued: boolean, -- joined the game: waits in the library and is put in the next match
 	queuedAt: number, -- place in line when more players are queued than there are pedestals
 	isDummy: boolean, -- a training dummy on a practice range
+	history: { { t: number, cf: CFrame } }, -- recent positions, for Chrono's rewind
+	lastRewind: number,
+	lastSwap: number,
 	bot: { [string]: any }?,
 }
 
@@ -8298,6 +9288,9 @@ function Combatants.create(name: string, player: Player?): Combatant
 		queued = false,
 		queuedAt = 0,
 		isDummy = false,
+		history = {},
+		lastRewind = 0,
+		lastSwap = 0,
 		bot = nil,
 	}
 	byId[c.id] = c
@@ -8427,6 +9420,38 @@ function Combatants.nearest(position: Vector3, maxRange: number, exclude: { [Com
 	return best
 end
 
+-- Position history (sampled a few times a second by StatusService) so Chrono spells can rewind.
+local HISTORY_SECONDS = 4.5
+
+function Combatants.recordHistory(t: number)
+	for _, c in byId do
+		local root = c.root
+		if root and Combatants.isActive(c) and not c.isDummy then
+			local h = c.history
+			table.insert(h, { t = t, cf = root.CFrame })
+			while #h > 0 and t - h[1].t > HISTORY_SECONDS do
+				table.remove(h, 1)
+			end
+		elseif #c.history > 0 then
+			table.clear(c.history)
+		end
+	end
+end
+
+-- Where this combatant stood `seconds` ago (nil if we don't know).
+function Combatants.cframeAgo(c: Combatant, seconds: number, t: number): CFrame?
+	local want = t - seconds
+	local best: CFrame? = nil
+	for _, entry in c.history do
+		if entry.t <= want then
+			best = entry.cf
+		else
+			break
+		end
+	end
+	return best or (if c.history[1] then c.history[1].cf else nil)
+end
+
 -- Approximate body as a vertical capsule around the root part.
 Combatants.CapsuleDown = 2.6
 Combatants.CapsuleUp = 1.9
@@ -8510,32 +9535,39 @@ function DamageService.heal(target: Combatant, amount: number)
 	end
 end
 
--- Returns the damage actually dealt to health.
-function DamageService.apply(target: Combatant, amount: number, info: DamageInfo): number
+-- Whether `attacker` may affect `target` right now (damage, pulls, swaps, rewinds).
+function DamageService.canHurt(target: Combatant, attacker: Combatant?, isStorm: boolean?): boolean
 	local hum = target.humanoid
 	if not hum or hum.Health <= 0 or not target.alive or not target.inMatch then
-		return 0
+		return false
 	end
+	if target.isDummy then
+		-- training dummies only react to spells from the Spell Lab
+		return attacker ~= nil and attacker.practice
+	end
+	-- practice spells never hurt anyone real, even if they somehow reach the arena
+	if attacker and attacker.practice then
+		return false
+	end
+	if not GameState.combatAllowed() then
+		return false
+	end
+	-- grace period: players (and bots) cannot hurt each other yet
+	if GameState.phase == "Grace" and attacker and attacker ~= target and not isStorm then
+		return false
+	end
+	return true
+end
+
+-- Returns the damage actually dealt to health, and whether the hit was a kill
+-- (for a training dummy: knocked down to its last hit point).
+function DamageService.apply(target: Combatant, amount: number, info: DamageInfo): (number, boolean)
 	local attacker = info.attacker
 	local isSelf = attacker == target
-	if target.isDummy then
-		-- training dummies only react to spells from the lobby Spell Lab
-		if not attacker or not attacker.practice then
-			return 0
-		end
-	else
-		-- lobby practice spells never hurt anyone real, even if they somehow reach the arena
-		if attacker and attacker.practice then
-			return 0
-		end
-		if not GameState.combatAllowed() then
-			return 0
-		end
-		-- grace period: players (and bots) cannot hurt each other yet
-		if GameState.phase == "Grace" and attacker and not isSelf and not info.isStorm then
-			return 0
-		end
+	if not DamageService.canHurt(target, attacker, info.isStorm) then
+		return 0, false
 	end
+	local hum = target.humanoid :: Humanoid
 
 	local crit = false
 	if isSelf then
@@ -8617,12 +9649,14 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 			damageNumber:FireClient(target.player, pos, math.floor(dealt + 0.5), crit, info.element or "Neutral", true)
 		end
 	end
-	return dealt
+	local killed = dealt > 0 and (hum.Health <= 0 or (target.isDummy and hum.Health <= 1))
+	return dealt, killed
 end
 
 function DamageService.init()
 	StatusService.dealDamage = function(c, amount, info)
-		return DamageService.apply(c, amount, info :: any)
+		local dealt = DamageService.apply(c, amount, info :: any)
+		return dealt
 	end
 end
 
@@ -8881,6 +9915,7 @@ InventoryService.dropHandler = nil :: ((Combatant, { LootEntry }) -> ())?
 
 local inventoryEvent = Remotes.event("InventoryUpdated")
 local INV = Config.Inventory
+local kitRng = Random.new()
 
 ---------------------------------------------------------------------------
 -- Wand tools (the visible wand in the character's hand)
@@ -9137,7 +10172,8 @@ function InventoryService.takeAllAsLoot(c: Combatant): { LootEntry }
 	return entries
 end
 
-function InventoryService.giveKit(c: Combatant, classId: string)
+-- Hands out a class kit, including its random bonus spell part. Returns the bonus part's id.
+function InventoryService.giveKit(c: Combatant, classId: string): string
 	local class = Classes.ById[classId] or Classes.ById[Classes.Default]
 	c.classId = class.id
 	local inv = c.inventory
@@ -9162,9 +10198,12 @@ function InventoryService.giveKit(c: Combatant, classId: string)
 	for id, n in class.kit.consumables or {} do
 		addConsumable(c, id, n)
 	end
+	local bonus = Classes.rollBonusPart(class, kitRng)
+	addPart(c, bonus, 1)
 	inv.equipped = 1
 	InventoryService.refreshTools(c)
 	InventoryService.sync(c)
+	return bonus
 end
 
 -- The lobby Spell Lab kit: a roomy practice staff, a twin-cast scepter, a few showcase
@@ -9905,6 +10944,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
+local SpellParts = require(Shared.Spells.SpellParts)
 local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
 local MapService = require(script.Parent.MapService)
@@ -10295,7 +11335,21 @@ local function runMatch()
 	ChestService.spawnArenaChests(arena.chestSpots)
 	for _, c in participants do
 		local classId = if c.player then ClassService.classFor(c.player) else ClassService.randomClass(rng)
-		InventoryService.giveKit(c, classId)
+		local bonus = InventoryService.giveKit(c, classId)
+		local part = SpellParts.ById[bonus]
+		if c.player and part then
+			FX.announceTo(c.player, "Toast", {
+				text = "Kit bonus: "
+					.. part.icon
+					.. " "
+					.. part.name
+					.. " ("
+					.. part.rarity
+					.. " "
+					.. part.category
+					.. ")",
+			})
+		end
 		StatusService.updateMovement(c)
 		setPlayerFlags(c)
 	end
@@ -10436,7 +11490,7 @@ end
 local function onPlayerAdded(player: Player)
 	local c = Combatants.create(player.DisplayName, player)
 	player:SetAttribute("Class", "Apprentice")
-	ClassService.refresh(player)
+	task.spawn(ClassService.refresh, player)
 	task.spawn(DataService.load, player)
 	player.CharacterAdded:Connect(function(character)
 		task.spawn(watchCharacter, c, character)
@@ -10715,6 +11769,7 @@ local Geometry = require(Shared.Util.Geometry)
 local SpellTypes = require(Shared.Spells.SpellTypes)
 local Combatants = require(script.Parent.Combatants)
 local WorldQuery = require(script.Parent.WorldQuery)
+local DamageService = require(script.Parent.DamageService)
 local FX = require(script.Parent.FX)
 
 type Spec = SpellTypes.Spec
@@ -10725,8 +11780,8 @@ export type CastCtx = {
 	wandUid: string?,
 	siphon: number,
 	vampiric: number,
-	budget: { n: number },
-	aimPoint: Vector3?, -- where the caster clicked (used by Meteor)
+	budget: { n: number, splits: number? }, -- payload casts / Hydra + Fractal copies left for this cast
+	aimPoint: Vector3?, -- where the caster clicked (used by Meteor and Skyfall)
 }
 
 type Proj = {
@@ -10747,6 +11802,10 @@ type Proj = {
 	lastSync: number,
 	target: Combatant?,
 	targetTime: number,
+	nextShot: number, -- sentry fire time (projectile age)
+	nextField: number, -- pull / aura tick (projectile age)
+	proxFired: boolean,
+	bounceTriggers: number,
 }
 
 local ProjectileService = {}
@@ -10757,9 +11816,9 @@ type Executor = {
 	hitCombatant: (Spec, CastCtx, Combatant, Vector3, Vector3, number?) -> (),
 	onImpact: (Spec, CastCtx, Vector3, Vector3, Vector3, Combatant?) -> (),
 	onPierce: (Spec, CastCtx, Vector3, Vector3) -> (),
-	onEnd: (Spec, CastCtx, Vector3, Vector3) -> (),
+	onEnd: (Spec, CastCtx, Vector3, Vector3, Vector3?) -> (),
 	explode: (Spec, CastCtx, Vector3) -> (),
-	castPayload: (Spec, CastCtx, Vector3, Vector3) -> (),
+	castPayload: (Spec, CastCtx, Vector3, Vector3, Vector3?) -> (),
 	zoneAt: (Spec, CastCtx, Vector3) -> (),
 }
 local executor: Executor
@@ -10774,6 +11833,9 @@ local MAX_PULSES = 6
 local PULSE_INTERVAL = 0.6
 local TIMER_DELAY = 0.5
 local SYNC_INTERVAL = 0.1
+local FIELD_TICK = 0.2
+local PROXIMITY_RADIUS = 9
+local MAX_BOUNCE_TRIGGERS = 8
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -10803,12 +11865,31 @@ local function visualOf(spec: Spec): { [string]: any }
 		or_ = spec.orbitRadius,
 		b = spec.boomerangAt,
 		l = spec.lifetime,
+		d = spec.hold,
+		hv = spec.hover,
 	}
 	(spec :: any)._vis = vis
 	return vis
 end
 
-export type SpawnOptions = { orbitAngle: number? }
+export type SpawnOptions = {
+	orbitAngle: number?,
+	bouncesLeft: number?, -- Hydra copies keep the bounces their parent had left
+	noHold: boolean?, -- split-off copies don't freeze again (Stasis)
+}
+
+-- Hydra and Fractal copies come out of a per-cast budget so they can't run away forever.
+function ProjectileService.takeSplit(ctx: CastCtx): boolean
+	local left = ctx.budget.splits
+	if left == nil then
+		left = Config.Combat.MaxSplits
+	end
+	if left <= 0 then
+		return false
+	end
+	ctx.budget.splits = left - 1
+	return true
+end
 
 function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, opts: SpawnOptions?): boolean
 	if #active >= Config.Combat.MaxProjectiles then
@@ -10829,6 +11910,8 @@ function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir:
 		orbitRadius = spec.orbitRadius,
 		orbitAngle = orbitAngle,
 		boomerangAt = spec.boomerangAt,
+		hold = if opts and opts.noHold then 0 else spec.hold,
+		hover = spec.hover,
 		seed = seed,
 	})
 	local p: Proj = {
@@ -10839,7 +11922,7 @@ function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir:
 		radius = math.max(0.25, spec.size * 0.5),
 		hit = {},
 		pierceLeft = spec.pierce,
-		bouncesLeft = spec.bounces,
+		bouncesLeft = if opts and opts.bouncesLeft then opts.bouncesLeft else spec.bounces,
 		timerFired = false,
 		nextPulse = PULSE_INTERVAL,
 		pulses = 0,
@@ -10849,9 +11932,18 @@ function ProjectileService.spawn(spec: Spec, ctx: CastCtx, origin: Vector3, dir:
 		lastSync = now(),
 		target = nil,
 		targetTime = 0,
+		nextShot = state.hold + spec.hover,
+		nextField = 0,
+		proxFired = false,
+		bounceTriggers = 0,
 	}
 	table.insert(active, p)
-	FX.all("P+", p.id, origin, state.vel, seed, orbitAngle, ctx.caster.model, visualOf(spec))
+	local vis = visualOf(spec)
+	if state.hold ~= spec.hold then
+		vis = table.clone(vis)
+		vis.d = state.hold
+	end
+	FX.all("P+", p.id, origin, state.vel, seed, orbitAngle, ctx.caster.model, vis)
 	return true
 end
 
@@ -10866,6 +11958,67 @@ end
 local function syncNow(p: Proj)
 	p.lastSync = now()
 	table.insert(syncBatch, { p.id, p.state.pos, p.state.vel, p.state.stuck })
+end
+
+-- The nearest enemy this projectile can see (sentries, auto-aimed payloads, proximity fuses).
+local function nearestVisible(p: Proj, range: number): Combatant?
+	local pos = p.state.pos
+	local best, bestDist = nil, range
+	for _, c in Combatants.active() do
+		if c ~= p.ctx.caster and DamageService.canHurt(c, p.ctx.caster) then
+			local center = Combatants.centerOf(c)
+			local dist = (center - pos).Magnitude
+			if dist < bestDist and (p.spec.phasing or WorldQuery.lineOfSight(pos, center)) then
+				best, bestDist = c, dist
+			end
+		end
+	end
+	return best
+end
+
+-- A hovering sentry aims its payloads at the nearest enemy (and tells meteors / walls where).
+local function aimDir(p: Proj, fallback: Vector3): (Vector3, Vector3?)
+	if p.spec.hover > 0 then
+		local target = nearestVisible(p, math.max(p.spec.turretRange, 40))
+		if target then
+			local at = Combatants.centerOf(target)
+			return Geometry.safeUnit(at - p.state.pos, fallback), at
+		end
+	end
+	return fallback, nil
+end
+
+-- Magnetic pull and damaging auras (Tornado, Black Hole) while the projectile flies.
+local function fieldTick(p: Proj)
+	local spec = p.spec
+	local pos = p.state.pos
+	local caster = p.ctx.caster
+	local reach = math.max(spec.auraRadius, if spec.pull > 0 then 14 + spec.size * 2 else 0)
+	for _, c in Combatants.withinRadius(pos, reach + 1.5, caster) do
+		if DamageService.canHurt(c, caster) then
+			local center = Combatants.centerOf(c)
+			local to = pos - center
+			local flat = Vector3.new(to.X, 0, to.Z)
+			if spec.pull > 0 and flat.Magnitude > 1.5 then
+				DamageService.knock(c, flat.Unit * spec.pull * 0.6 + Vector3.new(0, 4, 0))
+			end
+			if spec.auraDps > 0 and to.Magnitude <= spec.auraRadius + 1.5 then
+				local swirl = Vector3.new(-flat.Z, 0, flat.X)
+				DamageService.apply(c, spec.auraDps * FIELD_TICK, {
+					attacker = caster,
+					element = spec.element,
+					noCrit = true,
+					status = spec.status,
+					knockDir = if swirl.Magnitude > 1e-3 then swirl.Unit else nil,
+					knockback = if spec.auraLift > 0 then 10 else 0,
+					lift = spec.auraLift,
+					lifesteal = spec.lifesteal + p.ctx.vampiric,
+					spellName = spec.name,
+					hitPos = center,
+				})
+			end
+		end
+	end
 end
 
 local function findTarget(p: Proj): Combatant?
@@ -10895,7 +12048,7 @@ end
 local function impact(p: Proj, pos: Vector3, normal: Vector3, hitC: Combatant?)
 	local dir = Geometry.safeUnit(p.state.vel, -normal)
 	executor.onImpact(p.spec, p.ctx, pos, normal, dir, hitC)
-	executor.onEnd(p.spec, p.ctx, pos, dir)
+	executor.onEnd(p.spec, p.ctx, pos, dir, if hitC then nil else normal)
 	kill(p, pos, "impact")
 end
 
@@ -10918,8 +12071,8 @@ local function onCombatantHit(p: Proj, c: Combatant, pos: Vector3)
 	local spec = p.spec
 	local dir = Geometry.safeUnit(p.state.vel)
 	executor.hitCombatant(spec, p.ctx, c, pos, dir, nil)
-	-- bombs, mines and flasks burst on contact with a body
-	if spec.directMult == 0 and (spec.explodeRadius > 0 or spec.zoneOnImpact) then
+	-- bombs, mines and flasks burst on contact with a body (black holes and tornadoes don't)
+	if spec.directMult == 0 and spec.pierce < 50 and (spec.explodeRadius > 0 or spec.zoneOnImpact) then
 		impact(p, pos, -dir, c)
 		return
 	end
@@ -10952,6 +12105,19 @@ local function onWorldHit(p: Proj, result: RaycastResult)
 		s.vel = v
 		s.pos = result.Position + n * (p.radius + 0.05)
 		syncNow(p)
+		if spec.trigger == "OnBounce" and p.bounceTriggers < MAX_BOUNCE_TRIGGERS then
+			p.bounceTriggers += 1
+			executor.castPayload(spec, p.ctx, s.pos, Geometry.safeUnit(v, n))
+		end
+		-- Hydra: every bounce splits off more copies, each with the bounces this one has left
+		for k = 1, spec.hydra do
+			if v.Magnitude < 1 or not ProjectileService.takeSplit(p.ctx) then
+				break
+			end
+			local yaw = (if k % 2 == 1 then 1 else -1) * (18 + 10 * k)
+			local d = Geometry.fan(v.Unit, yaw, seedRng:NextNumber(-6, 6))
+			ProjectileService.spawn(spec, p.ctx, s.pos, d, { bouncesLeft = p.bouncesLeft, noHold = true })
+		end
 		return
 	end
 	impact(p, result.Position, n, nil)
@@ -11032,14 +12198,43 @@ local function stepProjectile(p: Proj, dt: number)
 		end
 	end
 
-	-- timed triggers
-	if spec.trigger == "Timer" and not p.timerFired and s.age >= TIMER_DELAY then
+	-- sentries shoot at the nearest enemy they can see
+	local shot = spec.turretShot
+	if shot and s.age >= p.nextShot then
+		p.nextShot += spec.turretRate
+		local target = nearestVisible(p, spec.turretRange)
+		if target then
+			local d = Geometry.safeUnit(Combatants.centerOf(target) - s.pos, Vector3.new(0, 0, -1))
+			ProjectileService.spawn(shot, p.ctx, s.pos + d * (p.radius + 0.6), d)
+		end
+	end
+
+	-- magnetic pull and damaging auras
+	if (spec.pull > 0 or spec.auraDps > 0) and s.age >= p.nextField then
+		p.nextField += FIELD_TICK
+		fieldTick(p)
+	end
+
+	-- proximity fuse
+	if spec.trigger == "Proximity" and not p.proxFired then
+		local near = nearestVisible(p, PROXIMITY_RADIUS)
+		if near then
+			p.proxFired = true
+			local d = Geometry.safeUnit(Combatants.centerOf(near) - s.pos, Geometry.safeUnit(s.vel))
+			executor.castPayload(spec, p.ctx, s.pos, d)
+		end
+	end
+
+	-- timed triggers (a hovering sentry aims them at enemies)
+	if spec.trigger == "Timer" and not p.timerFired and s.age >= s.hold + TIMER_DELAY then
 		p.timerFired = true
-		executor.castPayload(spec, p.ctx, s.pos, Geometry.safeUnit(s.vel))
-	elseif spec.trigger == "Pulse" and s.age >= p.nextPulse and p.pulses < MAX_PULSES then
+		local d, at = aimDir(p, Geometry.safeUnit(s.vel))
+		executor.castPayload(spec, p.ctx, s.pos, d, at)
+	elseif spec.trigger == "Pulse" and s.age >= s.hold + p.nextPulse and p.pulses < MAX_PULSES then
 		p.pulses += 1
 		p.nextPulse += PULSE_INTERVAL
-		executor.castPayload(spec, p.ctx, s.pos, Geometry.safeUnit(s.vel, Vector3.new(0, 0, -1)))
+		local d, at = aimDir(p, Geometry.safeUnit(s.vel, Vector3.new(0, 0, -1)))
+		executor.castPayload(spec, p.ctx, s.pos, d, at)
 	end
 
 	if s.age >= spec.lifetime then
@@ -11324,8 +12519,9 @@ return QueueService
           <Properties>
             <string name="Name">SpellExecutor</string>
             <string name="Source"><![CDATA[-- Executes compiled spells: spawns projectiles, fires beams, novas, chains, meteors,
--- blinks and shields, and resolves everything that happens on impact
--- (explosions, zones, vortexes, shards, lightning arcs and trigger payloads).
+-- blinks, shields and walls, and resolves everything that happens on impact
+-- (explosions, zones, vortexes, shards, lightning arcs, swaps, rewinds, fractal splits
+-- and trigger payloads).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -11350,6 +12546,21 @@ local rng = Random.new()
 local ECHO_DELAY = 0.3
 local MAX_TRIGGERS_PER_EVENT = 4
 local ARC_RANGE = 18
+local SKYFALL_RANGE = 160
+local SKYFALL_HEIGHT = 55
+
+-- Chaos spells roll one of these on every hit.
+local CHAOS_STATUSES: { SpellTypes.StatusDef } = {
+	{ kind = "Burn", dps = 5, duration = 3 },
+	{ kind = "Chill", slow = 0.35, duration = 2.5, maxStacks = 3 },
+	{ kind = "Venom", dps = 2, duration = 6, maxStacks = 5 },
+}
+
+local function now(): number
+	return workspace:GetServerTimeNow()
+end
+
+local castPayloadRef: (Spec, CastCtx, Vector3, Vector3, Vector3?) -> ()
 
 ---------------------------------------------------------------------------
 -- Damage helpers
@@ -11381,6 +12592,75 @@ local function arcFrom(spec: Spec, ctx: CastCtx, from: Combatant, pos: Vector3, 
 	end
 end
 
+-- Transpose: the caster and the target trade places.
+local function swapPlaces(spec: Spec, caster: Combatant, target: Combatant)
+	local t = now()
+	if t - caster.lastSwap < 0.4 or target.isDummy or not Combatants.canAct(caster) then
+		return
+	end
+	local a, b = caster.root, target.root
+	local casterModel, targetModel = caster.model, target.model
+	if not a or not b or not casterModel or not targetModel then
+		return
+	end
+	caster.lastSwap = t
+	local from, to = a.CFrame, b.CFrame
+	casterModel:PivotTo(to + Vector3.new(0, 0.5, 0))
+	targetModel:PivotTo(from + Vector3.new(0, 0.5, 0))
+	FX.all("Blink", from.Position, to.Position, spec.color, spec.color2)
+	FX.all("Blink", to.Position, from.Position, spec.color2, spec.color)
+end
+
+-- Chrono: send the target back to where they stood a moment ago.
+local function rewind(spec: Spec, target: Combatant)
+	local t = now()
+	if t - target.lastRewind < 1.5 or target.isDummy or not target.model or not target.root then
+		return
+	end
+	local cf = Combatants.cframeAgo(target, spec.rewind, t)
+	if not cf then
+		return
+	end
+	target.lastRewind = t
+	local from = (target.root :: BasePart).Position;
+	(target.model :: Model):PivotTo(cf)
+	FX.all("Blink", from, cf.Position, spec.color, spec.color2)
+end
+
+-- Everything a hit does besides damage: kill triggers, rewinds and swaps.
+local function afterHit(
+	spec: Spec,
+	ctx: CastCtx,
+	target: Combatant,
+	pos: Vector3,
+	dir: Vector3,
+	killed: boolean,
+	direct: boolean
+)
+	if killed then
+		if spec.trigger == "OnKill" then
+			castPayloadRef(spec, ctx, pos, dir)
+		end
+		return
+	end
+	if not DamageService.canHurt(target, ctx.caster) then
+		return
+	end
+	if spec.rewind > 0 then
+		rewind(spec, target)
+	end
+	if spec.swap and direct then
+		swapPlaces(spec, ctx.caster, target)
+	end
+end
+
+local function chaosRoll(spec: Spec): (number, SpellTypes.StatusDef?)
+	if not spec.chaos then
+		return 1, spec.status
+	end
+	return rng:NextNumber(0.25, 2.5), CHAOS_STATUSES[rng:NextInteger(1, #CHAOS_STATUSES)]
+end
+
 function SpellExecutor.hitCombatant(
 	spec: Spec,
 	ctx: CastCtx,
@@ -11393,7 +12673,9 @@ function SpellExecutor.hitCombatant(
 	if damage <= 0 and spec.directMult <= 0 then
 		return
 	end
-	DamageService.apply(target, damage, {
+	local roll, status = chaosRoll(spec)
+	damage *= roll
+	local _, killed = DamageService.apply(target, damage, {
 		attacker = ctx.caster,
 		element = spec.element,
 		crit = spec.crit,
@@ -11403,7 +12685,7 @@ function SpellExecutor.hitCombatant(
 		lifesteal = spec.lifesteal + ctx.vampiric,
 		siphon = ctx.siphon,
 		wandUid = ctx.wandUid,
-		status = spec.status,
+		status = status,
 		mark = spec.mark,
 		spellName = spec.name,
 		hitPos = pos,
@@ -11411,6 +12693,7 @@ function SpellExecutor.hitCombatant(
 	if spec.arc > 0 then
 		arcFrom(spec, ctx, target, pos, damage * 0.5)
 	end
+	afterHit(spec, ctx, target, pos, dir, killed, true)
 end
 
 function SpellExecutor.explode(spec: Spec, ctx: CastCtx, pos: Vector3)
@@ -11423,7 +12706,8 @@ function SpellExecutor.explode(spec: Spec, ctx: CastCtx, pos: Vector3)
 		if dist <= radius + 1.5 then
 			local falloff = 1 - 0.5 * math.clamp(dist / math.max(radius, 1), 0, 1)
 			local away = Geometry.safeUnit(center - pos + Vector3.new(0, 1, 0), Vector3.yAxis)
-			DamageService.apply(c, damage * falloff, {
+			local roll, status = chaosRoll(spec)
+			local _, killed = DamageService.apply(c, damage * falloff * roll, {
 				attacker = ctx.caster,
 				element = spec.element,
 				crit = spec.crit,
@@ -11431,11 +12715,12 @@ function SpellExecutor.explode(spec: Spec, ctx: CastCtx, pos: Vector3)
 				knockback = spec.knockback * 1.1 + 10,
 				lift = spec.lift + 18,
 				lifesteal = spec.lifesteal + ctx.vampiric,
-				status = spec.status,
+				status = status,
 				mark = spec.mark,
 				spellName = spec.name,
 				hitPos = center,
 			})
+			afterHit(spec, ctx, c, center, away, killed, false)
 		end
 	end
 end
@@ -11443,6 +12728,9 @@ end
 local function vortex(spec: Spec, ctx: CastCtx, pos: Vector3)
 	FX.all("Vortex", pos, 16, spec.color, spec.color2)
 	for _, c in Combatants.withinRadius(pos, 16, ctx.caster) do
+		if not DamageService.canHurt(c, ctx.caster) then
+			continue
+		end
 		local to = pos - Combatants.centerOf(c)
 		local flat = Vector3.new(to.X, 0, to.Z)
 		if flat.Magnitude > 1 then
@@ -11469,13 +12757,34 @@ end
 -- Trigger plumbing
 ---------------------------------------------------------------------------
 
-function SpellExecutor.castPayload(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vector3)
+-- `aimAt` (optional): a target point for payloads that land somewhere (Meteor, Rampart).
+function SpellExecutor.castPayload(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vector3, aimAt: Vector3?)
 	local payload = spec.payload
 	if not payload or ctx.budget.n <= 0 then
 		return
 	end
 	ctx.budget.n -= 1
-	SpellExecutor.cast(payload, ctx, pos, Geometry.safeUnit(dir), false)
+	SpellExecutor.cast(payload, ctx, pos, Geometry.safeUnit(dir), false, aimAt)
+end
+castPayloadRef = SpellExecutor.castPayload
+
+-- Fractal: when a spell ends it splits into three smaller copies of itself (bouncing off
+-- whatever it hit), which may split again.
+local function splitFractal(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vector3, normal: Vector3?)
+	local child = spec.fractalChild
+	if not child then
+		return
+	end
+	local base = Geometry.safeUnit(if normal then Geometry.reflect(dir, normal) else dir, Vector3.new(0, 0, -1))
+	local start = pos + (normal or Vector3.zero) * 0.8
+	local reach = if child.kind == "Nova" then child.radius * 0.9 elseif child.kind == "Meteor" then 8 else 0
+	for i = 1, 3 do
+		if not ProjectileService.takeSplit(ctx) then
+			break
+		end
+		local d = Geometry.fan(base, -40 + 40 * (i - 1), rng:NextNumber(-5, 20))
+		SpellExecutor.cast(child, ctx, start + Geometry.flat(d) * reach, d, false)
+	end
 end
 
 -- Anything ending on impact: explosion, zone, vortex, shards, OnHit trigger.
@@ -11504,10 +12813,12 @@ function SpellExecutor.onPierce(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vec
 	end
 end
 
-function SpellExecutor.onEnd(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vector3)
+-- `normal` is set when the spell ended by hitting the world (Fractal copies bounce off it).
+function SpellExecutor.onEnd(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vector3, normal: Vector3?)
 	if spec.trigger == "OnExpire" then
 		SpellExecutor.castPayload(spec, ctx, pos, dir)
 	end
+	splitFractal(spec, ctx, pos, dir, normal)
 end
 
 function SpellExecutor.zoneAt(spec: Spec, ctx: CastCtx, pos: Vector3)
@@ -11515,28 +12826,30 @@ function SpellExecutor.zoneAt(spec: Spec, ctx: CastCtx, pos: Vector3)
 end
 
 -- For forms that resolve instantly, Timer/Pulse/OnExpire all fire at the end point.
-local function instantEndTriggers(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vector3)
+local function instantEndTriggers(spec: Spec, ctx: CastCtx, pos: Vector3, dir: Vector3, normal: Vector3?)
 	if spec.trigger == "OnExpire" or spec.trigger == "Timer" or spec.trigger == "Pulse" then
 		SpellExecutor.castPayload(spec, ctx, pos, dir)
 	end
+	splitFractal(spec, ctx, pos, dir, normal)
 end
 
 ---------------------------------------------------------------------------
 -- Forms
 ---------------------------------------------------------------------------
 
-local function doBeam(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3)
-	local remaining = spec.range
+local function doBeam(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, range: number?, bounces: number?)
+	local remaining = range or spec.range
 	local pos = origin
 	local d = dir
 	local pierceLeft = spec.pierce
-	local bouncesLeft = spec.bounces
+	local bouncesLeft = bounces or spec.bounces
 	local hitSet: { [Combatant]: boolean } = {}
 	local points = { origin }
 	local triggers = 0
 	local radius = math.max(0.3, spec.size * 0.5)
 	local endPos = origin
 	local endNormal = -dir
+	local worldNormal: Vector3? = nil -- set when the beam ends on a wall (Fractal bounces off it)
 	local stopped = false
 
 	for _ = 1, 12 do
@@ -11579,8 +12892,21 @@ local function doBeam(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3)
 				bouncesLeft -= 1
 				d = Geometry.reflect(d, world.Normal)
 				pos = world.Position + world.Normal * 0.1
+				if spec.trigger == "OnBounce" and triggers < MAX_TRIGGERS_PER_EVENT * 2 then
+					triggers += 1
+					SpellExecutor.castPayload(spec, ctx, pos, d)
+				end
+				-- Hydra beams branch at every reflection
+				for k = 1, spec.hydra do
+					if not ProjectileService.takeSplit(ctx) then
+						break
+					end
+					local branch = Geometry.fan(d, (if k % 2 == 1 then 1 else -1) * (20 + 8 * k), 0)
+					task.defer(doBeam, spec, ctx, pos, branch, remaining, bouncesLeft)
+				end
 			else
 				endNormal = world.Normal
+				worldNormal = world.Normal
 				SpellExecutor.onImpact(spec, ctx, world.Position, world.Normal, d, nil)
 				break
 			end
@@ -11589,7 +12915,7 @@ local function doBeam(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3)
 		end
 	end
 	FX.all("Beam", points, spec.color, spec.color2, spec.size)
-	instantEndTriggers(spec, ctx, endPos + endNormal * 0.5, d)
+	instantEndTriggers(spec, ctx, endPos + endNormal * 0.5, d, worldNormal)
 end
 
 local function doNova(spec: Spec, ctx: CastCtx, center: Vector3, dir: Vector3)
@@ -11698,7 +13024,8 @@ local function doMeteor(
 	_dir: Vector3,
 	index: number,
 	count: number,
-	fromCaster: boolean?
+	fromCaster: boolean?,
+	aimAt: Vector3?
 )
 	-- Cast from a wand: land on the spot the caster clicked (world raycasts ignore bodies,
 	-- so a ray "through" an enemy would otherwise land far behind them).
@@ -11713,6 +13040,9 @@ local function doMeteor(
 		local blocked = WorldQuery.raycast(origin, aim - origin)
 		target = if blocked then blocked.Position else aim
 		target = WorldQuery.groundBelow(target + Vector3.new(0, 2, 0), 250) or target
+	elseif aimAt then
+		-- aimed by a sentry: land on its target
+		target = WorldQuery.groundBelow(aimAt + Vector3.new(0, 2, 0), 250) or aimAt
 	else
 		target = WorldQuery.groundBelow(origin + Vector3.new(0, 2, 0), 250) or origin
 	end
@@ -11725,7 +13055,7 @@ local function doMeteor(
 	ProjectileService.spawn(spec, ctx, start, Geometry.safeUnit(target - start, -Vector3.yAxis))
 end
 
-local function doBlink(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3)
+local function doBlink(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, toPoint: Vector3?)
 	local caster = ctx.caster
 	if not Combatants.canAct(caster) or not caster.model then
 		return
@@ -11733,7 +13063,10 @@ local function doBlink(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3)
 	local root = caster.root :: BasePart
 	local start = root.Position
 	local dest: Vector3
-	if spec.depth > 1 then
+	if toPoint then
+		-- Skyfall blink: land on the aim point
+		dest = toPoint + Vector3.new(0, 3.2, 0)
+	elseif spec.depth > 1 then
 		-- cast by a trigger: teleport to where the parent spell was
 		dest = origin + Vector3.new(0, 2.5, 0)
 	else
@@ -11777,6 +13110,104 @@ local function doAegis(spec: Spec, ctx: CastCtx)
 	FX.all("Shield", caster.model, spec.color)
 end
 
+-- Rampart: a solid wall rises on the aim point (or where a trigger fired it), facing the caster.
+local function doWall(
+	spec: Spec,
+	ctx: CastCtx,
+	origin: Vector3,
+	dir: Vector3,
+	fromCaster: boolean?,
+	index: number,
+	count: number,
+	aimAt: Vector3?
+)
+	local casterPos = if ctx.caster.root then (ctx.caster.root :: BasePart).Position else origin
+	local ground: Vector3
+	local facing: Vector3
+	if fromCaster and ctx.aimPoint then
+		local aim = ctx.aimPoint :: Vector3
+		local offset = aim - casterPos
+		if offset.Magnitude > spec.range then
+			aim = casterPos + offset.Unit * spec.range
+		end
+		ground = WorldQuery.groundBelow(aim + Vector3.new(0, 3, 0), 80) or aim
+		facing = Geometry.flat(ground - casterPos)
+	elseif aimAt then
+		ground = WorldQuery.groundBelow(aimAt + Vector3.new(0, 3, 0), 80) or aimAt
+		facing = Geometry.flat(ground - origin)
+	else
+		ground = WorldQuery.groundBelow(origin + Vector3.new(0, 2, 0), 40) or origin
+		facing = Geometry.flat(dir)
+	end
+	facing = if facing.Magnitude > 1e-3 then facing.Unit else Vector3.new(0, 0, -1)
+	if count > 1 then
+		local right = facing:Cross(Vector3.yAxis)
+		ground += right * (index - (count + 1) / 2) * spec.wallWidth * 1.02
+	end
+	-- shove anyone standing where the wall rises
+	for _, c in Combatants.withinRadius(ground, spec.wallWidth / 2 + 2, ctx.caster) do
+		local along = (Combatants.centerOf(c) - ground):Dot(facing)
+		if math.abs(along) < 3 and DamageService.canHurt(c, ctx.caster) then
+			local side = if along >= 0 then 1 else -1
+			DamageService.knock(c, facing * side * (spec.knockback + 20) + Vector3.new(0, 25, 0))
+		end
+	end
+	ZoneService.createWall(spec, ground, facing, function(center: Vector3)
+		instantEndTriggers(spec, ctx, center, facing, nil)
+	end)
+	FX.all("Nova", ground + Vector3.new(0, 0.5, 0), math.min(spec.wallWidth * 0.6, 16), spec.color, spec.color2)
+	SpellExecutor.onImpact(spec, ctx, ground + Vector3.new(0, 0.5, 0), Vector3.yAxis, facing, nil)
+end
+
+-- Skyfall: where on the ground the spell comes down (the aim point, within range).
+local function skyTarget(ctx: CastCtx, origin: Vector3): Vector3?
+	local aim = ctx.aimPoint
+	if not aim then
+		return nil
+	end
+	local from = if ctx.caster.root then (ctx.caster.root :: BasePart).Position else origin
+	local offset = aim - from
+	if offset.Magnitude > SKYFALL_RANGE then
+		aim = from + offset.Unit * SKYFALL_RANGE
+	end
+	return WorldQuery.groundBelow(aim + Vector3.new(0, 3, 0), 250) or aim
+end
+
+local function castFromSky(spec: Spec, ctx: CastCtx, ground: Vector3, dir: Vector3, count: number)
+	local kind = spec.kind
+	FX.all("Warn", ground, math.max(spec.explodeRadius, spec.radius, 4), spec.color)
+	local function spot(i: number): Vector3
+		if count <= 1 then
+			return ground
+		end
+		local angle = (i / count) * math.pi * 2
+		local r = 3 + count * 0.6
+		return ground + Vector3.new(math.cos(angle) * r, 0, math.sin(angle) * r)
+	end
+	if kind == "Projectile" then
+		for i = 1, count do
+			local target = spot(i)
+			local start = target + Vector3.new(rng:NextNumber(-6, 6), SKYFALL_HEIGHT, rng:NextNumber(-6, 6))
+			ProjectileService.spawn(spec, ctx, start, Geometry.safeUnit(target - start, -Vector3.yAxis))
+		end
+	elseif kind == "Beam" then
+		for i = 1, count do
+			doBeam(spec, ctx, spot(i) + Vector3.new(0, 80, 0), -Vector3.yAxis, 90, nil)
+		end
+	elseif kind == "Nova" then
+		for i = 1, count do
+			task.delay((i - 1) * 0.12, doNova, spec, ctx, spot(i) + Vector3.new(0, 1.5, 0), dir)
+		end
+	elseif kind == "Chain" then
+		local taken: { [Combatant]: boolean } = {}
+		for i = 1, count do
+			doChain(spec, ctx, spot(i) + Vector3.new(0, 30, 0), -Vector3.yAxis, taken)
+		end
+	elseif kind == "Blink" then
+		doBlink(spec, ctx, ground, dir, ground)
+	end
+end
+
 local function echoless(spec: Spec): Spec
 	local cached = (spec :: any)._echoless
 	if cached then
@@ -11788,10 +13219,54 @@ local function echoless(spec: Spec): Spec
 	return copy
 end
 
+local function holdless(spec: Spec): Spec
+	local cached = (spec :: any)._holdless
+	if cached then
+		return cached
+	end
+	local copy = table.clone(spec)
+	copy.hold = 0
+	(spec :: any)._holdless = copy
+	return copy
+end
+
+-- Where a re-cast from the wand starts (for echoes and delayed instant spells).
+local function wandOrigin(ctx: CastCtx, dir: Vector3, fallback: Vector3): Vector3
+	local model = ctx.caster.model
+	local head = model and model:FindFirstChild("Head") :: BasePart?
+	return if head then head.Position + dir * 2.2 else fallback
+end
+
 -- Casts a compiled spell. `fromCaster` is true for spells cast straight from a wand.
-function SpellExecutor.cast(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, fromCaster: boolean?)
+-- `aimAt` is an optional target point for payloads fired by a sentry.
+function SpellExecutor.cast(
+	spec: Spec,
+	ctx: CastCtx,
+	origin: Vector3,
+	dir: Vector3,
+	fromCaster: boolean?,
+	aimAt: Vector3?
+)
 	local kind = spec.kind
+	-- Stasis on an instant spell: it simply goes off later
+	local delayed = spec.hold > 0 and kind ~= "Projectile" and kind ~= "Meteor"
+	if delayed then
+		local later = holdless(spec)
+		task.delay(spec.hold, function()
+			if Combatants.canAct(ctx.caster) then
+				local o = if fromCaster then wandOrigin(ctx, dir, origin) else origin
+				SpellExecutor.cast(later, ctx, o, dir, fromCaster, aimAt)
+			end
+		end)
+		return
+	end
 	local count = if kind == "Blink" or kind == "Aegis" then 1 else spec.count
+	local sky = if spec.skyfall
+			and fromCaster
+			and not spec.orbit
+			and (kind == "Projectile" or kind == "Beam" or kind == "Nova" or kind == "Chain" or kind == "Blink")
+		then skyTarget(ctx, origin)
+		else nil
 	local dirs: { Vector3 } = {}
 	if count <= 1 then
 		dirs[1] = dir
@@ -11803,7 +13278,9 @@ function SpellExecutor.cast(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vect
 		end
 	end
 
-	if kind == "Projectile" then
+	if sky then
+		castFromSky(spec, ctx, sky, dir, count)
+	elseif kind == "Projectile" then
 		local baseAngle = math.atan2(dir.Z, dir.X)
 		for i, d in dirs do
 			ProjectileService.spawn(spec, ctx, origin, d, {
@@ -11833,12 +13310,16 @@ function SpellExecutor.cast(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vect
 		end
 	elseif kind == "Meteor" then
 		for i, d in dirs do
-			doMeteor(spec, ctx, origin, d, i, count, fromCaster)
+			doMeteor(spec, ctx, origin, d, i, count, fromCaster, aimAt)
 		end
 	elseif kind == "Blink" then
-		doBlink(spec, ctx, origin, dir)
+		doBlink(spec, ctx, origin, dir, nil)
 	elseif kind == "Aegis" then
 		doAegis(spec, ctx)
+	elseif kind == "Wall" then
+		for i = 1, count do
+			doWall(spec, ctx, origin, dir, fromCaster, i, count, aimAt)
+		end
 	end
 
 	if spec.echo > 0 then
@@ -11848,13 +13329,7 @@ function SpellExecutor.cast(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vect
 				if not Combatants.canAct(ctx.caster) then
 					return
 				end
-				local o = origin
-				if fromCaster then
-					local head = (ctx.caster.model :: Model):FindFirstChild("Head") :: BasePart?
-					if head then
-						o = head.Position + dir * 2.2
-					end
-				end
+				local o = if fromCaster then wandOrigin(ctx, dir, origin) else origin
 				SpellExecutor.cast(again, ctx, o, dir, fromCaster)
 			end)
 		end
@@ -12167,6 +13642,7 @@ end
 
 local function tick()
 	local t = now()
+	Combatants.recordHistory(t)
 	for _, c in Combatants.all() do
 		local hum = c.humanoid
 		if hum and c.alive and hum.Health > 0 then
@@ -12475,7 +13951,8 @@ return WorldQuery
         <Item class="ModuleScript" referent="52">
           <Properties>
             <string name="Name">ZoneService</string>
-            <string name="Source"><![CDATA[-- Lingering ground effects left by Cloud spells and the Lingering modifier.
+            <string name="Source"><![CDATA[-- Lingering ground effects left by Cloud spells and the Lingering modifier, and the solid
+-- walls conjured by Rampart spells.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -12502,10 +13979,28 @@ type Zone = {
 
 local ZoneService = {}
 
+type Wall = {
+	part: BasePart,
+	untilT: number,
+	onEnd: ((Vector3) -> ())?,
+}
+
 local zones: { Zone } = {}
+local walls: { Wall } = {}
 local nextId = 0
 local MAX_ZONES = 60
+local MAX_WALLS = 40
 local TICK = 0.5
+
+-- What a conjured wall is made of, by element.
+local WALL_LOOKS: { [string]: { Enum.Material | number } } = {
+	Earth = { Enum.Material.Slate, 0 },
+	Frost = { Enum.Material.Ice, 0.15 },
+	Fire = { Enum.Material.CrackedLava, 0 },
+	Poison = { Enum.Material.Glass, 0.35 },
+	Void = { Enum.Material.Glass, 0.3 },
+	Chaos = { Enum.Material.Neon, 0.4 },
+}
 
 local function now(): number
 	return workspace:GetServerTimeNow()
@@ -12531,12 +14026,67 @@ function ZoneService.create(spec: Spec, caster: Combatant, position: Vector3)
 	FX.all("Zone", zone.id, ground, zone.radius, spec.zoneDuration, spec.color, spec.color2, spec.element)
 end
 
+-- A solid wall standing on `ground`, its face turned toward `facing`. Blocks movement and spells
+-- until it crumbles, then calls onEnd with its centre.
+function ZoneService.createWall(spec: Spec, ground: Vector3, facing: Vector3, onEnd: ((Vector3) -> ())?): BasePart
+	if #walls >= MAX_WALLS then
+		local oldest = table.remove(walls, 1) :: Wall
+		oldest.part:Destroy()
+	end
+	local folder = workspace:FindFirstChild("SpellWalls")
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = "SpellWalls"
+		folder.Parent = workspace
+	end
+	local flat = Vector3.new(facing.X, 0, facing.Z)
+	local look = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	local style = WALL_LOOKS[spec.element] or { Enum.Material.Glass, 0.3 }
+	local center = ground + Vector3.new(0, spec.wallHeight / 2 - 0.5, 0)
+	local part = Instance.new("Part")
+	part.Name = "SpellWall"
+	part.Anchored = true
+	part.CanTouch = false
+	part.Size = Vector3.new(spec.wallWidth, spec.wallHeight, 2)
+	part.CFrame = CFrame.lookAt(center, center + look)
+	part.Material = style[1] :: Enum.Material
+	part.Transparency = style[2] :: number
+	part.Color = Color3.fromRGB(spec.color[1], spec.color[2], spec.color[3])
+	part.Parent = folder
+	table.insert(walls, { part = part, untilT = now() + spec.lifetime, onEnd = onEnd })
+	return part
+end
+
 function ZoneService.clear()
 	table.clear(zones)
+	for _, wall in walls do
+		wall.part:Destroy()
+	end
+	table.clear(walls)
+end
+
+local function tickWalls(t: number)
+	local i = 1
+	while i <= #walls do
+		local wall = walls[i]
+		if t >= wall.untilT then
+			table.remove(walls, i)
+			local center = wall.part.Position
+			wall.part:Destroy()
+			if wall.onEnd then
+				task.spawn(wall.onEnd, center)
+			end
+		else
+			i += 1
+		end
+	end
 end
 
 function ZoneService.init()
 	RunService.Heartbeat:Connect(function()
+		if #walls > 0 then
+			tickWalls(now())
+		end
 		if #zones == 0 then
 			return
 		end
@@ -13144,6 +14694,72 @@ local function buildProjectile(vis: { [string]: any }): (Part, number, boolean)
 	elseif form == "Boomerang" then
 		part = fxPart({ Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.35, s * 1.8, s * 1.8), Color = c })
 		spin = 25
+	elseif form == "Sawblade" then
+		part = fxPart({ Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, s * 1.6, s * 1.6), Color = c })
+		part.Material = Enum.Material.Metal
+		local edge = Instance.new("Sparkles")
+		edge.SparkleColor = c2
+		edge.Parent = part
+		spin = 40
+	elseif form == "Swarm" then
+		part = ball(Vector3.zero, s, c, 0.05)
+		local wings = Instance.new("ParticleEmitter")
+		wings.Color = ColorSequence.new(c2)
+		wings.LightEmission = 1
+		wings.Size = NumberSequence.new(s * 0.8, 0)
+		wings.Transparency = NumberSequence.new(0.3, 1)
+		wings.Lifetime = NumberRange.new(0.15, 0.3)
+		wings.Rate = 25
+		wings.Speed = NumberRange.new(0, 0.5)
+		wings.Parent = part
+	elseif form == "Tornado" then
+		-- a spinning funnel of debris
+		part = fxPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(s * 2.4, s * 1.1, s * 1.1),
+			Color = c,
+			Transparency = 0.55,
+			Material = Enum.Material.ForceField,
+		})
+		local debris = Instance.new("ParticleEmitter")
+		debris.Color = ColorSequence.new(c, c2)
+		debris.Size = NumberSequence.new(0.6, 0.2)
+		debris.Transparency = NumberSequence.new(0.2, 1)
+		debris.Lifetime = NumberRange.new(0.6, 1.2)
+		debris.Rate = 60
+		debris.Speed = NumberRange.new(4, 8)
+		debris.SpreadAngle = Vector2.new(180, 20)
+		debris.RotSpeed = NumberRange.new(-200, 200)
+		debris.Parent = part
+		flat = true
+		spin = 18
+	elseif form == "BlackHole" then
+		part = ball(Vector3.zero, s, Color3.new(0, 0, 0))
+		part.Material = Enum.Material.SmoothPlastic
+		local disk = Instance.new("ParticleEmitter")
+		disk.Color = ColorSequence.new(c, c2)
+		disk.LightEmission = 1
+		disk.Size = NumberSequence.new(s * 0.5, 0)
+		disk.Transparency = NumberSequence.new(0, 1)
+		disk.Lifetime = NumberRange.new(0.4, 0.8)
+		disk.Rate = 80
+		disk.Speed = NumberRange.new(-s * 6, -s * 3) -- particles fall inward
+		disk.SpreadAngle = Vector2.new(180, 180)
+		disk.Parent = part
+	elseif form == "Sentry" then
+		-- a floating eye with a glowing, pulsing iris
+		part = ball(Vector3.zero, s, Color3.fromRGB(240, 235, 225))
+		part.Material = Enum.Material.SmoothPlastic
+		local iris = Instance.new("ParticleEmitter")
+		iris.Color = ColorSequence.new(c, c2)
+		iris.LightEmission = 1
+		iris.LockedToPart = true
+		iris.Size = NumberSequence.new(s * 0.9, s * 0.4)
+		iris.Transparency = NumberSequence.new(0.1, 1)
+		iris.Lifetime = NumberRange.new(0.3, 0.5)
+		iris.Rate = 20
+		iris.Speed = NumberRange.new(0, 0)
+		iris.Parent = part
 	elseif form == "Meteor" then
 		part = ball(Vector3.zero, s, c:Lerp(Color3.new(0, 0, 0), 0.6))
 		part.Material = Enum.Material.Basalt
@@ -13331,6 +14947,8 @@ handlers["P+"] = function(id: number, pos: Vector3, vel: Vector3, seed: number, 
 		orbitRadius = vis.or_,
 		orbitAngle = orbitAngle,
 		boomerangAt = vis.b,
+		hold = vis.d,
+		hover = vis.hv,
 		seed = seed,
 	})
 	local part, spin, flat = buildProjectile(vis)
@@ -14111,30 +15729,52 @@ chapter("Library", "📚  Spell Library", function()
 	end
 end)
 
-chapter("Classes", "🎓  Classes", function()
-	heading("Classes")
+chapter("Classes", "🎓  Kits", function()
+	heading("Kits")
 	para(
-		"Your class decides the wand, spells and parts you start each match with. Pick one at the <b>Class Altar</b> (in the Plaza's gazebo, or in the library). Premium classes unlock with Roblox Premium."
+		"Your kit (class) decides the wands, spells, parts and potions you start each match with. Pick one at the <b>Class Altar</b> (in the Plaza's gazebo, or in the library). The Apprentice is free; the others are sold in tiers. Cheap tiers are mostly flavour, the top tiers are a real head start. The best gear is still in the chests."
 	)
+	para(
+		"<b>Bonus part:</b> every kit also gives you <b>one random spell part</b> each match. The higher the tier, the rarer it can be:"
+	)
+	for tier = 0, #Classes.Tiers - 1 do
+		local info = Classes.tierInfo(tier)
+		para(
+			"<b>"
+				.. info.name
+				.. "</b> ("
+				.. (if info.robux > 0 then "R$" .. info.robux .. ", about " .. info.usd else "free")
+				.. "): "
+				.. Classes.oddsText(tier)
+		)
+	end
 	for _, class in Classes.List do
-		subheading(class.icon .. "  " .. class.name .. (if class.premium then "  (Premium)" else "  (Free)"))
+		local info = Classes.tierInfo(class.tier)
+		subheading(class.icon .. "  " .. class.name .. "  (" .. info.name .. ")")
 		local spells = {}
-		for _, id in class.kit.wands[1].spells do
-			table.insert(spells, PremadeSpells.ById[id].name)
+		for _, w in class.kit.wands do
+			for _, id in w.spells do
+				table.insert(spells, PremadeSpells.ById[id].name)
+			end
 		end
 		local parts = {}
 		for id, n in (class.kit.parts or {}) :: { [string]: number } do
 			table.insert(parts, SpellParts.ById[id].name .. (if n > 1 then " x" .. n else ""))
 		end
 		table.sort(parts)
+		local wands = {}
+		for _, w in class.kit.wands do
+			table.insert(wands, w.template.name .. " (" .. w.template.rarity .. ")")
+		end
 		para(
 			class.tagline
-				.. "\n<b>Wand:</b> "
-				.. class.kit.wands[1].template.name
-				.. "   <b>Spells:</b> "
+				.. "\n<b>Wands:</b> "
+				.. table.concat(wands, ", ")
+				.. "\n<b>Spells:</b> "
 				.. table.concat(spells, ", ")
-				.. "   <b>Parts:</b> "
+				.. "\n<b>Parts:</b> "
 				.. table.concat(parts, ", ")
+				.. " + 1 random"
 		)
 	end
 end)
@@ -16478,7 +18118,7 @@ return InventoryController
             <Properties>
               <string name="Name">LobbyController</string>
               <string name="Source"><![CDATA[-- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
--- Leave queue, class selection (premium classes), the map vote, spectating, the lectern/altar
+-- Leave queue, the kit shop / class picker, the map vote, spectating, the lectern/altar
 -- prompts, and the animated props (orrery, floating books, the fountain crystal, floating isles).
 
 local Players = game:GetService("Players")
@@ -16488,6 +18128,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Remotes = require(Shared.Remotes)
+local Config = require(Shared.Config)
 local Classes = require(Shared.Classes)
 local Consumables = require(Shared.Consumables)
 local SpellParts = require(Shared.Spells.SpellParts)
@@ -16511,8 +18152,7 @@ local classAction = Remotes.func("ClassAction")
 local gui: ScreenGui
 local root: Frame
 local classPanel: Frame
-local classGrid: Frame
-local unlockButton: TextButton
+local classGrid: ScrollingFrame
 local classButton: TextButton
 local spectateBar: Frame
 local spectateName: TextLabel
@@ -16554,94 +18194,163 @@ local function kitInfo(class: Classes.ClassDef): ItemInfo.Info
 	if #potions > 0 then
 		table.insert(lines, "Potions: " .. table.concat(potions, ", "))
 	end
+	local tier = Classes.tierInfo(class.tier)
+	table.insert(lines, "Bonus: 1 random spell part each match (" .. Classes.oddsText(class.tier) .. ")")
 	return {
 		title = class.icon .. " " .. class.name,
 		color = Theme.rgb(class.color),
-		subtitle = if class.premium then "Premium class" else "Free class",
+		subtitle = if class.tier == 0
+			then "Free kit"
+			else tier.name .. " kit · R$" .. tier.robux .. " (about " .. tier.usd .. ")",
 		body = class.tagline .. "\n\nStarting kit:\n" .. table.concat(lines, "\n"),
 	}
 end
 
+local function ownedKits(): { [string]: boolean }
+	local set: { [string]: boolean } = {}
+	for id in string.gmatch(tostring(player:GetAttribute("OwnedKits") or ""), "[^,]+") do
+		set[id] = true
+	end
+	set[Classes.Default] = true
+	return set
+end
+
+local function kitCard(class: Classes.ClassDef, owned: boolean, isCurrent: boolean, order: number, parent: Instance)
+	local tier = Classes.tierInfo(class.tier)
+	local card = Create("TextButton", {
+		Name = "Kit_" .. class.id,
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundColor3 = if isCurrent then C.Panel3 else C.Panel2,
+		Size = UDim2.fromOffset(210, 112),
+		LayoutOrder = order,
+		Parent = parent,
+	}, {
+		Create.corner(10),
+		Create.stroke(
+			if isCurrent then C.Gold else Theme.rgb(class.color),
+			if isCurrent then 3 else 1.5,
+			if owned then 0 else 0.5
+		),
+	})
+	Widgets.label({
+		Text = class.icon,
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromOffset(40, 40),
+		Position = UDim2.fromOffset(8, 8),
+		Parent = card,
+	})
+	Widgets.label({
+		Text = class.name,
+		Font = Theme.Black,
+		TextSize = 16,
+		TextColor3 = Theme.rgb(class.color),
+		Size = UDim2.new(1, -60, 0, 20),
+		Position = UDim2.fromOffset(54, 8),
+		Parent = card,
+	})
+	Widgets.label({
+		Name = "Status",
+		Text = if isCurrent
+			then "✔ SELECTED"
+			elseif owned then (if class.tier == 0 then "FREE" else "OWNED · click to pick")
+			else "🛒 R$" .. tier.robux .. "  (" .. tier.usd .. ")",
+		Font = Theme.Bold,
+		TextSize = 12,
+		TextColor3 = if isCurrent then C.Gold elseif owned then C.Good else Theme.rgb(tier.color),
+		Size = UDim2.new(1, -60, 0, 16),
+		Position = UDim2.fromOffset(54, 30),
+		Parent = card,
+	})
+	Widgets.label({
+		Text = class.tagline,
+		TextSize = 12,
+		TextWrapped = true,
+		TextColor3 = if owned then C.Text else C.Dim,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Size = UDim2.new(1, -16, 0, 52),
+		Position = UDim2.fromOffset(8, 54),
+		Parent = card,
+	})
+	Widgets.attachTooltip(card, function()
+		return kitInfo(class)
+	end)
+	card.Activated:Connect(function()
+		Sounds.play("Click")
+		local ok, success, message = pcall(function()
+			return classAction:InvokeServer(if owned then "Select" else "Buy", class.id)
+		end)
+		if ok and message then
+			State.toast(message, if success then C.Good else C.Bad)
+		end
+	end)
+end
+
 local function renderClasses()
 	Widgets.clear(classGrid, true)
-	local access = player:GetAttribute("PremiumAccess") == true
+	local owned = ownedKits()
 	local current = player:GetAttribute("Class")
-	for i, class in Classes.List do
-		local locked = class.premium and not access
-		local isCurrent = current == class.id
-		local card = Create("TextButton", {
-			Text = "",
-			AutoButtonColor = false,
-			BackgroundColor3 = if isCurrent then C.Panel3 else C.Panel2,
-			LayoutOrder = i,
+	local order = 0
+	for tierIndex = 0, #Classes.Tiers - 1 do
+		local tier = Classes.tierInfo(tierIndex)
+		order += 1
+		local row = Create("Frame", {
+			Name = "Tier_" .. tier.name,
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -12, 0, 116),
+			LayoutOrder = order,
 			Parent = classGrid,
-		}, {
-			Create.corner(10),
-			Create.stroke(
-				if isCurrent then C.Gold else Theme.rgb(class.color),
-				if isCurrent then 3 else 1.5,
-				if locked then 0.6 else 0
-			),
 		})
 		Widgets.label({
-			Text = class.icon,
-			TextScaled = true,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			Size = UDim2.fromOffset(44, 44),
-			Position = UDim2.fromOffset(10, 10),
-			Parent = card,
-		})
-		Widgets.label({
-			Text = class.name,
+			Text = string.upper(tier.name) .. (if tier.id == 0 then "" else " CIRCLE"),
 			Font = Theme.Black,
-			TextSize = 16,
-			TextColor3 = if locked then C.Dim else Theme.rgb(class.color),
-			Size = UDim2.new(1, -66, 0, 20),
-			Position = UDim2.fromOffset(60, 10),
-			Parent = card,
+			TextSize = 18,
+			TextColor3 = Theme.rgb(tier.color),
+			Size = UDim2.fromOffset(220, 22),
+			Position = UDim2.fromOffset(4, 6),
+			Parent = row,
 		})
 		Widgets.label({
-			Text = if class.premium then (if locked then "🔒 PREMIUM" else "⭐ PREMIUM") else "FREE",
+			Text = if tier.robux > 0
+				then "R$" .. tier.robux .. " each  ·  about " .. tier.usd
+				else "Free for everyone",
 			Font = Theme.Bold,
-			TextSize = 11,
-			TextColor3 = if class.premium then C.Gold else C.Good,
-			Size = UDim2.new(1, -66, 0, 14),
-			Position = UDim2.fromOffset(60, 32),
-			Parent = card,
+			TextSize = 13,
+			TextColor3 = C.Text,
+			Size = UDim2.fromOffset(220, 18),
+			Position = UDim2.fromOffset(4, 30),
+			Parent = row,
 		})
 		Widgets.label({
-			Text = class.tagline,
-			TextSize = 12,
+			Text = "Bonus part each match:\n" .. Classes.oddsText(tier.id),
+			TextSize = 11,
 			TextWrapped = true,
-			TextColor3 = if locked then C.Dim else C.Text,
+			TextColor3 = C.Dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
-			Size = UDim2.new(1, -20, 0, 44),
-			Position = UDim2.fromOffset(10, 60),
-			Parent = card,
+			Size = UDim2.fromOffset(220, 60),
+			Position = UDim2.fromOffset(4, 52),
+			Parent = row,
 		})
-		Widgets.attachTooltip(card, function()
-			return kitInfo(class)
-		end)
-		card.Activated:Connect(function()
-			if locked then
-				State.toast("Premium class - unlock it with Roblox Premium", C.Gold)
-				return
+		local cards = Create("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -236, 1, 0),
+			Position = UDim2.fromOffset(232, 0),
+			Parent = row,
+		}, { Create.list(Enum.FillDirection.Horizontal, 10) })
+		local n = 0
+		for _, class in Classes.List do
+			if class.tier == tierIndex then
+				n += 1
+				kitCard(class, owned[class.id] == true, current == class.id, n, cards)
 			end
-			Sounds.play("Click")
-			local ok, success, message = pcall(function()
-				return classAction:InvokeServer("Select", class.id)
-			end)
-			if ok and message then
-				State.toast(message, if success then C.Good else C.Bad)
-			end
-		end)
+		end
 	end
-	unlockButton.Visible = not access
 end
 
 local function buildClassPanel()
 	classPanel = Widgets.panel({
-		Size = UDim2.fromOffset(1000, 470),
+		Size = UDim2.fromOffset(940, 540),
 		Position = UDim2.fromScale(0.5, 0.52),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundColor3 = C.Background,
@@ -16650,7 +18359,7 @@ local function buildClassPanel()
 		Parent = root,
 	})
 	Widgets.label({
-		Text = "CHOOSE YOUR CLASS",
+		Text = "CHOOSE YOUR KIT",
 		Font = Theme.Black,
 		TextSize = 24,
 		TextColor3 = C.Gold,
@@ -16659,10 +18368,11 @@ local function buildClassPanel()
 		Parent = classPanel,
 	})
 	Widgets.label({
-		Text = "Your class decides the wand, spells and parts you start with. Everything else is in the chests!",
+		Text = "Your kit decides the wands, spells and parts you start with, plus a random bonus part each match. Hover a kit to see everything in it.",
 		TextSize = 13,
 		TextColor3 = C.Dim,
-		Size = UDim2.new(1, -40, 0, 18),
+		TextWrapped = true,
+		Size = UDim2.new(1, -80, 0, 18),
 		Position = UDim2.fromOffset(20, 42),
 		Parent = classPanel,
 	})
@@ -16675,29 +18385,28 @@ local function buildClassPanel()
 		end,
 		parent = classPanel,
 	})
-	classGrid = Create("Frame", {
+	classGrid = Create("ScrollingFrame", {
+		Name = "KitList",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -40, 0, 330),
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -30, 1, -110),
 		Position = UDim2.fromOffset(20, 70),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 8,
 		Parent = classPanel,
-	}, {
-		Create("UIGridLayout", {
-			CellSize = UDim2.fromOffset(184, 112),
-			CellPadding = UDim2.fromOffset(10, 10),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	})
-	unlockButton = Widgets.button("⭐  Unlock every class with Premium", {
-		size = UDim2.fromOffset(360, 40),
-		position = UDim2.new(0.5, 0, 1, -54),
-		anchor = Vector2.new(0.5, 0),
-		color = Color3.fromRGB(200, 150, 40),
-		onClick = function()
-			pcall(function()
-				classAction:InvokeServer("Unlock")
-			end)
-		end,
-		parent = classPanel,
+	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+	local premiumNote = if Config.Kits.PremiumFreeTier > 0
+		then "  ·  Roblox Premium members get every " .. Classes.tierInfo(Config.Kits.PremiumFreeTier).name .. " kit free"
+		else ""
+	Widgets.label({
+		Text = "Prices are in Robux; dollar amounts are approximate." .. premiumNote,
+		TextSize = 12,
+		TextColor3 = C.Dim,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.new(1, -40, 0, 18),
+		Position = UDim2.new(0, 20, 1, -30),
+		Parent = classPanel,
 	})
 end
 
@@ -17086,7 +18795,7 @@ function LobbyController.init()
 		end
 	end
 	player:GetAttributeChangedSignal("Class"):Connect(updateClassButton)
-	player:GetAttributeChangedSignal("PremiumAccess"):Connect(updateClassButton)
+	player:GetAttributeChangedSignal("OwnedKits"):Connect(updateClassButton)
 	updateClassButton()
 
 	local lastTarget = 0

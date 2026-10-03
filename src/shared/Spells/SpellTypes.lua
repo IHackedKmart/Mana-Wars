@@ -22,7 +22,7 @@ export type Spec = {
 	name: string,
 	form: string,
 	element: string,
-	kind: string, -- "Projectile" | "Beam" | "Nova" | "Chain" | "Meteor" | "Blink" | "Aegis"
+	kind: string, -- "Projectile" | "Beam" | "Nova" | "Chain" | "Meteor" | "Blink" | "Aegis" | "Wall"
 	depth: number,
 
 	-- economy
@@ -72,6 +72,22 @@ export type Spec = {
 	vortex: number,
 	echo: number,
 	shatter: number,
+	hold: number, -- seconds frozen in place before moving (Stasis); instant forms are delayed instead
+	hover: number, -- projectile stops and hovers after this many seconds (Sentry)
+	turretRate: number, -- a hovering sentry shoots `turretShot` at the nearest enemy this often
+	turretRange: number,
+	pull: number, -- drags nearby enemies toward the projectile while it flies (Magnetic, Black Hole)
+	auraDps: number, -- damages enemies near the projectile while it flies (Tornado, Black Hole)
+	auraRadius: number,
+	auraLift: number, -- upward kick on each aura tick (Tornado)
+	hydra: number, -- extra copies spawned every time it bounces
+	fractal: number, -- generations of self-copies spawned when it ends
+	skyfall: boolean, -- comes down from the sky onto the aim point instead of leaving the wand
+	swap: boolean, -- the caster swaps places with whoever it hits
+	chaos: boolean, -- every hit rolls a random damage multiplier and a random status
+	rewind: number, -- sends whoever it hits back to where they were this many seconds ago
+	wallWidth: number, -- Wall form: size of the conjured wall
+	wallHeight: number,
 
 	-- on-hit effects
 	knockback: number,
@@ -86,6 +102,8 @@ export type Spec = {
 	trigger: string?,
 	payload: Spec?,
 	shard: Spec?,
+	turretShot: Spec?,
+	fractalChild: Spec?,
 
 	-- visuals
 	color: { number },

@@ -154,7 +154,14 @@ end
 
 -- 1. Every premade spell runs cleanly; every damaging one should hurt somebody.
 -- shields and blinks don't hurt on their own; Orbiting Blades only hits things that come close
-local utility = { Bulwark = true, EscapeStep = true, BlinkStrike = true, StormShield = true, OrbitingBlades = true }
+local utility = {
+	Bulwark = true,
+	EscapeStep = true,
+	BlinkStrike = true,
+	StormShield = true,
+	OrbitingBlades = true,
+	EarthenRampart = true, -- a wall: it blocks, it doesn't hurt
+}
 local hurting = 0
 for _, premade in PremadeSpells.List do
 	local dealt = castAndRun(Items.newSpell(premade.recipe, premade.name, premade.rarity, premade.id), premade.id, 4)
@@ -176,6 +183,261 @@ do
 	if 100 - targets[4].humanoid.Health <= 0 then
 		fail("orbiting blades should hit an adjacent enemy")
 	end
+end
+
+-- 1b. The wilder parts do what they say.
+do
+	local fxLog = {}
+	Mock.Remotes.event("FX").OnClientEvent:Connect(function(kind, ...)
+		table.insert(fxLog, { kind = kind, args = { ... } })
+	end)
+	local function countFx(kind: string, from: number): number
+		local n = 0
+		for i = from + 1, #fxLog do
+			if fxLog[i].kind == kind then
+				n += 1
+			end
+		end
+		return n
+	end
+	local function cast(recipe, aim, label: string)
+		giveWand(Items.newSpell(recipe))
+		local ok, reason = CastingService.tryCast(caster, aim)
+		if not ok then
+			fail(label .. ": cast refused (" .. tostring(reason) .. ")")
+		end
+	end
+	local function checkWarnings(label: string)
+		for i = reported + 1, #Mock.warnings do
+			fail(label .. ": " .. Mock.warnings[i])
+		end
+		reported = #Mock.warnings
+	end
+	local function hurt(i: number): number
+		return 100 - targets[i].humanoid.Health
+	end
+	-- targets 4 and 5 normally stand in the firing lane; move them aside for these tests
+	local function reset()
+		resetWorld()
+		targets[4].root.CFrame = CFrame.new(40, 3, -10)
+		targets[5].root.CFrame = CFrame.new(48, 3, -6)
+	end
+
+	-- Rampart: a wall rises between us and target 1 and blocks a bolt, then crumbles.
+	reset()
+	cast({ form = "Rampart", element = "Earth" }, Vector3.new(0, 3, -18), "rampart")
+	local walls = Mock.workspace:FindFirstChild("SpellWalls")
+	if not walls or #walls:GetChildren() ~= 1 then
+		fail("Rampart should raise one wall")
+	end
+	Mock.step(0.3)
+	cast({ form = "Bolt", element = "Arcane" }, TARGET_POS[1], "bolt into wall")
+	Mock.step(1.5)
+	if hurt(1) > 0 then
+		fail("the wall should block a bolt aimed through it")
+	end
+	Mock.step(5)
+	if walls and #walls:GetChildren() ~= 0 then
+		fail("the wall should crumble after its lifetime")
+	end
+	cast({ form = "Bolt", element = "Arcane" }, TARGET_POS[1], "bolt after wall")
+	Mock.step(1.5)
+	if hurt(1) <= 0 then
+		fail("with the wall gone the bolt should hit")
+	end
+	checkWarnings("rampart")
+
+	-- Rampart + On Expire: the payload goes off where the wall crumbles.
+	reset()
+	local mark = #fxLog
+	cast(
+		{ form = "Rampart", trigger = "OnExpire", payload = { form = "Nova", element = "Fire" } },
+		Vector3.new(0, 3, -26),
+		"rampart trigger"
+	)
+	Mock.step(7)
+	if countFx("Nova", mark) < 2 then -- one ring when it rises, one nova when it crumbles
+		fail("a crumbling wall should fire its On Expire payload")
+	end
+	checkWarnings("rampart trigger")
+
+	-- Hydra: a bouncing bolt splits on every bounce.
+	reset()
+	mark = #fxLog
+	cast({ form = "Bolt", element = "Arcane", mods = { "Bounce", "Hydra" } }, Vector3.new(0, 0, -12), "hydra")
+	Mock.step(3)
+	local hydraShots = countFx("P+", mark)
+	if hydraShots < 4 then
+		fail("Hydra should split on bounces, saw " .. hydraShots .. " projectiles")
+	end
+	checkWarnings("hydra")
+
+	-- Fractal x2: 1 -> 3 -> 9 copies.
+	reset()
+	mark = #fxLog
+	cast({ form = "Spark", element = "Fire", mods = { "Fractal", "Fractal" } }, Vector3.new(0, 4, -79), "fractal")
+	Mock.step(3)
+	local fractalShots = countFx("P+", mark)
+	if fractalShots < 13 then
+		fail("two Fractals should make 1 + 3 + 9 sparks, saw " .. fractalShots)
+	end
+	checkWarnings("fractal")
+
+	-- Transpose: hit target 1 and trade places with it (but never during the grace period).
+	reset()
+	cast({ form = "Bolt", element = "Arcane", mods = { "Transpose" } }, TARGET_POS[1], "transpose")
+	Mock.step(1.5)
+	if caster.root.Position.Z > -20 or targets[1].root.Position.Z < -10 then
+		fail("Transpose should swap the caster and the target")
+	end
+	reset()
+	GameState.setPhase("Grace", 0)
+	cast({ form = "Bolt", element = "Arcane", mods = { "Transpose" } }, TARGET_POS[1], "transpose in grace")
+	Mock.step(1.5)
+	if caster.root.Position.Z < -5 then
+		fail("Transpose must not work during the grace period")
+	end
+	GameState.setPhase("Battle", 0)
+	checkWarnings("transpose")
+
+	-- Chrono: a hit sends the target back to where it stood 2 seconds ago.
+	reset()
+	targets[1].history = {}
+	targets[1].lastRewind = 0
+	Mock.step(2.5) -- standing at x = 0
+	targets[1].root.CFrame = CFrame.new(12, 3, -30)
+	Mock.step(0.6) -- ran to x = 12
+	cast({ form = "Lance", element = "Chrono" }, Vector3.new(12, 3, -30), "chrono")
+	Mock.step(0.3)
+	if targets[1].root.Position.X > 6 or hurt(1) <= 0 then
+		fail("Chrono should rewind the target to x = 0, got x = " .. targets[1].root.Position.X)
+	end
+	checkWarnings("chrono")
+
+	-- Skyfall: the bolt comes down from the sky onto the aim point.
+	reset()
+	mark = #fxLog
+	cast({ form = "Bolt", element = "Arcane", mods = { "Skyfall" } }, TARGET_POS[1], "skyfall")
+	local spawnedHigh = false
+	for i = mark + 1, #fxLog do
+		if fxLog[i].kind == "P+" and fxLog[i].args[2].Y > 40 then
+			spawnedHigh = true
+		end
+	end
+	Mock.step(2)
+	if not spawnedHigh or hurt(1) <= 0 then
+		fail("Skyfall should drop the bolt from high above onto the target")
+	end
+	checkWarnings("skyfall")
+
+	-- Stasis: hangs in the air for a second before flying.
+	reset()
+	cast({ form = "Bolt", element = "Arcane", mods = { "Stasis" } }, TARGET_POS[1], "stasis")
+	Mock.step(0.9)
+	if hurt(1) > 0 then
+		fail("Stasis should hold the bolt for a second")
+	end
+	Mock.step(1.5)
+	if hurt(1) <= 0 then
+		fail("after the stasis the bolt should fly on and hit")
+	end
+	-- an instant spell with Stasis goes off late
+	reset()
+	mark = #fxLog
+	cast({ form = "Lance", element = "Arcane", mods = { "Stasis" } }, TARGET_POS[1], "stasis lance")
+	if countFx("Beam", mark) > 0 then
+		fail("a Stasis lance should not fire immediately")
+	end
+	Mock.step(1.3)
+	if countFx("Beam", mark) ~= 1 then
+		fail("a Stasis lance should fire after a second")
+	end
+	checkWarnings("stasis")
+
+	-- Black Hole: drags targets in and crushes them.
+	reset()
+	cast({ form = "BlackHole", element = "Void" }, TARGET_POS[1], "black hole")
+	Mock.step(2)
+	if targets[1].root.AssemblyLinearVelocity.Magnitude < 1 then
+		fail("a black hole should pull nearby enemies")
+	end
+	Mock.step(3)
+	if hurt(1) <= 0 then
+		fail("a black hole should crush what it pulls in")
+	end
+	checkWarnings("black hole")
+
+	-- Sentry: hovers and shoots the nearest enemy.
+	reset()
+	mark = #fxLog
+	cast({ form = "Sentry", element = "Arcane" }, TARGET_POS[1], "sentry")
+	Mock.step(4)
+	if countFx("P+", mark) < 4 or damageDealt() <= 0 then
+		fail("a sentry should keep shooting at enemies")
+	end
+	checkWarnings("sentry")
+
+	-- On Kill: the payload goes off where the target dies.
+	reset()
+	targets[1].humanoid.Health = 5
+	cast({
+		form = "Bolt",
+		element = "Arcane",
+		trigger = "OnKill",
+		payload = { form = "Nova", element = "Fire", mods = { "Enlarge" } },
+	}, TARGET_POS[1], "on kill")
+	Mock.step(1.5)
+	if hurt(2) <= 0 and hurt(3) <= 0 then
+		fail("On Kill should burst a nova where target 1 died")
+	end
+	targets[1].humanoid.Health = 100
+	checkWarnings("on kill")
+
+	-- Proximity: the fuse goes off as the bolt passes close to an enemy.
+	reset()
+	mark = #fxLog
+	targets[4].root.CFrame = CFrame.new(6, 3, -15) -- just beside the flight path
+	cast(
+		{ form = "Bolt", element = "Arcane", trigger = "Proximity", payload = { form = "Nova" } },
+		TARGET_POS[1],
+		"proximity"
+	)
+	Mock.step(1.5)
+	if countFx("Nova", mark) < 1 or hurt(4) <= 0 then
+		fail("a proximity fuse should go off next to target 4")
+	end
+	checkWarnings("proximity")
+
+	-- On Bounce: every bounce casts the payload.
+	reset()
+	mark = #fxLog
+	cast({
+		form = "Grenade",
+		mods = { "Bounce", "Extend" },
+		trigger = "OnBounce",
+		payload = { form = "Nova", element = "Fire" },
+	}, Vector3.new(-6, 0, 5), "on bounce") -- away from everyone, so it just bounces
+	Mock.step(3)
+	if countFx("Nova", mark) < 2 then
+		fail("On Bounce should fire on every bounce, saw " .. countFx("Nova", mark))
+	end
+	checkWarnings("on bounce")
+
+	-- Chaos: damage swings wildly from hit to hit.
+	local low, high = math.huge, 0
+	for _ = 1, 10 do
+		reset()
+		cast({ form = "Bolt", element = "Chaos" }, TARGET_POS[1], "chaos")
+		Mock.step(1.2)
+		local d = hurt(1)
+		if d > 0 then
+			low, high = math.min(low, d), math.max(high, d)
+		end
+	end
+	if high <= 0 or high / low < 1.6 then
+		fail("Chaos damage should vary a lot, got " .. low .. " to " .. high)
+	end
+	checkWarnings("chaos")
 end
 
 -- 2. Fuzz: lots of random spells, including deep trigger chains.

@@ -1,6 +1,6 @@
--- Class selection and premium access.
--- Premium access = Roblox Premium membership OR owning the classes game pass
--- (or playing in Studio, so you can test every class). See Config.Premium.
+-- Kit (class) selection and ownership. Every paid kit is its own game pass (Config.Kits);
+-- Roblox Premium members get the cheapest tier(s) free, and Studio unlocks everything for testing.
+-- Owned kits are published to the client as the "OwnedKits" attribute (comma separated ids).
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
@@ -14,83 +14,133 @@ local Classes = require(Shared.Classes)
 
 local ClassService = {}
 
-local function computeAccess(player: Player): boolean
-	local P = Config.Premium
-	if P.StudioUnlocksAll and RunService:IsStudio() then
-		return true
-	end
-	if P.UseRobloxPremium and player.MembershipType == Enum.MembershipType.Premium then
-		return true
-	end
-	if P.ClassesGamePassId ~= 0 then
-		local ok, owns = pcall(function()
-			return MarketplaceService:UserOwnsGamePassAsync(player.UserId, P.ClassesGamePassId)
-		end)
-		if ok and owns then
-			return true
-		end
-	end
-	return false
+local owned: { [Player]: { [string]: boolean } } = setmetatable({}, { __mode = "k" }) :: any
+
+local function passFor(classId: string): number
+	return Config.Kits.GamePassIds[classId] or 0
 end
 
+local function kitForPass(passId: number): string?
+	for classId, id in Config.Kits.GamePassIds do
+		if id == passId and id ~= 0 then
+			return classId
+		end
+	end
+	return nil
+end
+
+local function publish(player: Player)
+	local list = {}
+	for _, class in Classes.List do
+		if ClassService.owns(player, class.id) then
+			table.insert(list, class.id)
+		end
+	end
+	player:SetAttribute("OwnedKits", table.concat(list, ","))
+end
+
+function ClassService.owns(player: Player, classId: string): boolean
+	local class = Classes.ById[classId]
+	if not class then
+		return false
+	end
+	if class.tier == 0 then
+		return true
+	end
+	local K = Config.Kits
+	if K.StudioUnlocksAll and RunService:IsStudio() then
+		return true
+	end
+	if class.tier <= K.PremiumFreeTier and player.MembershipType == Enum.MembershipType.Premium then
+		return true
+	end
+	local set = owned[player]
+	return set ~= nil and set[classId] == true
+end
+
+-- Looks up which kit game passes the player owns (yields: one web call per configured pass).
 function ClassService.refresh(player: Player)
-	local access = computeAccess(player)
-	player:SetAttribute("PremiumAccess", access)
-	local class = Classes.ById[tostring(player:GetAttribute("Class"))]
-	if not class or (class.premium and not access) then
+	local set = owned[player] or {}
+	owned[player] = set
+	for _, class in Classes.List do
+		local passId = passFor(class.id)
+		if passId ~= 0 and not set[class.id] then
+			local ok, has = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
+			end)
+			if ok and has then
+				set[class.id] = true
+			end
+		end
+	end
+	publish(player)
+	if not ClassService.owns(player, tostring(player:GetAttribute("Class"))) then
 		player:SetAttribute("Class", Classes.Default)
 	end
 end
 
-function ClassService.hasAccess(player: Player): boolean
-	return player:GetAttribute("PremiumAccess") == true
-end
-
 -- The class this player will actually start the match with.
 function ClassService.classFor(player: Player): string
-	local class = Classes.ById[tostring(player:GetAttribute("Class"))]
-	if class and (not class.premium or ClassService.hasAccess(player)) then
-		return class.id
+	local id = tostring(player:GetAttribute("Class"))
+	if Classes.ById[id] and ClassService.owns(player, id) then
+		return id
 	end
 	return Classes.Default
 end
 
+-- Bots pick a random kit, but never the top tiers (a bot with a $25 kit isn't fun to meet).
 function ClassService.randomClass(rng: Random): string
-	local list = Classes.List
-	return list[rng:NextInteger(1, #list)].id
+	local list = {}
+	for _, class in Classes.List do
+		if class.tier <= 3 then
+			table.insert(list, class.id)
+		end
+	end
+	return list[rng:NextInteger(1, #list)]
 end
 
 function ClassService.init()
 	Players.PlayerMembershipChanged:Connect(function(player)
-		ClassService.refresh(player)
+		publish(player)
 	end)
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
-		if purchased and passId == Config.Premium.ClassesGamePassId then
-			player:SetAttribute("PremiumAccess", true)
+		local classId = kitForPass(passId)
+		if purchased and classId then
+			local set = owned[player] or {}
+			owned[player] = set
+			set[classId] = true
+			publish(player)
+			player:SetAttribute("Class", classId)
 		end
 	end)
 
 	Remotes.func("ClassAction").OnServerInvoke = function(player, action, classId)
+		if type(classId) ~= "string" then
+			return false, "Bad kit"
+		end
+		local class = Classes.ById[classId]
+		if not class then
+			return false, "Unknown kit"
+		end
 		if action == "Select" then
-			if type(classId) ~= "string" then
-				return false, "Bad class"
-			end
-			local class = Classes.ById[classId]
-			if not class then
-				return false, "Unknown class"
-			end
-			if class.premium and not ClassService.hasAccess(player) then
-				return false, "This class needs Premium"
+			if not ClassService.owns(player, class.id) then
+				return false, "You don't own the " .. class.name .. " kit yet"
 			end
 			player:SetAttribute("Class", class.id)
 			return true, class.name .. " selected"
-		elseif action == "Unlock" then
-			if Config.Premium.ClassesGamePassId ~= 0 then
-				MarketplaceService:PromptGamePassPurchase(player, Config.Premium.ClassesGamePassId)
-			elseif Config.Premium.UseRobloxPremium then
-				MarketplaceService:PromptPremiumPurchase(player)
+		elseif action == "Buy" then
+			if ClassService.owns(player, class.id) then
+				return true, "You already own " .. class.name
 			end
-			return true, nil
+			local passId = passFor(class.id)
+			if passId ~= 0 then
+				MarketplaceService:PromptGamePassPurchase(player, passId)
+				return true, nil
+			elseif class.tier <= Config.Kits.PremiumFreeTier then
+				MarketplaceService:PromptPremiumPurchase(player)
+				return true, nil
+			end
+			return false, "The " .. class.name .. " kit isn't on sale yet"
 		end
 		return false, "Unknown action"
 	end

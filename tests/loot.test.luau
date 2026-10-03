@@ -8,6 +8,7 @@ local Consumables = __require(Shared.Consumables)
 local SpellBuilder = __require(Shared.Spells.SpellBuilder)
 local PremadeSpells = __require(Shared.Spells.PremadeSpells)
 local SpellParts = __require(Shared.Spells.SpellParts)
+local Config = __require(Shared.Config)
 
 local function checkWand(wand, label)
 	local s = wand.stats
@@ -120,7 +121,7 @@ test("random chest recipes are valid", function()
 end)
 
 test("class kits reference real content", function()
-	expect(Classes.ById[Classes.Default] ~= nil and not Classes.ById[Classes.Default].premium, "free default class")
+	expect(Classes.ById[Classes.Default] ~= nil and Classes.ById[Classes.Default].tier == 0, "free default class")
 	for _, class in Classes.List do
 		expect(#class.kit.wands >= 1, class.id .. " has no wand")
 		for _, w in class.kit.wands do
@@ -138,6 +139,74 @@ test("class kits reference real content", function()
 			expect(Consumables.ById[id] ~= nil, class.id .. " unknown consumable " .. id)
 		end
 	end
+end)
+
+test("kit tiers run from 99 cents to 25 dollars and every paid kit can be sold", function()
+	local lastRobux = -1
+	for i, tier in Classes.Tiers do
+		expect(tier.id == i - 1, "tiers are numbered 0..n in order")
+		expect(tier.robux > lastRobux, tier.name .. " should cost more than the tier below")
+		lastRobux = tier.robux
+		local total = 0
+		for rarity, pct in tier.bonusOdds do
+			expect(Rarity.Info[rarity] ~= nil, tier.name .. " odds use an unknown rarity " .. rarity)
+			total += pct
+		end
+		expect(total == 100, tier.name .. " bonus odds should add up to 100%, got " .. total)
+	end
+	expect(Classes.Tiers[2].usd == "$0.99" and Classes.Tiers[#Classes.Tiers].usd == "$24.99", "price range")
+	local perTier = {}
+	for _, class in Classes.List do
+		perTier[class.tier] = (perTier[class.tier] or 0) + 1
+		expect(Classes.tierInfo(class.tier).id == class.tier, class.id .. " has an unknown tier")
+		if class.tier > 0 then
+			expect(Config.Kits.GamePassIds[class.id] ~= nil, class.id .. " needs a game pass entry in Config.Kits")
+		end
+	end
+	for _, tier in Classes.Tiers do
+		expect((perTier[tier.id] or 0) >= 1, tier.name .. " has no kits")
+	end
+	for id in Config.Kits.GamePassIds do
+		expect(Classes.ById[id] ~= nil and Classes.ById[id].tier > 0, "game pass for unknown or free kit " .. id)
+	end
+end)
+
+test("higher tiers give better kits and rarer bonus parts", function()
+	-- best wand rarity never goes down as the price goes up
+	local bestByTier = {}
+	for _, class in Classes.List do
+		for _, w in class.kit.wands do
+			local r = Rarity.rank(w.template.rarity)
+			bestByTier[class.tier] = math.max(bestByTier[class.tier] or 0, r)
+		end
+	end
+	for t = 1, #Classes.Tiers - 1 do
+		expect(bestByTier[t] >= bestByTier[t - 1], "tier " .. t .. " kits should not be worse than tier " .. t - 1)
+	end
+	-- the bonus part follows the advertised odds
+	local rng = Random.new(99)
+	local lastAverage = 0
+	for _, tier in Classes.Tiers do
+		local class = nil
+		for _, c in Classes.List do
+			if c.tier == tier.id then
+				class = c
+			end
+		end
+		local sum, n = 0, 2000
+		for _ = 1, n do
+			local id = Classes.rollBonusPart(class, rng)
+			local part = SpellParts.ById[id]
+			expect(part ~= nil, "bonus part must exist: " .. tostring(id))
+			expect(tier.bonusOdds[part.rarity] ~= nil, tier.name .. " rolled a " .. part.rarity .. " part")
+			sum += Rarity.rank(part.rarity)
+		end
+		local average = sum / n
+		expect(average >= lastAverage, tier.name .. " bonus parts should be at least as rare as the tier below")
+		lastAverage = average
+	end
+	local copper = Classes.oddsText(1)
+	expect(copper == "75% Common · 25% Uncommon", "odds text: " .. copper)
 end)
 
 test("crafted spell rarity follows its rarest part", function()

@@ -35,6 +35,7 @@ InventoryService.dropHandler = nil :: ((Combatant, { LootEntry }) -> ())?
 
 local inventoryEvent = Remotes.event("InventoryUpdated")
 local INV = Config.Inventory
+local kitRng = Random.new()
 
 ---------------------------------------------------------------------------
 -- Wand tools (the visible wand in the character's hand)
@@ -291,7 +292,8 @@ function InventoryService.takeAllAsLoot(c: Combatant): { LootEntry }
 	return entries
 end
 
-function InventoryService.giveKit(c: Combatant, classId: string)
+-- Hands out a class kit, including its random bonus spell part. Returns the bonus part's id.
+function InventoryService.giveKit(c: Combatant, classId: string): string
 	local class = Classes.ById[classId] or Classes.ById[Classes.Default]
 	c.classId = class.id
 	local inv = c.inventory
@@ -316,9 +318,12 @@ function InventoryService.giveKit(c: Combatant, classId: string)
 	for id, n in class.kit.consumables or {} do
 		addConsumable(c, id, n)
 	end
+	local bonus = Classes.rollBonusPart(class, kitRng)
+	addPart(c, bonus, 1)
 	inv.equipped = 1
 	InventoryService.refreshTools(c)
 	InventoryService.sync(c)
+	return bonus
 end
 
 -- The lobby Spell Lab kit: a roomy practice staff, a twin-cast scepter, a few showcase

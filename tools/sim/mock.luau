@@ -531,11 +531,62 @@ local wallPart = Instance.new("Part")
 wallPart.Name = "Wall"
 Mock.WALL_Z = -80
 
+-- Ray (inflated by `radius`) against an oriented box part; returns t in [0, 1] and the world normal.
+local function boxHit(origin, dir, radius, part)
+	local cf = part.CFrame
+	local half = part.Size / 2 + Vector3.new(radius, radius, radius)
+	local o = cf:PointToObjectSpace(origin)
+	local d = cf:VectorToObjectSpace(dir)
+	local tmin, tmax = 0, 1
+	local hitAxis, hitSign = nil, 0
+	for _, axis in { "X", "Y", "Z" } do
+		local oa, da, ha = o[axis], d[axis], half[axis]
+		if math.abs(da) < 1e-9 then
+			if math.abs(oa) > ha then
+				return nil
+			end
+		else
+			local t1, t2 = (-ha - oa) / da, (ha - oa) / da
+			local sign = -1
+			if t1 > t2 then
+				t1, t2 = t2, t1
+				sign = 1
+			end
+			if t1 > tmin then
+				tmin, hitAxis, hitSign = t1, axis, sign
+			end
+			tmax = math.min(tmax, t2)
+			if tmin > tmax then
+				return nil
+			end
+		end
+	end
+	if not hitAxis then
+		return nil -- started inside
+	end
+	local localNormal = Vector3.new(
+		if hitAxis == "X" then hitSign else 0,
+		if hitAxis == "Y" then hitSign else 0,
+		if hitAxis == "Z" then hitSign else 0
+	)
+	return tmin, cf:VectorToWorldSpace(localNormal)
+end
+
 local function planeHit(origin, dir, radius)
 	local best = nil
+	-- conjured walls (Rampart spells) are solid
+	local walls = Mock.workspace and Mock.workspace:FindFirstChild("SpellWalls")
+	if walls then
+		for _, part in walls:GetChildren() do
+			local t, normal = boxHit(origin, dir, radius, part)
+			if t and (not best or t < best.t) then
+				best = { t = t, Position = origin + dir * t - normal * radius, Normal = normal, Instance = part }
+			end
+		end
+	end
 	if dir.Y < -1e-6 then
 		local t = (radius - origin.Y) / dir.Y
-		if t >= 0 and t <= 1 then
+		if t >= 0 and t <= 1 and (not best or t < best.t) then
 			local p = origin + dir * t
 			best = { t = t, Position = Vector3.new(p.X, 0, p.Z), Normal = Vector3.yAxis, Instance = floorPart }
 		end

@@ -86,7 +86,7 @@ line("|---|---|---|---|---|---|---|")
 for _, part in sortedParts("Form") do
 	local spec = SpellBuilder.compile({ form = part.id })
 	local damage
-	if spec.kind == "Blink" or spec.kind == "Aegis" then
+	if spec.kind == "Blink" or spec.kind == "Aegis" or spec.kind == "Wall" then
 		damage = "—"
 	elseif spec.directMult > 0 then
 		damage = tostring(spec.damage)
@@ -140,29 +140,48 @@ for _, premade in PremadeSpells.List do
 end
 line()
 
-line("## Classes")
+line("## Kits")
 line()
-line("| | Class | Access | Starting wand | Starting spells | Extra parts |")
+line(
+	"Kits (classes) decide what you start each match with. The Apprentice is free; every other kit is its own game pass, priced by tier. Every kit also gives **one random spell part** each match, rolled with its tier's odds."
+)
+line()
+line("| Tier | Price | Bonus part odds |")
+line("|---|---|---|")
+for _, tier in Classes.Tiers do
+	line(
+		string.format(
+			"| **%s** | %s | %s |",
+			tier.name,
+			if tier.robux > 0 then string.format("R$%d (about %s)", tier.robux, tier.usd) else "Free",
+			Classes.oddsText(tier.id)
+		)
+	)
+end
+line()
+line("| | Kit | Tier | Wands | Starting spells | Parts |")
 line("|---|---|---|---|---|---|")
 for _, class in Classes.List do
-	local wand = class.kit.wands[1]
-	local spells = {}
-	for _, id in wand.spells do
-		table.insert(spells, PremadeSpells.ById[id].name)
+	local wands, spells = {}, {}
+	for _, w in class.kit.wands do
+		table.insert(wands, w.template.name .. " (" .. w.template.rarity .. ")")
+		for _, id in w.spells do
+			table.insert(spells, PremadeSpells.ById[id].name)
+		end
 	end
 	local parts = {}
 	for id, n in class.kit.parts or {} do
 		table.insert(parts, SpellParts.ById[id].name .. (if n > 1 then " x" .. n else ""))
 	end
 	table.sort(parts)
+	table.insert(parts, "+1 random")
 	line(
 		string.format(
-			"| %s | **%s** | %s | %s (%s) | %s | %s |",
+			"| %s | **%s** | %s | %s | %s | %s |",
 			class.icon,
 			class.name,
-			if class.premium then "Premium" else "Free",
-			wand.template.name,
-			wand.template.rarity,
+			Classes.tierInfo(class.tier).name,
+			table.concat(wands, ", "),
 			table.concat(spells, ", "),
 			table.concat(parts, ", ")
 		)

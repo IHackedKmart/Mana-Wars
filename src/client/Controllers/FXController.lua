@@ -132,6 +132,72 @@ local function buildProjectile(vis: { [string]: any }): (Part, number, boolean)
 	elseif form == "Boomerang" then
 		part = fxPart({ Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.35, s * 1.8, s * 1.8), Color = c })
 		spin = 25
+	elseif form == "Sawblade" then
+		part = fxPart({ Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, s * 1.6, s * 1.6), Color = c })
+		part.Material = Enum.Material.Metal
+		local edge = Instance.new("Sparkles")
+		edge.SparkleColor = c2
+		edge.Parent = part
+		spin = 40
+	elseif form == "Swarm" then
+		part = ball(Vector3.zero, s, c, 0.05)
+		local wings = Instance.new("ParticleEmitter")
+		wings.Color = ColorSequence.new(c2)
+		wings.LightEmission = 1
+		wings.Size = NumberSequence.new(s * 0.8, 0)
+		wings.Transparency = NumberSequence.new(0.3, 1)
+		wings.Lifetime = NumberRange.new(0.15, 0.3)
+		wings.Rate = 25
+		wings.Speed = NumberRange.new(0, 0.5)
+		wings.Parent = part
+	elseif form == "Tornado" then
+		-- a spinning funnel of debris
+		part = fxPart({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(s * 2.4, s * 1.1, s * 1.1),
+			Color = c,
+			Transparency = 0.55,
+			Material = Enum.Material.ForceField,
+		})
+		local debris = Instance.new("ParticleEmitter")
+		debris.Color = ColorSequence.new(c, c2)
+		debris.Size = NumberSequence.new(0.6, 0.2)
+		debris.Transparency = NumberSequence.new(0.2, 1)
+		debris.Lifetime = NumberRange.new(0.6, 1.2)
+		debris.Rate = 60
+		debris.Speed = NumberRange.new(4, 8)
+		debris.SpreadAngle = Vector2.new(180, 20)
+		debris.RotSpeed = NumberRange.new(-200, 200)
+		debris.Parent = part
+		flat = true
+		spin = 18
+	elseif form == "BlackHole" then
+		part = ball(Vector3.zero, s, Color3.new(0, 0, 0))
+		part.Material = Enum.Material.SmoothPlastic
+		local disk = Instance.new("ParticleEmitter")
+		disk.Color = ColorSequence.new(c, c2)
+		disk.LightEmission = 1
+		disk.Size = NumberSequence.new(s * 0.5, 0)
+		disk.Transparency = NumberSequence.new(0, 1)
+		disk.Lifetime = NumberRange.new(0.4, 0.8)
+		disk.Rate = 80
+		disk.Speed = NumberRange.new(-s * 6, -s * 3) -- particles fall inward
+		disk.SpreadAngle = Vector2.new(180, 180)
+		disk.Parent = part
+	elseif form == "Sentry" then
+		-- a floating eye with a glowing, pulsing iris
+		part = ball(Vector3.zero, s, Color3.fromRGB(240, 235, 225))
+		part.Material = Enum.Material.SmoothPlastic
+		local iris = Instance.new("ParticleEmitter")
+		iris.Color = ColorSequence.new(c, c2)
+		iris.LightEmission = 1
+		iris.LockedToPart = true
+		iris.Size = NumberSequence.new(s * 0.9, s * 0.4)
+		iris.Transparency = NumberSequence.new(0.1, 1)
+		iris.Lifetime = NumberRange.new(0.3, 0.5)
+		iris.Rate = 20
+		iris.Speed = NumberRange.new(0, 0)
+		iris.Parent = part
 	elseif form == "Meteor" then
 		part = ball(Vector3.zero, s, c:Lerp(Color3.new(0, 0, 0), 0.6))
 		part.Material = Enum.Material.Basalt
@@ -319,6 +385,8 @@ handlers["P+"] = function(id: number, pos: Vector3, vel: Vector3, seed: number, 
 		orbitRadius = vis.or_,
 		orbitAngle = orbitAngle,
 		boomerangAt = vis.b,
+		hold = vis.d,
+		hover = vis.hv,
 		seed = seed,
 	})
 	local part, spin, flat = buildProjectile(vis)

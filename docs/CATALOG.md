@@ -2,7 +2,7 @@
 
 _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand._
 
-**54 spell parts** (15 forms, 10 elements, 25 modifiers, 4 triggers). A spell is one form, an optional element, up to 4 modifiers and an optional trigger carrying a whole payload spell (nested up to 3 deep). That is about **67 million** different single-layer spells, and roughly **1.8e+16** once a single trigger payload is added.
+**74 spell parts** (21 forms, 12 elements, 34 modifiers, 7 triggers). A spell is one form, an optional element, up to 4 modifiers and an optional trigger carrying a whole payload spell (nested up to 3 deep). That is about **376 million** different single-layer spells, and roughly **9.9e+17** once a single trigger payload is added.
 
 ## Forms
 
@@ -20,9 +20,15 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 | 🏹 | **Lance** | Rare | 20 | 22 | 0.28s | An instant beam of force. Hits whatever is in your crosshair. |
 | 🧨 | **Mine** | Rare | explosion 34 | 20 | 0.25s | A lobbed trap that sticks to the ground, arms itself, and explodes when an enemy walks near. |
 | 🌟 | **Nova** | Rare | 18 | 26 | 0.30s | An instant ring of energy that blasts everything around you. |
+| 🧱 | **Rampart** | Rare | — | 24 | 0.40s | Raises a solid wall where you aim that blocks movement and spells for 6 seconds. Impact effects go off at its base; expiry triggers fire when it crumbles. |
+| 🪚 | **Sawblade** | Rare | 13 | 20 | 0.25s | A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path. |
+| 🐝 | **Swarm** | Rare | 3.5 | 24 | 0.30s | Releases six angry little sprites that wobble off and hunt down enemies. |
 | 🛡️ | **Aegis** | Epic | — | 40 | 0.50s | Wraps you in a shield that absorbs damage for a few seconds. Triggers fire when it ends. |
+| ⚫ | **Black Hole** | Epic | explosion 12 | 45 | 0.50s | A tiny black hole drifts forward, dragging everyone nearby into its crushing core, then collapses with a bang. |
 | 🌀 | **Blink** | Epic | — | 30 | 0.45s | Teleports you up to 40 studs toward your aim. Triggers fire where you land. |
 | ☄️ | **Meteor** | Epic | explosion 30 | 36 | 0.45s | Calls a burning rock down from the sky onto the spot you aim at. |
+| 🌪️ | **Tornado** | Epic | zone 9 | 34 | 0.45s | A slow, wandering twister that drags enemies in, tosses them into the air and grinds them up. |
+| 🧿 | **Sentry** | Legendary | zone 6 | 50 | 0.50s | Deploys a floating eye that hovers in place for 8 seconds and shoots sparks at the nearest enemy. Its shots inherit its element and modifiers; Pulse and Timer payloads are aimed at enemies too. |
 
 ## Elements
 
@@ -37,7 +43,9 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 | ⚡ | **Lightning** | Rare | Every hit arcs to one more nearby enemy for half damage. +35% speed, -10% damage. |
 | 🌌 | **Void** | Rare | Drains life: heals you for 15% of damage dealt. |
 | 🩸 | **Blood** | Epic | +50% damage, but every cast costs you 4 health. |
+| 🃏 | **Chaos** | Epic | Every hit rolls the dice: anywhere from 25% to 250% damage, plus a random burn, chill or venom. +10% speed. |
 | ☀️ | **Radiant** | Epic | Marks targets for 5s: they glow through walls for everyone and take 15% more damage. +15% crit. |
+| 🕰️ | **Chrono** | Legendary | Hits rewind the target to where they stood 2 seconds ago and slow them by 50%. -15% damage. |
 
 ## Modifiers
 
@@ -57,17 +65,26 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 | ♻️ | **Efficient** | Uncommon | The whole spell costs 40% less mana. |
 | 🎯 | **Homing** | Uncommon | Projectiles steer toward the nearest enemy. |
 | 📌 | **Pierce** | Uncommon | Passes through 2 more enemies. Chains jump 2 more times. |
+| 🪃 | **Returning** | Uncommon | Flies out, then curves back to you, hitting things both ways. +1 pierce. |
+| ⏸️ | **Stasis** | Uncommon | Hangs frozen in the air for 1 second, then flies on. Instant spells go off 1 second late. Stack for traps. |
 | 2️⃣ | **Twin** | Uncommon | Casts the spell twice at once. |
 | 💥 | **Explosive** | Rare | Explodes on impact, damaging everything nearby. |
 | 🦇 | **Leech** | Rare | Heals you for 20% of the damage this spell deals. |
 | ♨️ | **Lingering** | Rare | Leaves a pool of its element behind that damages anyone standing in it. |
+| 🧲 | **Magnetic** | Rare | While it flies, it drags nearby enemies toward itself. |
 | 🔄 | **Orbit** | Rare | Projectiles circle around you as a protective ring instead of flying away. |
 | 💎 | **Shatter** | Rare | Bursts into 3 sharp shards of the same element when it hits something. |
 | 3️⃣ | **Triple** | Rare | Casts the spell three times at once in a fan. |
+| ✴️ | **Barrage** | Epic | Casts the spell five times at once in a wide fan, each at 55% damage. |
+| 🐘 | **Gigantic** | Epic | Triples the size of everything: projectiles, explosions, novas and zones. +50% damage, much slower and pricier. |
 | 🔋 | **Overcharge** | Epic | +80% damage, but much more mana and a longer cast delay. |
 | 👁️ | **Phasing** | Epic | Passes straight through walls and terrain. |
+| 🌧️ | **Skyfall** | Epic | The spell comes down from the sky onto your aim point instead of leaving your wand. Novas erupt there, beams strike straight down, blinks land there. |
+| 🔀 | **Transpose** | Epic | When it hits an enemy, you swap places with them. |
 | 🕳️ | **Vortex** | Epic | On impact, sucks nearby enemies toward the point of impact. |
 | 🔁 | **Echo** | Legendary | The spell casts itself again a moment later for free. |
+| 🧬 | **Fractal** | Legendary | When it ends, it splits into 3 smaller copies of itself, which split again. Each Fractal adds a generation (up to 3). |
+| 🐉 | **Hydra** | Legendary | Every time it bounces, it splits in two. +1 bounce. Pair it with Bounce and watch it get out of hand. |
 
 ## Triggers
 
@@ -75,7 +92,10 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 |---|---|---|---|
 | ⌛ | **On Expire** | Rare | Casts the payload spell when this spell ends, however it ends. |
 | 🎇 | **On Hit** | Rare | Casts the payload spell wherever this spell hits something. |
+| 🏓 | **On Bounce** | Epic | Casts the payload every time this spell bounces (up to 8 times). |
+| 📡 | **Proximity** | Epic | A proximity fuse: casts the payload at the first enemy that comes within 9 studs of this spell. |
 | ⏲️ | **Timer** | Epic | Casts the payload spell once, half a second after casting, from wherever this spell is. |
+| 💀 | **On Kill** | Legendary | Casts the payload from the spot where this spell kills someone. Kill chains! (Knocking a training dummy down to 1 HP counts.) |
 | 💓 | **Pulse** | Legendary | Casts the payload spell every 0.6 seconds while this spell is alive (up to 6 times). |
 
 ## Premade spells (found in chests)
@@ -117,6 +137,11 @@ Every premade spell can be dismantled in the Spellforge to recover its parts.
 | **Tick Bomb** | Rare | Mine + Poison + Lingering | 34 | _A mine that leaves a toxic puddle behind._ |
 | **Seeker Swarm** | Rare | Wisp + Arcane + Triple | 32 | _Three wisps, one target._ |
 | **Railgun** | Rare | Bolt + Lightning + Accelerate + Pierce | 23 | _Starts slow. Ends fast. Goes through people._ |
+| **Ripper** | Rare | Sawblade + Earth + Bounce | 25 | _A stone sawblade that just keeps bouncing._ |
+| **The Hive** | Rare | Swarm + Poison | 24 | _Six venomous sprites with a grudge._ |
+| **Earthen Rampart** | Rare | Rampart + Earth | 24 | _Hide behind it. Or wall someone in._ |
+| **Boomerbomb** | Rare | Grenade + Fire + Returning | 26 | _It comes back. That's the problem._ |
+| **Time Bomb** | Rare | Grenade + Arcane + Stasis + Explosive | 36 | _Hangs in the air for a second. Then it doesn't._ |
 | **Cluster Bomb** | Epic | Grenade + Fire → **OnExpire** → (Spray + Fire) | 42 | _A bomb full of smaller fire._ |
 | **Orbiting Blades** | Epic | Bolt + Arcane + Orbit + Triple | 43 | _Three bolts circle you like a whirling shield._ |
 | **Storm Shield** | Epic | Aegis + Lightning → **OnExpire** → (Nova + Lightning) | 72 | _When the shield breaks, it discharges._ |
@@ -126,28 +151,62 @@ Every premade spell can be dismantled in the Spellforge to recover its parts.
 | **Seeking Inferno** | Epic | Bolt + Fire + Homing + Explosive + Lingering | 48 | _A homing fireball that leaves the ground burning._ |
 | **Gravity Well** | Epic | Grenade + Earth + Vortex | 38 | _Pulls everyone together. Then explodes._ |
 | **Toxic Comet** | Epic | Meteor + Poison + Lingering | 50 | _A meteor that leaves a poison crater._ |
+| **Twister** | Epic | Tornado + Wind + Magnetic | 44 | _Picks people up. Puts them down somewhere else. Hard._ |
+| **Black Hole** | Epic | BlackHole + Void | 45 | _Everything goes in. Nothing comes out._ |
+| **Arcane Rain** | Epic | Bolt + Arcane + Skyfall + Barrage | 65 | _Five bolts fall out of a clear sky._ |
+| **Switcheroo** | Epic | Bolt + Arcane + Transpose + Haste | 30 | _Now you're over there, and they're over here._ |
+| **Flak Cannon** | Epic | Bolt + Fire → **Proximity** → (Spray + Fire) | 32 | _Bursts into burning shrapnel next to anyone who gets close._ |
+| **Bouncing Betty** | Epic | Grenade + Earth + Bounce → **OnBounce** → (Nova + Fire) | 62 | _Every bounce sets off a blast._ |
+| **Chaos Orb** | Epic | Orb + Chaos + Gigantic | 54 | _Nobody knows what it'll do. Including you._ |
 | **Starfall** | Legendary | Meteor + Radiant + Triple | 76 | _Three radiant stars crash down at once._ |
 | **Hailstorm** | Legendary | Cloud + Frost → **Pulse** → (Spark + Frost + Twin) | 60 | _A freezing cloud that spits ice in every direction._ |
 | **Phantom Lance** | Legendary | Lance + Void + Phasing + Overcharge | 65 | _Walls mean nothing._ |
 | **Singularity** | Legendary | Orb + Void + Vortex + Enlarge → **OnExpire** → (Nova + Void + Empower) | 88 | _Gather. Collapse. Detonate._ |
 | **Echoing Thunder** | Legendary | Chain + Lightning + Echo + Pierce | 44 | _Strikes twice, jumps everywhere._ |
+| **Hydra Storm** | Legendary | Bolt + Lightning + Bounce + Hydra | 27 | _One bolt. Then two. Then four. Then eight._ |
+| **Fireworks** | Legendary | Spark + Fire + Fractal + Fractal | 36 | _It splits, and splits, and splits again._ |
+| **Watchful Eye** | Legendary | Sentry + Radiant | 50 | _A floating eye that shoots at anyone it sees, and makes them glow._ |
+| **Rewind Lance** | Legendary | Lance + Chrono | 22 | _Undo the last two seconds of their escape._ |
+| **Reaper's Chain** | Legendary | Chain + Void → **OnKill** → (Chain + Void + Pierce) | 50 | _Every death feeds the next._ |
 | **Doombringer** | Mythic | Meteor + Blood + Overcharge + Lingering → **OnHit** → (Nova + Fire + Knockback) | 115 | _A blood meteor that erupts in fire where it lands._ |
 | **Sunwheel** | Mythic | Orb + Radiant + Orbit → **Pulse** → (Lance + Radiant) | 80 | _A radiant orb circles you, firing lances in every direction._ |
+| **Event Horizon** | Mythic | BlackHole + Void + Gigantic → **OnExpire** → (Nova + Void + Empower + Enlarge) | 119 | _A colossal black hole that ends in a void supernova._ |
+| **Doom Turret** | Mythic | Sentry + Fire → **Pulse** → (Meteor + Fire) | 108 | _A burning eye that calls meteors down on whoever it sees._ |
+| **Kaleidoscope** | Mythic | Spark + Arcane + Fractal + Hydra + Bounce + Bounce | 50 | _Bounces, splits and splits again. Good luck counting them._ |
 
-## Classes
+## Kits
 
-| | Class | Access | Starting wand | Starting spells | Extra parts |
+Kits (classes) decide what you start each match with. The Apprentice is free; every other kit is its own game pass, priced by tier. Every kit also gives **one random spell part** each match, rolled with its tier's odds.
+
+| Tier | Price | Bonus part odds |
+|---|---|---|
+| **Novice** | Free | 100% Common |
+| **Copper** | R$80 (about $0.99) | 75% Common · 25% Uncommon |
+| **Silver** | R$240 (about $2.99) | 30% Common · 55% Uncommon · 15% Rare |
+| **Gold** | R$400 (about $4.99) | 40% Uncommon · 50% Rare · 10% Epic |
+| **Arcane** | R$800 (about $9.99) | 55% Rare · 40% Epic · 5% Legendary |
+| **Astral** | R$1200 (about $14.99) | 20% Rare · 60% Epic · 20% Legendary |
+| **Archmage** | R$2000 (about $24.99) | 55% Epic · 45% Legendary |
+
+| | Kit | Tier | Wands | Starting spells | Parts |
 |---|---|---|---|---|---|
-| 📖 | **Apprentice** | Free | Apprentice's Wand (Common) | Spark Bolt, Magic Bolt | Arcane, Bolt |
-| 🔥 | **Pyromancer** | Premium | Emberheart Rod (Uncommon) | Firebolt, Firebomb | Explosive, Fire x2 |
-| ❄️ | **Cryomancer** | Premium | Glacial Wand (Uncommon) | Frostbolt, Ice Shard | Frost x2, Pierce |
-| ⚡ | **Stormcaller** | Premium | Tempest Scepter (Uncommon) | Quick Spark, Twin Sparks | Haste, Lightning, Twin |
-| ☠️ | **Plaguebringer** | Premium | Rotwood Staff (Uncommon) | Venom Wisp, Magic Bolt | Lingering, Poison x2 |
-| 🌌 | **Voidwalker** | Premium | Abyssal Focus (Uncommon) | Spark Bolt, Magic Bolt | Blink, Leech, Void |
-| ⛰️ | **Geomancer** | Premium | Bedrock Staff (Uncommon) | Pebble Toss, Boulder | Aegis, Bounce, Earth |
-| 🩸 | **Bloodmage** | Premium | Sanguine Rod (Uncommon) | Magic Bolt, Scattershot | Blood, Critical, Empower |
-| ☀️ | **Lightbringer** | Premium | Sunlit Scepter (Uncommon) | Spark Bolt, Magic Bolt | Critical, Radiant |
-| 🌪️ | **Windwalker** | Premium | Zephyr Wand (Uncommon) | Gust, Spark Bolt | Haste, Wind |
+| 📖 | **Apprentice** | Novice | Apprentice's Wand (Common) | Spark Bolt, Magic Bolt | Arcane, Bolt, +1 random |
+| ❄️ | **Cryomancer** | Copper | Frosted Wand (Common) | Frostbolt, Spark Bolt | Frost, +1 random |
+| ⛰️ | **Geomancer** | Copper | Pebble Rod (Common) | Pebble Toss, Magic Bolt | Earth, +1 random |
+| 🌪️ | **Windwalker** | Copper | Breeze Wand (Common) | Gust, Spark Bolt | Wind, +1 random |
+| 🔥 | **Pyromancer** | Silver | Emberheart Rod (Uncommon) | Firebolt, Firebomb | Fire x2, Heavy, +1 random |
+| ☠️ | **Plaguebringer** | Silver | Rotwood Staff (Uncommon) | Venom Wisp, Magic Bolt | Extend, Poison x2, +1 random |
+| ⚡ | **Stormcaller** | Silver | Tempest Scepter (Uncommon) | Quick Spark, Twin Sparks | Haste, Lightning, +1 random |
+| 🌌 | **Voidwalker** | Gold | Abyssal Focus (Rare) | Void Seeker, Spark Bolt, Magic Bolt | Blink, Leech, Void, +1 random |
+| 🩸 | **Bloodmage** | Gold | Sanguine Rod (Rare) | Blood Glaive, Scattershot, Magic Bolt | Blood, Critical, Empower, +1 random |
+| ☀️ | **Lightbringer** | Gold | Sunlit Scepter (Rare) | Sunlance, Spark Bolt, Magic Bolt | Critical, Radiant, +1 random |
+| 🔧 | **Artificer** | Arcane | Tinkerer's Rod (Rare) | Ripper, Earthen Rampart, Fireball, Pebble Toss | Bounce, Explosive, Rampart, Sawblade, +1 random |
+| ⏳ | **Chronomancer** | Arcane | Hourglass Wand (Rare) | Time Bomb, Ice Shard, Switcheroo, Frostbolt | Frost, Quicken, Stasis x2, +1 random |
+| 🐝 | **Swarmlord** | Arcane | Hive Staff (Rare) | The Hive, Seeker Swarm, Venom Wisp, Magic Bolt | Homing, Poison x2, Swarm, +1 random |
+| ⛈️ | **Stormlord** | Astral | Thunderhead Scepter (Epic) | Hydra Storm, Chain Lightning, Thunder Lance, Twin Sparks | Bounce x2, Lightning x2, Pierce, +1 random |
+| 🕳️ | **Void Archon** | Astral | Event Staff (Epic), Phase Focus (Rare) | Black Hole, Void Seeker, Switcheroo, Magic Bolt, Escape Step, Spark Bolt | Leech, Magnetic, Void x2, +1 random |
+| 🌟 | **Archmage** | Archmage | Staff of the Archmage (Legendary), Warding Focus (Epic) | Arcane Rain, Fireworks, Starfall, Magic Missile, Escape Step, Bulwark | Arcane x2, Fractal, Skyfall, Triple, +1 random |
+| ☄️ | **Harbinger** | Archmage | Harbinger's Rod (Legendary), Chaos Scepter (Epic) | Watchful Eye, Meteor, Seeking Inferno, Fireball, Chaos Orb, Sparkler | Chaos, Explosive x2, Gigantic, Sentry, +1 random |
 
 ## Maps
 

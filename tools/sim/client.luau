@@ -61,19 +61,26 @@ local PlayersService = {
 -- Server realm
 ---------------------------------------------------------------------------
 
+-- a fake Roblox store: remembers which game passes were prompted and which are owned
+local ownedPasses: { [number]: boolean } = {}
+local promptedPass: number? = nil
+local Marketplace = {
+	PromptGamePassPurchaseFinished = Mock.signal(),
+	UserOwnsGamePassAsync = function(_, _userId, passId)
+		return ownedPasses[passId] == true
+	end,
+	PromptGamePassPurchase = function(_, _player, passId)
+		promptedPass = passId
+	end,
+	PromptPremiumPurchase = function() end,
+}
+
 local server = Mock.realm({
 	RunService = Mock.runService(true),
 	Players = PlayersService,
 	TweenService = Mock.TweenService,
 	Lighting = Instance.new("Lighting"),
-	MarketplaceService = {
-		PromptGamePassPurchaseFinished = Mock.signal(),
-		UserOwnsGamePassAsync = function()
-			return false
-		end,
-		PromptGamePassPurchase = function() end,
-		PromptPremiumPurchase = function() end,
-	},
+	MarketplaceService = Marketplace,
 }, true)
 
 local Combatants = server.load("Server/Services/Combatants")
@@ -122,7 +129,6 @@ Combatants.setModel(me, character)
 me.inMatch = true
 me.alive = true
 player:SetAttribute("Class", "Apprentice")
-player:SetAttribute("PremiumAccess", true)
 player:SetAttribute("InMatch", true)
 player:SetAttribute("Alive", true)
 
@@ -280,7 +286,8 @@ end
 ---------------------------------------------------------------------------
 
 -- 1. Spawn with a class kit: HUD should show the wand.
-InventoryService.giveKit(me, "Pyromancer")
+local bonus = InventoryService.giveKit(me, "Pyromancer")
+check((me.inventory.parts[bonus] or 0) >= 1, "the kit should hand out its random bonus part")
 Mock.step(0.5, true)
 checkWarnings("boot")
 check(State.inventory ~= nil, "client should receive the inventory")
@@ -290,7 +297,11 @@ check(
 )
 
 -- 2. Spellforge: Bolt + Fire + Explosive -> "Bursting Ember Bolt"
+-- (start from a known set of parts; the kit's bonus part is random)
+table.clear(me.inventory.parts)
 me.inventory.parts.Bolt = 1
+me.inventory.parts.Fire = 2
+me.inventory.parts.Explosive = 1
 InventoryService.sync(me)
 Mock.step(0.1, true)
 InventoryController.open()
@@ -463,10 +474,50 @@ Mock.step(0.2, true)
 check(not votePanel.Visible, "the vote panel should hide when voting closes")
 checkWarnings("map vote")
 
+-- The kit shop: tiers from free to $25, buy a kit with a game pass, then pick it.
+local ServerConfig = server.load("Shared/Config")
+local ClassService = server.load("Server/Services/ClassService")
+ServerConfig.Kits.GamePassIds.Stormcaller = 5555
+ServerConfig.Kits.StudioUnlocksAll = false -- the fake engine says it's Studio; test the real shop
+ClassService.refresh(player)
+Mock.step(0.1, true)
 usePrompt("ClassPicker")
-click(lobby, "Stormcaller")
-checkWarnings("class picker")
-check(player:GetAttribute("Class") == "Stormcaller", "picking a class should update the server")
+local kitList = lobby:FindFirstChild("KitList", true)
+check(kitList ~= nil and kitList.Visible ~= false, "the altar should open the kit shop")
+for _, tierName in { "Novice", "Copper", "Silver", "Gold", "Arcane", "Astral", "Archmage" } do
+	check(lobby:FindFirstChild("Tier_" .. tierName, true) ~= nil, "the shop should list the " .. tierName .. " tier")
+end
+local function kitStatus(id: string): string
+	local card = lobby:FindFirstChild("Kit_" .. id, true)
+	local status = card and card:FindFirstChild("Status")
+	return if status then textOf(status) or "" else ""
+end
+check(string.find(kitStatus("Stormcaller"), "R$240", 1, true) ~= nil, "unowned kits show their price")
+check(string.find(kitStatus("Apprentice"), "SELECTED", 1, true) ~= nil, "the free kit starts selected")
+-- not on sale (no game pass id yet)
+clickNamed(lobby, "Kit_Archmage")
+check(player:GetAttribute("Class") == "Apprentice", "an unbuyable kit can't be picked")
+-- buy one: the store prompt opens, the purchase goes through, the kit is owned and picked
+clickNamed(lobby, "Kit_Stormcaller")
+check(promptedPass == 5555, "clicking an unowned kit should prompt its game pass")
+check(player:GetAttribute("Class") == "Apprentice", "nothing changes until the purchase finishes")
+ownedPasses[5555] = true
+Marketplace.PromptGamePassPurchaseFinished:Fire(player, 5555, true)
+Mock.step(0.2, true)
+check(player:GetAttribute("Class") == "Stormcaller", "buying a kit should select it")
+check(
+	string.find(tostring(player:GetAttribute("OwnedKits")), "Stormcaller", 1, true) ~= nil,
+	"owned kits are published"
+)
+check(string.find(kitStatus("Stormcaller"), "SELECTED", 1, true) ~= nil, "the shop should show the new kit as selected")
+clickNamed(lobby, "Kit_Apprentice")
+check(player:GetAttribute("Class") == "Apprentice", "switching back to the free kit")
+clickNamed(lobby, "Kit_Stormcaller")
+checkWarnings("kit shop")
+check(player:GetAttribute("Class") == "Stormcaller", "an owned kit can be picked again")
+-- ownership is remembered from the store on the next join
+ClassService.refresh(player)
+check(ClassService.owns(player, "Stormcaller") and not ClassService.owns(player, "Archmage"), "ownership check")
 click(lobby, "⚡  Class: Stormcaller")
 
 -- 9. Spectating during a match.
