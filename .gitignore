@@ -1,0 +1,15 @@
+# Rojo / Studio
+sourcemap.json
+*.rbxl.lock
+*.rbxlx.lock
+roblox.yml
+roblox.d.luau
+globalTypes.d.luau
+
+# Local tool downloads
+/tools/bin/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/settings.json
