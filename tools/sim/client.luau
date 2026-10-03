@@ -195,6 +195,18 @@ local UIS = {
 	end,
 }
 local PromptService = { PromptTriggered = Mock.signal() }
+-- Debris: remembers what should be cleaned up and when (see sweepDebris)
+local debrisItems: { { item: any, at: number } } = {}
+local function sweepDebris()
+	for i = #debrisItems, 1, -1 do
+		local d = debrisItems[i]
+		if d.at <= Mock.clock.t then
+			d.item:Destroy()
+			table.remove(debrisItems, i)
+		end
+	end
+end
+
 local client = Mock.realm({
 	RunService = Mock.runService(false),
 	Players = PlayersService,
@@ -209,7 +221,11 @@ local client = Mock.realm({
 	StarterGui = { SetCoreGuiEnabled = function() end },
 	ProximityPromptService = PromptService,
 	SoundService = soundService,
-	Debris = { AddItem = function() end },
+	Debris = {
+		AddItem = function(_, item, life)
+			table.insert(debrisItems, { item = item, at = Mock.clock.t + (life or 10) })
+		end,
+	},
 	Lighting = Instance.new("Lighting"),
 	GuiService = {
 		GetGuiInset = function()
@@ -560,7 +576,19 @@ key(Enum.KeyCode.H)
 local grimoire = gui("Grimoire")
 check(grimoire and grimoire.Enabled and GrimoireController.isOpen(), "H should open the Grimoire")
 for _, chapterId in
-	{ "Welcome", "Crafting", "Wands", "Forms", "Elements", "Modifiers", "Triggers", "Library", "Classes", "Controls" }
+	{
+		"Welcome",
+		"Crafting",
+		"Wands",
+		"Forms",
+		"Elements",
+		"Modifiers",
+		"Triggers",
+		"Library",
+		"Classes",
+		"Wardrobe",
+		"Controls",
+	}
 do
 	clickNamed(grimoire, chapterId)
 	local page = grimoire:FindFirstChild("Page", true)
@@ -965,6 +993,83 @@ do
 	check(State.wardrobe.coins == coins, "coins should be saved")
 	check(#State.wardrobe.garments == 2 and State.wardrobe.equipped.Robe ~= nil, "the wardrobe should be saved")
 	checkWarnings("rejoin")
+end
+
+-- 15. Every spell effect, in every element, draws without errors and cleans up after itself.
+do
+	local fxRemote = Remotes.event("FX")
+	local clientFX = Mock.workspace:FindFirstChild("ClientFX")
+	local function live(): number
+		local n = 0
+		for _, d in clientFX:GetDescendants() do
+			if d:IsA("BasePart") then
+				n += 1
+			end
+		end
+		for _, d in Mock.workspace.Terrain:GetChildren() do
+			if d.ClassName == "Attachment" then
+				n += 1
+			end
+		end
+		return n
+	end
+	sweepDebris()
+	local base = live()
+	local color, color2 = { 255, 120, 40 }, { 255, 230, 120 }
+	local pos = Vector3.new(0, 3, -20)
+	local elements = { "Neutral" }
+	for _, part in server.load("Shared/Spells/SpellParts").ByCategory.Element do
+		table.insert(elements, part.id)
+	end
+	for i, e in elements do
+		fxRemote:FireAllClients("Boom", pos, 8, color, color2, e)
+		fxRemote:FireAllClients("Nova", pos, 10, color, color2, e)
+		fxRemote:FireAllClients("Beam", { pos, pos + Vector3.new(0, 0, -30) }, color, color2, 0.8, e)
+		fxRemote:FireAllClients("Beam", { pos, pos + Vector3.new(4, 0, -12) }, color, color2, 0.3, e)
+		fxRemote:FireAllClients(
+			"Chain",
+			{ pos, pos + Vector3.new(10, 0, 0), pos + Vector3.new(10, 0, 10) },
+			color,
+			color2,
+			0.4,
+			e
+		)
+		fxRemote:FireAllClients("Vortex", pos, 16, color, color2, e)
+		fxRemote:FireAllClients("Blink", pos, pos + Vector3.new(0, 0, 10), color, color2, e)
+		fxRemote:FireAllClients("Zone", 9000 + i, pos, 8, 1, color, color2, e)
+		fxRemote:FireAllClients("Cast", character, color, e)
+		for j, form in { "Bolt", "Orb", "Meteor", "BlackHole", "Tornado", "Spark" } do
+			local id = 90000 + i * 10 + j
+			fxRemote:FireAllClients(
+				"P+",
+				id,
+				pos,
+				Vector3.new(0, 0, -60),
+				j,
+				0,
+				character,
+				{ f = form, e = e, c = color, c2 = color2, s = 0.6, l = 2 }
+			)
+			Mock.step(0.05, true)
+			fxRemote:FireAllClients("P-", id, pos + Vector3.new(0, 0, -3), if j % 2 == 0 then "impact" else "fizzle")
+		end
+		Mock.step(0.05, true)
+	end
+	fxRemote:FireAllClients("Warn", pos, 6, color)
+	fxRemote:FireAllClients("Shield", character, color)
+	fxRemote:FireAllClients("Potion", character, color)
+	Mock.step(0.1, true)
+	checkWarnings("spell effects")
+	local drawn = live() - base
+	check(drawn > 200, "spell effects should draw plenty (" .. drawn .. " parts)")
+	for _ = 1, 10 do
+		Mock.step(0.5, true)
+		sweepDebris()
+	end
+	local left = live() - base
+	print(string.format("effects: %d parts drawn for %d elements, %d left after 5s", drawn, #elements, left))
+	check(left <= 2, "spell effects should clean themselves up, " .. left .. " left over")
+	checkWarnings("effect cleanup")
 end
 
 if failures > 0 then

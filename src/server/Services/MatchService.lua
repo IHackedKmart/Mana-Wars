@@ -163,10 +163,13 @@ onDied = function(c: Combatant)
 			stillAlive += 1
 		end
 	end
-	local place = stillAlive + 1
-	c.place = place
-	if c.player then
-		WardrobeService.awardPlacement(c, place, initialCount)
+	-- (someone who dies as the match ends was already ranked with the survivors: no second payout)
+	if c.place == nil then
+		local place = stillAlive + 1
+		c.place = place
+		if c.player then
+			WardrobeService.awardPlacement(c, place, initialCount)
+		end
 	end
 	local pos = if c.root then (c.root :: BasePart).Position else nil
 	local killer: Combatant? = nil
@@ -568,6 +571,11 @@ local function runMatch()
 	table.sort(standing, function(a, b)
 		if a == winner or b == winner then
 			return a == winner
+		end
+		-- anyone already on their way down (health gone, death not yet processed) ranks last
+		local activeA, activeB = Combatants.isActive(a), Combatants.isActive(b)
+		if activeA ~= activeB then
+			return activeA
 		end
 		return a.kills > b.kills
 	end)

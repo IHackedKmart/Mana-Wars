@@ -8,6 +8,8 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
 local Classes = require(Shared.Classes)
+local Cosmetics = require(Shared.Cosmetics)
+local Rarity = require(Shared.Rarity)
 local Consumables = require(Shared.Consumables)
 local SpellParts = require(Shared.Spells.SpellParts)
 local SpellBuilder = require(Shared.Spells.SpellBuilder)
@@ -205,7 +207,9 @@ end
 chapter("Welcome", "📖  Welcome", function()
 	heading("Welcome, Mage")
 	para(
-		"<b>Mana Wars</b> is a survival-games battle royale. Up to 24 mages drop onto an island, loot chests, craft spells, and fight until one is left standing."
+		"<b>Mana Wars</b> is a survival-games battle royale. Up to "
+			.. Config.Match.MaxParticipants
+			.. " mages drop onto an island, loot chests, craft spells, and fight until one is left standing."
 	)
 	subheading("How a match plays out")
 	para(
@@ -468,6 +472,76 @@ chapter("Classes", "🎓  Kits", function()
 				.. " + 1 random"
 		)
 	end
+end)
+
+chapter("Wardrobe", "👘  Robes & Coins", function()
+	heading("Robes, Hats & Coins")
+	para(
+		"Every match pays out <b>Enchanted Coins</b> by finishing place: 1st gets <b>"
+			.. Config.Economy.CoinsForFirst
+			.. "</b>, 2nd gets "
+			.. Config.Economy.CoinsForFirst - 1
+			.. " ... all the way down to 1 for 12th. New mages start with "
+			.. Config.Economy.StarterCoins
+			.. " coins and a plain robe and hat."
+	)
+	subheading("Coffers")
+	para(
+		"Spend coins on <b>Coffers</b> at the Coffer stall in the Plaza (or the 👘 Wardrobe button). Each holds robe and hat parts; pricier coffers roll rarer parts, and some designs only come from one coffer."
+	)
+	for _, box in Cosmetics.Boxes do
+		para(
+			box.icon
+				.. " <b>"
+				.. box.name
+				.. "</b> (🪙 "
+				.. box.price
+				.. ", "
+				.. box.parts
+				.. (if box.parts == 1 then " part" else " parts")
+				.. "): "
+				.. Cosmetics.boxOddsText(box)
+		)
+	end
+	subheading("The Tailor's Loom")
+	para(
+		"A <b>robe</b> is stitched from a <b>Cloth</b>, a <b>Trim</b> and a <b>Sigil</b>. A <b>hat</b> is a <b>Hat shape</b>, a <b>Band</b> and a <b>Gem</b>. Every part rolls its own design, colour, material, enchantments and (Sigils and Gems) an aura, so no two outfits look alike: there are over "
+			.. math.floor(Cosmetics.varietyCount() / 1000)
+			.. " thousand different parts."
+	)
+	subheading("Auras and resonance")
+	para(
+		"High-rarity Sigils and Gems carry an <b>aura</b>: embers, frost, lightning, smoke, stardust... A garment's <b>resonance</b> is the average rarity of its three parts, and its aura can only shine <b>one tier above</b> it. A Legendary gem on a Common hat barely glows; put it on Epic or Legendary parts and it shines at full strength. Auras show from Rare strength and add an extra flourish at Mythic; glowing ones (frost, lightning, holy light, inferno...) light up the area from Epic.\n"
+			.. "Wear a robe and a hat with the <b>same aura</b>, both at Epic strength or better, and you leave a <b>trail</b> of it behind you."
+	)
+	subheading("Enchantments")
+	local lines = {}
+	for _, def in Cosmetics.Enchants do
+		table.insert(
+			lines,
+			"<b>" .. def.name .. "</b>: up to " .. Cosmetics.enchantText({ stat = def.id, amount = def.cap })
+		)
+	end
+	para(
+		"Parts carry small bonuses that work in matches (rarer parts have more and bigger ones). Each stat is capped, so a full Mythic outfit is an edge, not an auto-win.\n"
+			.. table.concat(lines, "\n")
+	)
+	subheading("Trading")
+	para(
+		"The <b>Gilded Gavel</b> (the auction house pavilion in the Plaza) lets you sell loose parts or finished robes and hats to other players for coins. The house keeps "
+			.. math.floor(Config.Economy.AuctionFee * 100 + 0.5)
+			.. "%. Unsold items come back after "
+			.. Config.Economy.AuctionHours
+			.. " hours, and you can take a listing back any time before it sells. Unwanted parts can also be <b>salvaged</b> for a few coins ("
+			.. Rarity.Order[1]
+			.. " "
+			.. Cosmetics.SalvageValue[1]
+			.. ", up to "
+			.. Rarity.Order[#Rarity.Order]
+			.. " "
+			.. Cosmetics.SalvageValue[#Cosmetics.SalvageValue]
+			.. ")."
+	)
 end)
 
 chapter("Controls", "🎮  Controls", function()

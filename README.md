@@ -2,13 +2,15 @@
 
 A Roblox battle royale that crosses **old-school Minecraft Survival Games** with **Noita-style spellcrafting**.
 
-Everyone starts in a floating plaza where they can hang out and practise spells for as long as they like. Walking through the portal joins the queue for the next match. Up to 24 mages then vote on a map in a floating library and drop onto pedestals around a cornucopia of chests. When the gong sounds there's a 5-second breather. After that it's a fight, so you can risk the middle for the best loot or run for the hills. More chests are spread across a freshly generated island, and they hold three things:
+Everyone starts in a floating plaza where they can hang out and practise spells for as long as they like. Walking through the portal joins the queue for the next match. Up to 12 mages then vote on a map in a floating library and drop onto pedestals around a cornucopia of chests. When the gong sounds there's a 5-second breather. After that it's a fight, so you can risk the middle for the best loot or run for the hills. More chests are spread across a freshly generated island, and they hold three things:
 
 - **Wands.** Randomly generated, each with its own rarity, spell slots, mana pool, cast delay, recharge time, multicast, spread and perks.
 - **Fully made spells.** 69 hand-designed ones such as Fireball, Chain Lightning, Black Hole, Hydra Storm and Doom Turret, plus randomly generated ones.
 - **Spell parts.** 74 parts you combine in the **Spellforge** to craft your own spells.
 
 The chests refill halfway through, a Mana Storm closes in, and the last mage standing wins. There are 5 maps to vote on, and 17 kits to start with: a free Apprentice kit, plus 16 more sold in tiers from $0.99 to $25.
+
+Every match also pays out **Enchanted Coins** by finishing place. Spend them on **coffers** of robe and hat parts, stitch your own outfit at the **Tailor's Loom** (with auras like billowing smoke, trailing lightning and stardust on the rarest pieces), and trade parts or finished outfits with other players at the **auction house**.
 
 ## The hub: Arcanum Plaza
 
@@ -17,17 +19,20 @@ Every player spawns here, and nothing pulls you into a match until you choose to
 - the **Practice Range** to the east, with standing training dummies and two that slide along rails so you can practise leading your shots
 - a gazebo to the west with the **Class Altar** and **Grimoire** lecterns
 - a live **Next Match** board by the spawn, showing the vote countdown, how many mages are queued, and how many are still alive in the current match
+- two market stalls flanking the spawn: the **Tailor's Loom** (craft and wear robes and hats) and the **Coffer** merchant (spend Enchanted Coins on loot boxes)
+- the **Gilded Gavel**, an auction house pavilion in the south-west, where players buy and sell robe and hat parts or finished outfits
 
 - **Join the game.** Walk through the big **portal** at the north end, or press **⚔ JOIN GAME** at the top of the screen. That puts you in the queue and takes you to the library.
 - **Spell Lab.** Outside a match you carry a sandbox kit: a practice staff, a twin-cast scepter, showcase spells and 3 copies of **every** spell part. Dummies never die, and practice spells can't hurt other players. The kit is swapped for your real starting kit when a match starts. **♻ Restock Spell Lab** in the Spellbook refills everything.
 - **Tutorial.** On your first visit a step-by-step tutorial teaches crafting by doing. You open the Spellbook, forge a spell, slot it into a wand, hit a dummy, then build a spell with a trigger and payload. Each step finishes itself when you do it, and the next button glows.
-- **Grimoire.** Press **H**, or use a lectern, to open an in-game encyclopedia. It covers how a match works, how crafting works, how wands work, every Form, Element, Modifier and Trigger, the premade spell library, the kits and their tiers and odds, and the controls. You can also replay the tutorial from it.
+- **Grimoire.** Press **H**, or use a lectern, to open an in-game encyclopedia. It covers how a match works, how crafting works, how wands work, every Form, Element, Modifier and Trigger, the premade spell library, the kits and their tiers and odds, coins, coffers and outfits, and the controls. You can also replay the tutorial from it.
+- **👘 Wardrobe & Coffers / ⚖ Auction House** buttons on the left of the screen open the same windows as the stalls. Your coin count is shown under them.
 
 ## The queue: the Arcane Athenaeum
 
 Joining the game takes you to a library floating above the island. It has towering bookshelves, chandeliers, stained glass, a spinning orrery and floating books, plus a glass scrying window in the floor so you can watch the match below.
 
-- **Map vote.** As soon as someone is queued, a 30-second vote opens: a ballot of 3 maps on the right of the screen (the map just played is left off). Only queued players can vote. Players in the hub get a heads-up and can still join. The most votes wins, ties are broken at random, and the vote is cut to 10 seconds once all 24 pedestals are spoken for.
+- **Map vote.** As soon as someone is queued, a 30-second vote opens: a ballot of 3 maps on the right of the screen (the map just played is left off). Only queued players can vote. Players in the hub get a heads-up and can still join. The most votes wins, ties are broken at random, and the vote is cut to 10 seconds once all 12 pedestals are spoken for.
 - **The match** takes everyone in the queue, plus bots if there are fewer than 8 players. People who join mid-match wait here for the next one. They can spectate, or practise on the **Practice Terrace** through the north arch.
 - **After a match** you come back here, still queued, so the next round starts on its own. To take a break, use the portal on the south wall or press **↩ Leave queue** to return to the Plaza.
 
@@ -94,6 +99,8 @@ Every match generates a fresh layout of the chosen map. The cornucopia holds 10 
 | Open chest | E (hold) | tap the prompt | X |
 | Take everything from a chest | F | **Take All** | |
 | Potions | Z X C V | tap the potion | |
+| Coffers, Tailor's Loom, wardrobe | the Plaza's stalls, or **👘 Wardrobe & Coffers** | the same | |
+| Auction house | the Gilded Gavel pavilion, or **⚖ Auction House** | the same | |
 
 (Tab is left free for Roblox's player list.)
 
@@ -117,8 +124,8 @@ If you change the code in `src/`, rebuild the place file with `rojo build -o bui
 3. Run `rojo serve`, then click **Connect** in the Studio plugin. Edits to `src/` now sync live.
 
 ### Before you publish
-- **Server size:** set the place's **Max Players**. You'll find it in Studio under *File → Game Settings → Places* (click the place's ⋯ → Edit), or in the place's settings on the Creator Dashboard. **24** fills every pedestal. Going a little higher (e.g. 30) gives the Plaza a crowd: if more than 24 people queue, the extra players wait in the library for the next round, first come first served.
-- **DataStores:** in *Game Settings → Security*, turn on **Enable Studio Access to API Services** so wins, kills and tutorial progress save.
+- **Server size:** set the place's **Max Players**. You'll find it in Studio under *File → Game Settings → Places* (click the place's ⋯ → Edit), or in the place's settings on the Creator Dashboard. **12** fills every pedestal. Going a little higher (e.g. 16) gives the Plaza a crowd: if more than 12 people queue, the extra players wait in the library for the next round, first come first served.
+- **DataStores and MemoryStore:** in *Game Settings → Security*, turn on **Enable Studio Access to API Services** so coins, outfits, wins, kills and tutorial progress save while you test in Studio. Published games always have access. The auction house uses MemoryStoreService for the shared market. Without API access it falls back to a market for the current server only, and nothing is saved.
 - **Kits for sale:** create one game pass per paid kit on the Creator Dashboard (*your experience → Monetization → Passes*), priced at its tier (see [Kits and tiers](#kits-and-tiers)), and paste each pass id into `src/shared/Config.lua` → `Config.Kits.GamePassIds`. A kit whose id is still `0` shows as "not on sale yet". While you test in Studio, every kit is unlocked (`StudioUnlocksAll`).
 - **Streaming** is turned off (`Workspace.StreamingEnabled = false` in `default.project.json`) so every client always sees the whole arena.
 - **Sounds:** the game uses sounds that ship with every Roblox client, so it works out of the box. Swap the ids in `src/client/Controllers/Sounds.lua` for Creator Store sounds to make it sound much better.
@@ -146,11 +153,58 @@ Everything in a kit (contents, tier, price, odds) lives in `src/shared/Classes.l
 
 The bonus part is a random reward from a paid item, so the odds are shown in the kit shop and in the Grimoire before anyone buys, which is what Roblox's rules on paid random items ask for.
 
+## Enchanted Coins, robes and the auction house
+
+**Coins.** Every match pays coins by finishing place, so a full 12-player match pays everyone something:
+
+| Place | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th | 10th | 11th | 12th |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Coins | 12 | 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4 | 3 | 2 | 1 |
+
+New players start with 60 coins and a plain starter robe and hat. Coins can't be bought with Robux. They're only earned by playing.
+
+**Coffers** (the Coffer stall, or 👘 Wardrobe & Coffers → Coffers) hold robe and hat parts. Pricier coffers roll rarer parts, and some designs only come from one coffer:
+
+| | Coffer | Price | Parts | Odds |
+|---|---|---|---|---|
+| 👝 | Tattered Satchel | 50 | 1 | 98% Common · 1.8% Uncommon · 0.2% Rare |
+| 🧰 | Apprentice's Coffer | 100 | 1 | 70% Common · 24% Uncommon · 5% Rare · 1% Epic |
+| 🧳 | Enchanter's Chest | 300 | 2 | 30% Common · 40% Uncommon · 22% Rare · 7% Epic · 1% Legendary |
+| 🗝️ | Archmage's Vault | 500 | 2 | 30% Uncommon · 40% Rare · 22% Epic · 7% Legendary · 1% Mythic |
+| 🌠 | Celestial Reliquary | 1000 | 3 | 30% Rare · 40% Epic · 24% Legendary · 6% Mythic (halos, starcrowns, crystalweave and celestial robes only drop here) |
+
+**The Tailor's Loom.** A **robe** is stitched from a Cloth, a Trim and a Sigil. A **hat** is a Hat shape, a Band and a Gem. Every part rolls its own design (65 across the six slots), one of 36 colours, one of 10 materials (wool up to radiant neon and ethereal forcefield), 1–3 enchantments, and, on Sigils and Gems, one of 20 auras. That's about 146,000 distinct-looking parts, and a finished outfit is any six of them. Garments can be unpicked back into parts, and unwanted parts salvaged for coins.
+
+**Auras and mixed rarities.** The rarest Sigils and Gems give off effects: embers, frost, lightning, billowing smoke, void wisps, holy light, inferno, storm, stardust, prismatic, eclipse and more. When parts of different rarities are stitched together:
+- a garment's **resonance** is the average rarity of its three parts (rounded down)
+- its aura shines at the aura part's own rarity, but **never more than one tier above the resonance**. A Legendary gem on a Common hat glows faintly. On Epic-or-better parts it shines at full strength
+- auras are visible from Rare strength, and add a second, faster flourish at Mythic. The glowing ones (frost, lightning, void, runes, holy light, inferno, storm, stardust, prismatic, eclipse) also light up the area around you from Epic strength
+- a robe and a hat with the **same aura**, both at Epic strength or better, leave a **trail** of it behind you as you move
+
+So mixing rarities always works, but a matched set looks the best.
+
+**Enchantments** are small, capped bonuses that apply in matches: movement speed, max health, wand mana and regen, cast delay, recharge, damage reduction, crit, lifesteal, health regen, jump, coin Fortune, shorter burns and chills, and +damage for one element. Rarer parts carry more and bigger ones, but every stat has a cap (e.g. +12% speed, +25 health), so a full Mythic outfit is an edge, not an auto-win. Outfits are locked in once a match starts. The full tables are in [docs/CATALOG.md](docs/CATALOG.md#robes-hats-and-coffers).
+
+**The auction house (the Gilded Gavel).** List any loose part or unworn robe or hat for a price in coins (up to 10 listings at once). Other players browse by type, rarity and price, and buy with a click and a confirm. The house keeps 10%. Unsold items come back after 48 hours, and you can take a listing back any time before it sells.
+- The market is **shared by every server**. Listings live in a MemoryStore sorted map, so a player in another server can buy your item.
+- Items are held in escrow while listed, buying is atomic (two buyers can never get the same item), and sellers who are offline or in another server are paid through a DataStore mailbox the next time they play.
+- Profiles (coins, wardrobe, listings, stats) are saved with a session lock, so joining two servers at once can't duplicate items.
+
+## Spell effects
+
+Every spell is drawn on each client from small server events (`src/client/Controllers/FXController.lua`, with the building blocks in `VFX.lua`), and each element has its own look:
+- **Projectiles** have a white-hot core, a glow halo, a hot inner streak and a coloured trail, plus the element's own particles: flames for Fire, falling snow for Frost, arcs leaping off Lightning bolts, motes sucked inward for Void, dust for Earth, and so on. A bright light travels with each one.
+- **Impacts** flash, throw a shock ring, burst into element particles and sparks, and light up the area.
+- **Explosions** are layered: a white flash, a fireball, a forcefield shell, a shockwave racing across the ground with a dust ring, sparks that arc down, smoke for burning elements, a big light flash and camera shake. Earth throws rock chunks, Frost throws ice shards, Lightning crackles, Radiant fires light rays, Void implodes, Chrono spins clock rings and Chaos bursts in random colours.
+- **Novas** send out two rings and radial streaks. **Beams** have a spiralling sheath, particles all along their length and flashes at both ends (Lightning beams are jagged bolts). **Chain lightning** forks and flickers twice. **Zones** boil with element particles inside a pulsing rim. **Vortexes** suck particles in, and **blinks** leave a swirling column. Every cast also flashes a magic circle at the wand tip.
+
+All of it uses particle textures that ship with Roblox, so no uploads are needed. When lots of spells go off at once, particle counts scale down automatically to keep the frame rate up.
+
 ## Multiplayer
 
 Mana Wars is multiplayer out of the box, like the original survival-games servers. Each Roblox server has its own hub, queue and back-to-back matches:
 
-- Everyone in the server shares the Plaza. Each player decides when to join the queue, and everyone queued votes on the map and is placed on the pedestals together, up to 24 players.
+- Everyone in the server shares the Plaza. Each player decides when to join the queue, and everyone queued votes on the map and is placed on the pedestals together, up to 12 players.
 - Anyone can watch a running match from the hub or the library with **👁 Spectate the match**.
 - **When does a match start?** As soon as `Config.Bots.MinRealPlayers` players (default 1) are queued, the 30-second vote begins. Everyone else in the server can still join before it closes. On a busy server you may want to raise `MinRealPlayers` (e.g. to 4) so matches wait for a crowd.
 - **Bots are only filler.** They top a match up to `Config.Bots.FillTo` (8) participants, so a busy server plays with no bots at all. Set `Config.Bots.Enabled = false` to require real players (`Config.Match.MinPlayers`).
@@ -173,6 +227,10 @@ Almost every number lives in **`src/shared/Config.lua`**: match timings (the gra
 | change the hub (Arcanum Plaza) | `src/server/Map/Hub.lua` (shared pieces such as portals, lecterns and signs are in `Props.lua`) |
 | change the library | `src/server/Map/Lobby.lua` |
 | change the tutorial or Grimoire text | `src/client/Controllers/TutorialController.lua`, `GrimoireController.lua` |
+| change coin payouts, starting coins, the auction fee or listing limits | `Config.Economy` in `src/shared/Config.lua` |
+| add robe/hat designs, colours, materials, auras or enchantments, or change coffer prices and odds | `src/shared/Cosmetics.lua` |
+| change how outfits and auras are built on characters | `src/shared/OutfitBuilder.lua` |
+| change spell effects | `src/client/Controllers/FXController.lua` (what each spell draws) and `VFX.lua` (element styles and building blocks) |
 
 After changing game data, run `lune run tools/gen_docs` to refresh `docs/CATALOG.md`.
 
@@ -183,17 +241,21 @@ src/
   shared/        (ReplicatedStorage.Shared)  game data + logic used by both sides
     Spells/        SpellParts, SpellBuilder (recipe -> stats), PremadeSpells, SpellNames
     WandGenerator, LootTables, Classes, Items, Consumables, Rarity, ProjectileSim, Remotes
+    Cosmetics (robe/hat parts, coffers, resonance, enchantments), OutfitBuilder (dressing characters)
   server/        (ServerScriptService.Server)
     Services/      MatchService (game loop), QueueService (hub <-> queue), VoteService (map vote),
                    CastingService (wand decks + mana),
                    SpellExecutor (forms, impacts, triggers), ProjectileService, ZoneService,
                    DamageService, StatusService, InventoryService (Spellforge), ChestService,
-                   PracticeService (training dummies), BotService, ClassService, DataService, MapService
+                   PracticeService (training dummies), BotService, ClassService, MapService,
+                   DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
+                   outfits), AuctionService (the cross-server auction house)
     Map/           MapDefs (the 5 maps), TerrainGen, Structures (trees, ruins, cornucopia, chests),
                    Hub (Arcanum Plaza), Lobby (the library), Props (shared building blocks)
   client/        (StarterPlayerScripts.Client)
     Controllers/   HUD, Spellbook/Spellforge, Grimoire, Tutorial, chest window, lobby (join/leave queue,
-                   vote, kit shop, spectate), input, effects, storm, weather
+                   vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom), Auction house, input,
+                   effects (FXController + VFX), storm, weather
     UI/            small UI toolkit (Create, Widgets, Theme, ItemInfo)
 ```
 
@@ -204,10 +266,13 @@ The server is authoritative. Clients only send requests like "cast at this point
 The game logic is tested outside Roblox:
 
 ```bash
-python3 tools/run_tests.py          # unit tests for spells, wands, loot, kits and their odds (needs the `luau` CLI)
+python3 tools/run_tests.py          # unit tests for spells, wands, loot, kits, coffers, crafting and auras (needs the `luau` CLI)
 lune run tools/sim/combat           # every premade spell, the wild parts (walls, hydra, fractal, swaps, rewinds...), 1500 random spells, Spell Lab rules
-lune run tools/sim/client           # real client UI + real server: forge, slot, loot, cast, buy a kit, join/leave the queue, vote, Grimoire, the tutorial
-lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, two full matches with bots, leave the queue
+lune run tools/sim/client           # real client UI + real server: forge, slot, loot, cast, buy a kit, join/leave the queue, vote, Grimoire, the tutorial,
+                                    #   open coffers, stitch and wear a robe, outfits on R15/R6 bodies, sell/buy/cancel on the auction house,
+                                    #   saving and rejoining, and every spell effect in every element (drawn and cleaned up)
+lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, two full matches with bots
+                                    #   (distinct finishing places, exact coin payouts, saved profile), leave the queue
 lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps, checking chests, spacing and decoration
 ```
 
@@ -218,5 +283,8 @@ The `tools/sim` scripts run the actual game modules on a small fake engine (`too
 - **Visuals are built from code.** The plaza, library, trees and ruins are made from parts (the blocky look is an intentional Minecraft nod), icons are emoji, and there are no custom meshes or animations yet. Dropping in Creator Store models for chests, wands and bookshelves would be a big visual upgrade.
 - **Bots walk in straight lines and jump when stuck.** They don't pathfind, which is fine on open terrain but clumsy around ruins.
 - **Balance is a first pass.** Use `Config.lua`, `MapDefs.lua` and `SpellParts.lua` to tune it once real players are in.
-- **One server = one hub and one match at a time.** That's how classic survival-games servers worked. Once the game is popular, a separate hub *place* that queues players from many servers and teleports full groups into match servers (`TeleportService:ReserveServer`) would keep every match at 24.
+- **One server = one hub and one match at a time.** That's how classic survival-games servers worked. Once the game is popular, a separate hub *place* that queues players from many servers and teleports full groups into match servers (`TeleportService:ReserveServer`) would keep every match at 12.
 - **Paid kits.** The top tiers are a real head start (that's the point of them), but the best gear in the game is still in the chests. Check Roblox's current monetization and paid-random-item policies before you publish.
+- **Coffers are earned, not bought.** Coffers cost Enchanted Coins, which only come from playing, so they aren't paid random items. Their odds are still shown on every coffer. If you ever sell coins for Robux, the coffers become paid random items, and Roblox's rules for those (disclosed odds, age and region limits) apply.
+- **The auction house shows the newest 200 listings.** That's plenty at launch. A busy market would want server-side search and paging (more sorted maps keyed by type and price).
+- **Outfits are built from parts** (like everything else). Swapping the robe and hat shapes for Creator Store meshes would make them look far fancier. The auras, colours, materials and enchantments would carry over unchanged.

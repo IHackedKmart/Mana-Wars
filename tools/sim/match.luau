@@ -142,11 +142,47 @@ local phasesSeen: { string } = {}
 local lastPhase = nil
 local seconds = 0
 -- record every phase change as it happens (some, like Loading, are very short here)
+-- placements: everyone in a match finishes in a distinct place 1..N, and players earn
+-- Enchanted Coins for it (1st = 12 ... 12th = 1, plus their Fortune enchantment)
+local roster: { any } = {}
+local expectedCoins = 0
+local placementsChecked = 0
+local function checkPlacements()
+	local seen = {}
+	for _, c in roster do
+		local place = c.place
+		if type(place) ~= "number" or place < 1 or place > #roster or seen[place] then
+			fail(string.format("%s finished in place %s of %d", c.name, tostring(place), #roster))
+		else
+			seen[place] = true
+		end
+		if c.player then
+			local base = math.max(1, 13 - (place or 13))
+			expectedCoins += base + math.floor(base * (c.gear.fortune or 0) + 0.5)
+			print(string.format("  %s finished %s of %d", c.name, tostring(place), #roster))
+		end
+	end
+	placementsChecked += 1
+end
 Mock.onAttribute = function(name, value)
 	if name == "Phase" and value ~= lastPhase then
+		local previous = lastPhase
 		lastPhase = value
 		table.insert(phasesSeen, value)
 		print(string.format("  t=%5.1fs  phase -> %s", seconds, tostring(value)))
+		if value == "Battle" then
+			roster = {}
+			for _, c in Combatants.all() do
+				if c.inMatch and not c.isDummy then
+					table.insert(roster, c)
+				end
+			end
+			if #roster > 12 then
+				fail("matches hold at most 12 mages, got " .. #roster)
+			end
+		elseif previous == "Ended" then
+			checkPlacements()
+		end
 	end
 end
 local winners = 0
@@ -327,6 +363,22 @@ end
 local stats = savedStats["u1"]
 if not stats or (stats.matches or 0) < 1 then
 	fail("match stats should be saved")
+end
+if placementsChecked < 2 then
+	fail("expected placements for two matches, checked " .. placementsChecked)
+end
+local DataService = server.load("Server/Services/DataService")
+local profile = DataService.profile(player)
+local coins = if profile then profile.coins else -1
+print(string.format("coins: %d (60 to start + %d from placements)", coins, expectedCoins))
+if coins ~= 60 + expectedCoins then
+	fail(string.format("coins should be 60 + %d from placements, got %d", expectedCoins, coins))
+end
+if not stats or stats.coins ~= coins then
+	fail("coins should be saved with the profile")
+end
+if not stats or type(stats.wardrobe) ~= "table" or #stats.wardrobe.garments ~= 2 then
+	fail("the starter outfit should be saved with the profile")
 end
 print(
 	string.format("bots: %d, chests: %d, voxel chunks: %d, character loads: %d", maxBots, maxChests, voxelWrites, loads)

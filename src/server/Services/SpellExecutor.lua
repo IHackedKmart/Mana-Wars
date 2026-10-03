@@ -68,7 +68,7 @@ local function arcFrom(spec: Spec, ctx: CastCtx, from: Combatant, pos: Vector3, 
 		pos = p
 	end
 	if #points > 1 then
-		FX.all("Chain", points, spec.color, spec.color2, 0.25)
+		FX.all("Chain", points, spec.color, spec.color2, 0.25, spec.element)
 	end
 end
 
@@ -87,8 +87,8 @@ local function swapPlaces(spec: Spec, caster: Combatant, target: Combatant)
 	local from, to = a.CFrame, b.CFrame
 	casterModel:PivotTo(to + Vector3.new(0, 0.5, 0))
 	targetModel:PivotTo(from + Vector3.new(0, 0.5, 0))
-	FX.all("Blink", from.Position, to.Position, spec.color, spec.color2)
-	FX.all("Blink", to.Position, from.Position, spec.color2, spec.color)
+	FX.all("Blink", from.Position, to.Position, spec.color, spec.color2, spec.element)
+	FX.all("Blink", to.Position, from.Position, spec.color2, spec.color, spec.element)
 end
 
 -- Chrono: send the target back to where they stood a moment ago.
@@ -104,7 +104,7 @@ local function rewind(spec: Spec, target: Combatant)
 	target.lastRewind = t
 	local from = (target.root :: BasePart).Position;
 	(target.model :: Model):PivotTo(cf)
-	FX.all("Blink", from, cf.Position, spec.color, spec.color2)
+	FX.all("Blink", from, cf.Position, spec.color, spec.color2, spec.element)
 end
 
 -- Everything a hit does besides damage: kill triggers, rewinds and swaps.
@@ -179,7 +179,7 @@ end
 function SpellExecutor.explode(spec: Spec, ctx: CastCtx, pos: Vector3)
 	local radius = spec.explodeRadius
 	local damage = spec.damage * math.max(spec.explodeMult, 0.0001)
-	FX.all("Boom", pos, radius, spec.color, spec.color2)
+	FX.all("Boom", pos, radius, spec.color, spec.color2, spec.element)
 	for _, c in Combatants.active() do
 		local center = Combatants.centerOf(c)
 		local dist = (center - pos).Magnitude
@@ -206,7 +206,7 @@ function SpellExecutor.explode(spec: Spec, ctx: CastCtx, pos: Vector3)
 end
 
 local function vortex(spec: Spec, ctx: CastCtx, pos: Vector3)
-	FX.all("Vortex", pos, 16, spec.color, spec.color2)
+	FX.all("Vortex", pos, 16, spec.color, spec.color2, spec.element)
 	for _, c in Combatants.withinRadius(pos, 16, ctx.caster) do
 		if not DamageService.canHurt(c, ctx.caster) then
 			continue
@@ -394,12 +394,12 @@ local function doBeam(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, r
 			break
 		end
 	end
-	FX.all("Beam", points, spec.color, spec.color2, spec.size)
+	FX.all("Beam", points, spec.color, spec.color2, spec.size, spec.element)
 	instantEndTriggers(spec, ctx, endPos + endNormal * 0.5, d, worldNormal)
 end
 
 local function doNova(spec: Spec, ctx: CastCtx, center: Vector3, dir: Vector3)
-	FX.all("Nova", center, spec.radius, spec.color, spec.color2)
+	FX.all("Nova", center, spec.radius, spec.color, spec.color2, spec.element)
 	local triggers = 0
 	for _, c in Combatants.withinRadius(center, spec.radius + 1.5, ctx.caster) do
 		local p = Combatants.centerOf(c)
@@ -448,7 +448,7 @@ local function doChain(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, 
 		local reach = spec.range * 0.45
 		local world = WorldQuery.raycast(origin, dir * reach)
 		local stop = if world then world.Position else origin + dir * reach
-		FX.all("Chain", { origin, stop }, spec.color, spec.color2, 0.15)
+		FX.all("Chain", { origin, stop }, spec.color, spec.color2, 0.15, spec.element)
 		instantEndTriggers(spec, ctx, stop, dir)
 		return
 	end
@@ -487,7 +487,7 @@ local function doChain(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, 
 		end
 		current = nextC
 	end
-	FX.all("Chain", points, spec.color, spec.color2, spec.size)
+	FX.all("Chain", points, spec.color, spec.color2, spec.size, spec.element)
 	if spec.zoneOnImpact then
 		ZoneService.create(spec, ctx.caster, lastPos)
 	end
@@ -565,7 +565,7 @@ local function doBlink(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3, 
 	local flat = Geometry.flat(dir)
 	local look = if flat.Magnitude > 1e-3 then flat.Unit else root.CFrame.LookVector;
 	(caster.model :: Model):PivotTo(CFrame.lookAt(dest, dest + look))
-	FX.all("Blink", start, dest, spec.color, spec.color2)
+	FX.all("Blink", start, dest, spec.color, spec.color2, spec.element)
 	SpellExecutor.onImpact(spec, ctx, dest, Vector3.yAxis, dir, nil)
 	SpellExecutor.onEnd(spec, ctx, dest, dir)
 	if spec.trigger == "Timer" or spec.trigger == "Pulse" then
@@ -635,7 +635,14 @@ local function doWall(
 	ZoneService.createWall(spec, ground, facing, function(center: Vector3)
 		instantEndTriggers(spec, ctx, center, facing, nil)
 	end)
-	FX.all("Nova", ground + Vector3.new(0, 0.5, 0), math.min(spec.wallWidth * 0.6, 16), spec.color, spec.color2)
+	FX.all(
+		"Nova",
+		ground + Vector3.new(0, 0.5, 0),
+		math.min(spec.wallWidth * 0.6, 16),
+		spec.color,
+		spec.color2,
+		spec.element
+	)
 	SpellExecutor.onImpact(spec, ctx, ground + Vector3.new(0, 0.5, 0), Vector3.yAxis, facing, nil)
 end
 

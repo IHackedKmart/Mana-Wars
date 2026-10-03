@@ -945,12 +945,9 @@ function OutfitBuilder.strip(model: Instance)
 		old:Destroy()
 	end
 	for _, d in model:GetDescendants() do
-		if
-			d:IsA("Attachment")
+		local aura = d:IsA("Attachment")
 			and (string.sub(d.Name, 1, 5) == "Aura_" or d.Name == "TrailTop" or d.Name == "TrailBottom")
-		then
-			d:Destroy()
-		elseif d:IsA("Trail") and d.Name == "AuraTrail" then
+		if aura or (d:IsA("Trail") and d.Name == "AuraTrail") then
 			d:Destroy()
 		end
 	end

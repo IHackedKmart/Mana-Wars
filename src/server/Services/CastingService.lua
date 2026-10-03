@@ -274,7 +274,7 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 		budget = { n = Config.Combat.MaxTriggerFanout, splits = Config.Combat.MaxSplits },
 		aimPoint = target,
 	}
-	FX.all("Cast", c.model, drawn[1].color)
+	FX.all("Cast", c.model, drawn[1].color, drawn[1].element)
 	for _, spec in drawn do
 		local ok, err = pcall(SpellExecutor.cast, spec, ctx, origin, dir, true)
 		if not ok then

@@ -228,3 +228,58 @@ Players vote between 3 random maps in the lobby before every match. Each match g
 | 💧 | **Mana Tonic** | X | Common | Instantly refills the mana of every wand you carry. |
 | 👟 | **Swiftness Elixir** | C | Uncommon | +35% movement speed for 12 seconds. |
 | 🧱 | **Stoneskin Potion** | V | Rare | Grants a 30 point shield for 10 seconds. |
+
+## Robes, hats and coffers
+
+Matches pay **Enchanted Coins** by finishing place: 12 for 1st, 11 for 2nd ... 1 for 12th (plus the outfit's Fortune bonus). New players get 60 coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (10% fee, listings last 48 hours, 10 at a time).
+
+| | Coffer | Price | Parts | Odds | Only here |
+|---|---|---|---|---|---|
+| 👝 | **Tattered Satchel** | 50 coins | 1 | 98% Common · 1.8% Uncommon · 0.2% Rare | Patchwork Robe (robe cloth), Straw Hat (hat) |
+| 🧰 | **Apprentice's Coffer** | 100 coins | 1 | 70% Common · 24% Uncommon · 5% Rare · 1% Epic | - |
+| 🧳 | **Enchanter's Chest** | 300 coins | 2 | 30% Common · 40% Uncommon · 22% Rare · 7% Epic · 1% Legendary | - |
+| 🗝️ | **Archmage's Vault** | 500 coins | 2 | 30% Uncommon · 40% Rare · 22% Epic · 7% Legendary · 1% Mythic | - |
+| 🌠 | **Celestial Reliquary** | 1000 coins | 3 | 30% Rare · 40% Epic · 24% Legendary · 6% Mythic | Celestial Vestment (robe cloth), Crown (sigil), Crystalweave (robe cloth), Halo (hat), Nova (sigil), Prism (gem), Singularity (gem), Starcrown (hat), Starlit Band (hat band), Starlit Trim (trim) |
+
+A **robe** is a Cloth + Trim + Sigil; a **hat** is a Hat shape + Band + Gem. Each part rolls a design, one of 36 colours, one of 10 materials, 1-3 enchantments by rarity and (Sigils and Gems) one of 20 auras, all gated by rarity and coffer: **145,800** distinct-looking parts in all.
+
+**Resonance and auras:** a garment's resonance is the average rarity rank of its three parts (rounded down). Its aura shines at the aura part's rarity, but never more than one tier above the resonance: visible from Rare strength, with light from Epic, and an extra flourish at Mythic. A robe and hat with the same aura, both at Epic strength or better, leave a trail.
+
+| Slot | Designs (minimum rarity) |
+|---|---|
+| 👘 Robe cloth | Novice Robe (Common), Patchwork Robe (Common), Bell Robe (Common), Wanderer's Cloak (Uncommon), Monk's Habit (Uncommon), Battlemage Tabard (Rare), Shadow Wrap (Epic), Royal Robe (Epic), Archmage Regalia (Legendary), Crystalweave (Legendary), Celestial Vestment (Mythic) |
+| 🧵 Trim | Plain Hem (Common), Double Hem (Common), Fur Trim (Uncommon), Embroidered Trim (Uncommon), Gilded Trim (Rare), Chainmail Trim (Rare), Runic Trim (Epic), Starlit Trim (Mythic) |
+| 🔯 Sigil | Star (Common), Moon (Common), Leaf (Common), Sun (Uncommon), Flame (Uncommon), Snowflake (Uncommon), Thunder (Rare), Skull (Rare), Eye (Rare), Balance (Epic), Trident (Legendary), Infinity (Legendary), Crown (Mythic), Nova (Mythic) |
+| 🎩 Hat | Pointed Hat (Common), Hood (Common), Straw Hat (Common), Feathered Cap (Uncommon), Top Hat (Uncommon), Witch Hat (Uncommon), Circlet (Rare), Tricorn (Rare), Horned Helm (Epic), Mitre (Epic), Crown (Legendary), Halo (Mythic), Starcrown (Mythic) |
+| 🎀 Hat band | Plain Band (Common), Ribbon (Common), Braided Band (Uncommon), Studded Band (Uncommon), Gilded Band (Rare), Runic Band (Epic), Crystal Band (Legendary), Starlit Band (Mythic) |
+| 💎 Gem | Bead (Common), Orb (Common), Acorn (Common), Diamond (Uncommon), Star (Rare), Moonstone (Rare), Seeing Eye (Epic), Skull (Epic), Phoenix Heart (Legendary), Prism (Mythic), Singularity (Mythic) |
+
+**Auras:** Embers (Common), Mist (Common), Sparkles (Common), Falling Leaves (Common), Billowing Smoke (Uncommon), Frost (Uncommon), Toxic Fumes (Uncommon), Bubbles (Uncommon), Lightning (Rare), Petals (Rare), Bloodmist (Rare), Shadow (Epic), Void Wisps (Epic), Floating Runes (Epic), Holy Light (Epic), Inferno (Legendary), Storm (Legendary), Stardust (Legendary), Prismatic (Mythic), Eclipse (Mythic).
+
+| Enchantment | Effect | Per part (Common → Mythic) | Outfit cap |
+|---|---|---|---|
+| **Swiftness** | +N movement speed | 2% / 3% / 4% / 5% / 6% / 8% | +12% movement speed |
+| **Vitality** | +N max health | 3 / 5 / 7 / 10 / 13 / 16 | +25 max health |
+| **Mana Well** | +N wand mana | 4% / 6% / 8% / 11% / 14% / 18% | +25% wand mana |
+| **Flow** | +N mana regeneration | 4% / 6% / 8% / 11% / 14% / 18% | +25% mana regeneration |
+| **Celerity** | -N cast delay | 2% / 3% / 4% / 5% / 7% / 9% | -12% cast delay |
+| **Quickening** | -N wand recharge | 3% / 4% / 5% / 7% / 9% / 12% | -15% wand recharge |
+| **Warding** | -N damage taken | 2% / 3% / 4% / 5% / 6% / 8% | -12% damage taken |
+| **Precision** | +N crit chance | 1% / 2% / 3% / 4% / 5% / 6% | +10% crit chance |
+| **Leeching** | +N lifesteal | 1% / 1.5% / 2% / 3% / 4% / 5% | +8% lifesteal |
+| **Mending** | +N health per second | 0.2 / 0.3 / 0.4 / 0.6 / 0.8 / 1 | +1.5 health per second |
+| **Bounding** | +N jump height | 4% / 6% / 8% / 10% / 13% / 16% | +20% jump height |
+| **Fortune** | +N Enchanted Coins from matches | 3% / 5% / 7% / 10% / 13% / 16% | +30% Enchanted Coins from matches |
+| **Resilience** | -N burn, chill and venom duration | 4% / 6% / 8% / 11% / 14% / 18% | -30% burn, chill and venom duration |
+| **Arcane Attunement** | +N Arcane damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Arcane damage |
+| **Fire Attunement** | +N Fire damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Fire damage |
+| **Frost Attunement** | +N Frost damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Frost damage |
+| **Earth Attunement** | +N Earth damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Earth damage |
+| **Wind Attunement** | +N Wind damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Wind damage |
+| **Poison Attunement** | +N Poison damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Poison damage |
+| **Lightning Attunement** | +N Lightning damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Lightning damage |
+| **Void Attunement** | +N Void damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Void damage |
+| **Radiant Attunement** | +N Radiant damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Radiant damage |
+| **Blood Attunement** | +N Blood damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Blood damage |
+| **Chaos Attunement** | +N Chaos damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Chaos damage |
+| **Chrono Attunement** | +N Chrono damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Chrono damage |

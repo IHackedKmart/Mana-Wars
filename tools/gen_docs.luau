@@ -16,6 +16,7 @@ local Consumables = shared.load("Shared/Consumables")
 local Rarity = shared.load("Shared/Rarity")
 local Config = shared.load("Shared/Config")
 local MapDefs = shared.load("Server/Map/MapDefs")
+local Cosmetics = shared.load("Shared/Cosmetics")
 
 local out = {}
 local function line(s: string?)
@@ -223,6 +224,105 @@ line("| | Potion | Key | Rarity | Effect |")
 line("|---|---|---|---|---|")
 for _, c in Consumables.List do
 	line(string.format("| %s | **%s** | %s | %s | %s |", c.icon, c.name, c.key, c.rarity, c.description))
+end
+line()
+
+line("## Robes, hats and coffers")
+line()
+local E = Config.Economy
+line(
+	string.format(
+		"Matches pay **Enchanted Coins** by finishing place: %d for 1st, %d for 2nd ... 1 for 12th (plus the outfit's Fortune bonus). New players get %d coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (%d%% fee, listings last %d hours, %d at a time).",
+		E.CoinsForFirst,
+		E.CoinsForFirst - 1,
+		E.StarterCoins,
+		math.floor(E.AuctionFee * 100 + 0.5),
+		E.AuctionHours,
+		E.MaxListings
+	)
+)
+line()
+line("| | Coffer | Price | Parts | Odds | Only here |")
+line("|---|---|---|---|---|---|")
+for _, box in Cosmetics.Boxes do
+	local only = {}
+	for slot, list in Cosmetics.Designs do
+		for _, d in list do
+			if d.boxes and #d.boxes == 1 and d.boxes[1] == box.id then
+				table.insert(only, d.name .. " (" .. string.lower(Cosmetics.Slots[slot].label) .. ")")
+			end
+		end
+	end
+	table.sort(only)
+	line(
+		string.format(
+			"| %s | **%s** | %d coins | %d | %s | %s |",
+			box.icon,
+			box.name,
+			box.price,
+			box.parts,
+			Cosmetics.boxOddsText(box),
+			if #only > 0 then table.concat(only, ", ") else "-"
+		)
+	)
+end
+line()
+local colors, materials, auras = #Cosmetics.Colors, #Cosmetics.Materials, #Cosmetics.Auras
+line(
+	string.format(
+		"A **robe** is a Cloth + Trim + Sigil; a **hat** is a Hat shape + Band + Gem. Each part rolls a design, one of %d colours, one of %d materials, %d-%d enchantments by rarity and (Sigils and Gems) one of %d auras, all gated by rarity and coffer: **%s** distinct-looking parts in all.",
+		colors,
+		materials,
+		Cosmetics.EnchantCount[1],
+		Cosmetics.EnchantCount[#Cosmetics.EnchantCount],
+		auras,
+		string.reverse((string.gsub(string.reverse(tostring(Cosmetics.varietyCount())), "(%d%d%d)(%d)", "%1,%2")))
+	)
+)
+line()
+line(
+	"**Resonance and auras:** a garment's resonance is the average rarity rank of its three parts (rounded down). Its aura shines at the aura part's rarity, but never more than one tier above the resonance: visible from Rare strength, with light from Epic, and an extra flourish at Mythic. A robe and hat with the same aura, both at Epic strength or better, leave a trail."
+)
+line()
+line("| Slot | Designs (minimum rarity) |")
+line("|---|---|")
+for _, slot in Cosmetics.SlotOrder do
+	local names = {}
+	for _, d in Cosmetics.Designs[slot] do
+		table.insert(names, d.name .. " (" .. d.minRarity .. ")")
+	end
+	line(
+		string.format(
+			"| %s %s | %s |",
+			Cosmetics.Slots[slot].icon,
+			Cosmetics.Slots[slot].label,
+			table.concat(names, ", ")
+		)
+	)
+end
+line()
+local auraNames = {}
+for _, a in Cosmetics.Auras do
+	table.insert(auraNames, a.name .. " (" .. a.minRarity .. ")")
+end
+line("**Auras:** " .. table.concat(auraNames, ", ") .. ".")
+line()
+line("| Enchantment | Effect | Per part (Common → Mythic) | Outfit cap |")
+line("|---|---|---|---|")
+for _, def in Cosmetics.Enchants do
+	local values = {}
+	for _, v in def.values do
+		table.insert(values, (Cosmetics.enchantText({ stat = def.id, amount = v }):match("[%d%.]+%%?")))
+	end
+	line(
+		string.format(
+			"| **%s** | %s | %s | %s |",
+			def.name,
+			string.format(def.text, "N"),
+			table.concat(values, " / "),
+			Cosmetics.enchantText({ stat = def.id, amount = def.cap })
+		)
+	)
 end
 line()
 
