@@ -149,6 +149,18 @@ Every premade spell can be dismantled in the Spellforge to recover its parts.
 | ☀️ | **Lightbringer** | Premium | Sunlit Scepter (Uncommon) | Spark Bolt, Magic Bolt | Critical, Radiant |
 | 🌪️ | **Windwalker** | Premium | Zephyr Wand (Uncommon) | Gust, Spark Bolt | Haste, Wind |
 
+## Maps
+
+Players vote between 3 random maps in the lobby before every match. Each match generates a fresh layout of the chosen map: terrain, ruins and chest spots are different every time. The cornucopia always holds 10 chests.
+
+| | Map | Radius | Scattered chests | Landmarks | Weather | |
+|---|---|---|---|---|---|---|
+| 🌳 | **Verdant Isle** | 450 studs | 30 | 10 | Clear | _Rolling green hills, quiet lakes and crumbling ruins. The classic._ |
+| 🏔️ | **Frostpeak** | 420 studs | 28 | 9 | Snow | _A snowbound island of frozen lakes, pine forests and towering peaks._ |
+| 🌋 | **Ashen Wastes** | 400 studs | 26 | 9 | Ash (lava burns) | _A volcanic wasteland. Black rock, dead trees, and lava lakes that burn._ |
+| 🏜️ | **Sandsea Ruins** | 480 studs | 30 | 11 | Dust | _Endless dunes, sandstone ruins and rare oases. The biggest map._ |
+| 🍄 | **Fungal Hollow** | 380 studs | 24 | 8 | Spores | _A glowing night forest of giant mushrooms. Small, dark and deadly._ |
+
 ## Potions
 
 | | Potion | Key | Rarity | Effect |

@@ -20,6 +20,7 @@ local WandGenerator = require(Shared.WandGenerator)
 local SpellParts = require(Shared.Spells.SpellParts)
 local SpellBuilder = require(Shared.Spells.SpellBuilder)
 local SpellTypes = require(Shared.Spells.SpellTypes)
+local Signal = require(Shared.Util.Signal)
 local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
@@ -29,6 +30,11 @@ local State = require(script.Parent.State)
 local Sounds = require(script.Parent.Sounds)
 
 local InventoryController = {}
+
+-- Fired after every redraw (draft or inventory changed) and when a spell is forged.
+-- The tutorial listens to these to know when each step is done.
+InventoryController.Changed = Signal.new()
+InventoryController.Forged = Signal.new()
 
 local C = Theme.Colors
 local action = Remotes.func("InventoryAction")
@@ -49,6 +55,7 @@ local forgeFrame: Frame
 local detailsInfo: Frame
 local detailsButtons: Frame
 local isOpen = false
+local restockButton: TextButton
 local selected: Selection? = nil
 local draft = {
 	form = nil :: string?,
@@ -740,7 +747,7 @@ local function buildForge()
 		end
 	end
 
-	Widgets.button("Forge Spell", {
+	local forgeButton = Widgets.button("Forge Spell", {
 		size = UDim2.new(0.62, -16, 0, 34),
 		position = UDim2.new(0, 12, 1, -44),
 		color = if recipe then C.Accent else C.Panel3,
@@ -758,6 +765,9 @@ local function buildForge()
 			})
 			if ok then
 				Sounds.play("Forge")
+				if type(newUid) == "string" then
+					InventoryController.Forged:Fire(newUid)
+				end
 				clearDraft()
 				if type(newUid) == "string" then
 					selected = { kind = "Spell", uid = newUid }
@@ -767,6 +777,8 @@ local function buildForge()
 		end,
 		parent = forgeFrame,
 	})
+	forgeButton.Name = "ForgeButton"
+
 	Widgets.button("Clear", {
 		size = UDim2.new(0.38, -12, 0, 34),
 		position = UDim2.new(0.62, 0, 1, -44),
@@ -909,6 +921,8 @@ refresh = function()
 	buildBag()
 	buildForge()
 	buildDetails()
+	restockButton.Visible = State.practice()
+	InventoryController.Changed:Fire()
 end
 
 local function build()
@@ -947,6 +961,18 @@ local function build()
 		color = C.Panel3,
 		onClick = function()
 			InventoryController.close()
+		end,
+		parent = panel,
+	})
+	restockButton = Widgets.button("♻ Restock Spell Lab", {
+		size = UDim2.fromOffset(170, 34),
+		position = UDim2.new(1, -224, 0, 8),
+		color = Color3.fromRGB(60, 120, 90),
+		textSize = 13,
+		onClick = function()
+			clearDraft()
+			selected = nil
+			invoke("ResetPractice", {})
 		end,
 		parent = panel,
 	})
@@ -1035,7 +1061,7 @@ local function build()
 end
 
 function InventoryController.open()
-	if isOpen or not State.alive() then
+	if isOpen or not State.canAct() then
 		return
 	end
 	isOpen = true
@@ -1072,13 +1098,28 @@ function InventoryController.init()
 			InventoryController.close()
 		end
 	end)
-	Players.LocalPlayer:GetAttributeChangedSignal("Alive"):Connect(function()
-		if not State.alive() then
-			clearDraft()
-			selected = nil
-			InventoryController.close()
-		end
-	end)
+	-- moving between the lobby Spell Lab and a match swaps the whole inventory
+	local function resetView()
+		clearDraft()
+		selected = nil
+		InventoryController.close()
+	end
+	Players.LocalPlayer:GetAttributeChangedSignal("Alive"):Connect(resetView)
+	Players.LocalPlayer:GetAttributeChangedSignal("Practice"):Connect(resetView)
+end
+
+function InventoryController.isOpen(): boolean
+	return isOpen
+end
+
+function InventoryController.getDraft()
+	return {
+		form = draft.form,
+		element = draft.element,
+		mods = table.clone(draft.mods),
+		trigger = draft.trigger,
+		payloadUid = draft.payloadUid,
+	}
 end
 
 return InventoryController

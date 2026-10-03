@@ -172,10 +172,11 @@ end
 
 -- Attempts a cast for any combatant. Returns success and a reason when it fails.
 function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string?)
-	if not Combatants.isActive(c) or c.locked then
+	if not Combatants.canAct(c) or c.locked then
 		return false, "inactive"
 	end
-	if not GameState.combatAllowed() then
+	-- match fighters cast during the grace period and the battle; the lobby Spell Lab always works
+	if not c.practice and not GameState.combatAllowed() then
 		return false, "not now"
 	end
 	if (c.status.frozenUntil or 0) > now() then
@@ -249,7 +250,7 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 
 	if hpCost > 0 then
 		DamageService.apply(c, hpCost, { attacker = c, selfCost = true, isDot = true, element = "Blood" })
-		if not Combatants.isActive(c) then
+		if not Combatants.canAct(c) then
 			return true, nil
 		end
 	end

@@ -79,6 +79,7 @@ local savedStats = {}
 local server = Mock.realm({
 	RunService = Mock.runService(true),
 	Players = Players,
+	ProximityPromptService = { PromptTriggered = Mock.signal() },
 	TweenService = Mock.TweenService,
 	Lighting = Instance.new("Lighting"),
 	MarketplaceService = {
@@ -129,6 +130,15 @@ end)
 local Combatants = server.load("Server/Services/Combatants")
 local phasesSeen: { string } = {}
 local lastPhase = nil
+local seconds = 0
+-- record every phase change as it happens (some, like Loading, are very short here)
+Mock.onAttribute = function(name, value)
+	if name == "Phase" and value ~= lastPhase then
+		lastPhase = value
+		table.insert(phasesSeen, value)
+		print(string.format("  t=%5.1fs  phase -> %s", seconds, tostring(value)))
+	end
+end
 local winners = 0
 local announceCounts = {}
 local announce = Mock.Remotes.event("Announce")
@@ -142,18 +152,12 @@ end)
 
 local maxBots = 0
 local maxChests = 0
-local seconds = 0
 local LIMIT = 2400
 while seconds < LIMIT do
 	Mock.step(0.5)
 	seconds += 0.5
 	emulateDeaths()
 	local phase = Mock.repAttributes.Phase
-	if phase ~= lastPhase then
-		lastPhase = phase
-		table.insert(phasesSeen, phase)
-		print(string.format("  t=%5.1fs  phase -> %s", seconds, tostring(phase)))
-	end
 	local bots = Mock.workspace:FindFirstChild("Bots")
 	if bots then
 		maxBots = math.max(maxBots, #bots:GetChildren())
@@ -165,14 +169,14 @@ while seconds < LIMIT do
 		end
 	end
 	maxChests = math.max(maxChests, chests)
-	if winners >= 2 and phase == "Waiting" or (winners >= 2 and phase == "Intermission") then
+	if winners >= 2 and (phase == "Waiting" or phase == "Voting") then
 		break
 	end
 end
 
 local joined = table.concat(phasesSeen, " > ")
 print("phases: " .. joined)
-for _, needed in { "Intermission", "Countdown", "Grace", "Battle", "Ended" } do
+for _, needed in { "Voting", "Loading", "Countdown", "Grace", "Battle", "Ended" } do
 	if not string.find(joined, needed, 1, true) then
 		fail("never reached phase " .. needed)
 	end
@@ -195,6 +199,15 @@ end
 local me = Combatants.forPlayer(player)
 if not me or me.inMatch then
 	fail("the player should be back in the lobby after the match")
+end
+if me and not me.practice then
+	fail("back in the lobby the player should be in the Spell Lab")
+end
+if me and (me.inventory.parts.Bolt or 0) < 1 then
+	fail("the Spell Lab kit should include spell parts")
+end
+if player:GetAttribute("Practice") ~= true then
+	fail("the Practice attribute should be published")
 end
 local stats = savedStats["u1"]
 if not stats or (stats.matches or 0) < 1 then

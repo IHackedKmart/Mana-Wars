@@ -48,6 +48,9 @@ jobs:
       - name: Match simulation
         run: lune run tools/sim/match
 
+      - name: Map generation test
+        run: lune run tools/sim/maps
+
       - name: Build place file
         run: rojo build default.project.json -o ManaWars.rbxlx
 

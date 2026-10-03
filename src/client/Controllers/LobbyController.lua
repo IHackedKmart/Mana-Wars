@@ -1,6 +1,8 @@
--- Sky Sanctum UI: class selection (premium classes), lobby status, and spectating.
+-- Lobby UI for the Arcane Athenaeum: class selection (premium classes), the map vote,
+-- spectating, the lectern/altar prompts, and the animated orrery and floating books.
 
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -20,6 +22,8 @@ local Sounds = require(script.Parent.Sounds)
 
 local LobbyController = {}
 
+LobbyController.onOpenGrimoire = nil :: (() -> ())?
+
 local C = Theme.Colors
 local player = Players.LocalPlayer
 local classAction = Remotes.func("ClassAction")
@@ -35,6 +39,11 @@ local spectateName: TextLabel
 local spectateButton: TextButton
 local spectating = false
 local spectateIndex = 1
+local votePanel: Frame
+local voteList: Frame
+local voteTimer: TextLabel
+local voteState: { [string]: any } = { open = false }
+local myVote: string? = nil
 
 local function kitInfo(class: Classes.ClassDef): ItemInfo.Info
 	local lines = {}
@@ -263,10 +272,9 @@ local function updateSpectate()
 end
 
 local function buildSpectate()
-	spectateButton = Widgets.button("👁  Spectate", {
-		size = UDim2.fromOffset(160, 38),
-		position = UDim2.new(0.5, 0, 1, -70),
-		anchor = Vector2.new(0.5, 0),
+	spectateButton = Widgets.button("👁  Spectate the match", {
+		size = UDim2.fromOffset(230, 38),
+		position = UDim2.fromOffset(16, 190),
 		color = C.Panel3,
 		onClick = function()
 			setSpectate(true)
@@ -276,7 +284,7 @@ local function buildSpectate()
 	})
 	spectateBar = Widgets.panel({
 		Size = UDim2.fromOffset(420, 50),
-		Position = UDim2.new(0.5, 0, 1, -76),
+		Position = UDim2.new(0.5, 0, 0, 74),
 		AnchorPoint = Vector2.new(0.5, 0),
 		BackgroundTransparency = 0.15,
 		Visible = false,
@@ -321,15 +329,210 @@ local function buildSpectate()
 	})
 end
 
+---------------------------------------------------------------------------
+-- Map vote
+---------------------------------------------------------------------------
+
+local voteAction = Remotes.func("VoteAction")
+
+local function renderVote()
+	Widgets.clear(voteList, true)
+	local options = voteState.options
+	if not voteState.open or not options then
+		return
+	end
+	local counts = voteState.counts or {}
+	for i, option in options do
+		local chosen = myVote == option.id
+		local card = Create("TextButton", {
+			Name = "Vote_" .. option.id,
+			Text = "",
+			AutoButtonColor = false,
+			Size = UDim2.new(1, 0, 0, 84),
+			BackgroundColor3 = if chosen then C.Panel3 else C.Panel2,
+			LayoutOrder = i,
+			Parent = voteList,
+		}, {
+			Create.corner(10),
+			Create.stroke(if chosen then C.Gold else C.Stroke, if chosen then 3 else 1.5),
+		})
+		Widgets.label({
+			Text = option.icon,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Size = UDim2.fromOffset(52, 52),
+			Position = UDim2.fromOffset(8, 16),
+			Parent = card,
+		})
+		Widgets.label({
+			Text = option.name,
+			Font = Theme.Black,
+			TextSize = 17,
+			TextColor3 = if chosen then C.Gold else C.Text,
+			Size = UDim2.new(1, -140, 0, 22),
+			Position = UDim2.fromOffset(68, 8),
+			Parent = card,
+		})
+		Widgets.label({
+			Text = option.description,
+			TextSize = 12,
+			TextColor3 = C.Dim,
+			TextWrapped = true,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			Size = UDim2.new(1, -80, 0, 48),
+			Position = UDim2.fromOffset(68, 32),
+			Parent = card,
+		})
+		local votes = counts[option.id] or 0
+		Widgets.label({
+			Text = votes .. (if votes == 1 then " vote" else " votes"),
+			Font = Theme.Bold,
+			TextSize = 13,
+			TextColor3 = C.Gold,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Size = UDim2.fromOffset(70, 20),
+			Position = UDim2.new(1, -78, 0, 9),
+			Parent = card,
+		})
+		card.Activated:Connect(function()
+			Sounds.play("Click")
+			local ok, success = pcall(function()
+				return voteAction:InvokeServer("Vote", option.id)
+			end)
+			if ok and success then
+				myVote = option.id
+				renderVote()
+			end
+		end)
+	end
+end
+
+local function buildVote()
+	votePanel = Widgets.panel({
+		Name = "MapVote",
+		Size = UDim2.fromOffset(330, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Position = UDim2.new(1, -16, 0, 74),
+		AnchorPoint = Vector2.new(1, 0),
+		BackgroundColor3 = C.Background,
+		BackgroundTransparency = 0.1,
+		Visible = false,
+		Parent = root,
+	})
+	Create.padding(12, 10).Parent = votePanel
+	Create.list(Enum.FillDirection.Vertical, 8).Parent = votePanel
+	Widgets.label({
+		Text = "🗳  VOTE FOR THE NEXT MAP",
+		Font = Theme.Black,
+		TextSize = 16,
+		TextColor3 = C.Gold,
+		Size = UDim2.new(1, 0, 0, 20),
+		LayoutOrder = 1,
+		Parent = votePanel,
+	})
+	voteTimer = Widgets.label({
+		Text = "",
+		TextSize = 12,
+		TextColor3 = C.Dim,
+		Size = UDim2.new(1, 0, 0, 14),
+		LayoutOrder = 2,
+		Parent = votePanel,
+	})
+	voteList = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 3,
+		Parent = votePanel,
+	}, { Create.list(Enum.FillDirection.Vertical, 8) })
+
+	Remotes.event("VoteState").OnClientEvent:Connect(function(payload)
+		if type(payload) ~= "table" then
+			return
+		end
+		if payload.open and not voteState.open then
+			myVote = nil -- a new vote has started
+		end
+		voteState = payload
+		renderVote()
+	end)
+end
+
+---------------------------------------------------------------------------
+-- Library ambience: spin the orrery rings and the altar crystal, bob the floating books
+---------------------------------------------------------------------------
+
+local function animateLobby()
+	local lobby = workspace:WaitForChild("Lobby", 30)
+	local animated = lobby and lobby:WaitForChild("Animated", 10)
+	if not animated then
+		return
+	end
+	local entries = {}
+	for _, child in animated:GetChildren() do
+		local spin = child:GetAttribute("Spin")
+		local bob = child:GetAttribute("Bob")
+		if spin or bob then
+			local base = if child:IsA("Model")
+				then child:GetPivot()
+				elseif child:IsA("BasePart") then child.CFrame
+				else nil
+			if base then
+				table.insert(entries, { inst = child, base = base, spin = spin, bob = bob })
+			end
+		end
+	end
+	local orreryCore = animated:FindFirstChild("OrreryCore") :: BasePart?
+	local center = if orreryCore then orreryCore.Position else Vector3.zero
+	RunService.RenderStepped:Connect(function()
+		local t = os.clock()
+		for _, e in entries do
+			local cf: CFrame
+			if e.bob then
+				cf = e.base
+					* CFrame.new(0, math.sin(t * 1.3 + e.bob) * 0.9, 0)
+					* CFrame.Angles(0, math.sin(t * 0.4 + e.bob) * 0.3, 0)
+			elseif e.inst:IsA("Model") then
+				-- orrery rings turn around the orrery's centre
+				local pivot = CFrame.new(center)
+				cf = pivot * CFrame.Angles(0, t * e.spin, 0) * pivot:Inverse() * e.base
+			else
+				cf = e.base * CFrame.Angles(0, t * e.spin, 0)
+			end
+			if e.inst:IsA("Model") then
+				e.inst:PivotTo(cf)
+			else
+				(e.inst :: BasePart).CFrame = cf
+			end
+		end
+	end)
+end
+
 function LobbyController.init()
 	gui = Widgets.screen("Lobby", 5)
 	root = Widgets.scaledRoot(gui)
 	buildClassPanel()
 	buildSpectate()
+	buildVote()
+	task.spawn(animateLobby)
+
+	-- lecterns open the Grimoire, the altar opens the class picker
+	ProximityPromptService.PromptTriggered:Connect(function(prompt, who)
+		if who ~= player then
+			return
+		end
+		local action = prompt:GetAttribute("LobbyAction")
+		if action == "Grimoire" and LobbyController.onOpenGrimoire then
+			LobbyController.onOpenGrimoire()
+		elseif action == "ClassPicker" then
+			classPanel.Visible = true
+			renderClasses()
+		end
+	end)
 
 	classButton = Widgets.button("🎓  Class: Apprentice", {
 		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 64),
+		position = UDim2.fromOffset(16, 148),
 		color = C.Accent,
 		onClick = function()
 			classPanel.Visible = not classPanel.Visible
@@ -353,14 +556,6 @@ function LobbyController.init()
 	player:GetAttributeChangedSignal("PremiumAccess"):Connect(updateClassButton)
 	updateClassButton()
 
-	-- show the class picker once when you first arrive
-	task.delay(2, function()
-		if not State.alive() then
-			classPanel.Visible = true
-			renderClasses()
-		end
-	end)
-
 	local lastTarget = 0
 	RunService.RenderStepped:Connect(function()
 		local inLobby = not State.alive()
@@ -372,6 +567,11 @@ function LobbyController.init()
 		end
 		spectateButton.Visible = inLobby and matchRunning and not spectating
 		spectateBar.Visible = spectating
+		votePanel.Visible = inLobby and voteState.open == true
+		if votePanel.Visible then
+			local left = math.max(0, math.ceil(State.phaseEndsAt() - State.now()))
+			voteTimer.Text = "Voting closes in " .. left .. "s · the most votes wins"
+		end
 		if spectating and (not matchRunning or not inLobby) then
 			setSpectate(false)
 		end

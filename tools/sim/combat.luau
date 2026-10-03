@@ -265,7 +265,79 @@ if damageDealt() > 0 then
 end
 GameState.setPhase("Battle", 0)
 
--- 5. Status effects: burn ticks, frost freezes after three hits, venom stacks.
+-- 5. Lobby practice: Spell Lab casters hurt training dummies (in any phase) but never real mages,
+--    and dummies never die.
+do
+	resetWorld()
+	GameState.setPhase("Voting", 0)
+	local dummy = body("Dummy", Vector3.new(0, 3, -20))
+	dummy.isDummy = true
+	dummy.humanoid.MaxHealth = 500
+	dummy.humanoid.Health = 500
+	local trainee = body("Trainee", Vector3.new(0, 3, 0))
+	trainee.inMatch = false
+	trainee.alive = false
+	trainee.practice = true
+	trainee.root.CFrame = CFrame.new(0, 3, 0)
+	caster.root.CFrame = CFrame.new(300, 3, 300) -- out of the way
+	local wand = WandGenerator.fromTemplate({
+		name = "Lab",
+		rarity = "Rare",
+		wandType = "Staff",
+		stats = { capacity = 1, castDelay = 0.1, rechargeTime = 0.1, manaMax = 100000, manaRegen = 100000, spread = 0 },
+	})
+	wand.slots[1] = LootTables.premadeSpell("Fireball")
+	trainee.inventory = Items.newInventory()
+	trainee.inventory.wands[1] = wand
+	-- a real mage standing right behind the dummy must not be hurt by practice spells
+	targets[1].root.CFrame = CFrame.new(0, 3, -24)
+	for i = 2, #targets do
+		targets[i].root.CFrame = CFrame.new(-200, 3, -200 - i * 10) -- clear the firing lane
+	end
+	local before = #Mock.warnings
+	for _ = 1, 30 do
+		CastingService.tryCast(trainee, Vector3.new(0, 3, -20))
+		Mock.step(0.15)
+	end
+	Mock.step(2)
+	for i = before + 1, #Mock.warnings do
+		fail("practice: " .. Mock.warnings[i])
+	end
+	reported = #Mock.warnings
+	if dummy.humanoid.Health >= 500 then
+		fail("practice spells should damage the training dummy")
+	end
+	if dummy.humanoid.Health < 1 then
+		fail("training dummies must never die")
+	end
+	if targets[1].humanoid.Health < 100 then
+		fail("practice spells must never hurt real mages")
+	end
+	if trainee.humanoid.Health < 100 then
+		fail("practising mages take no damage (not even from their own explosions)")
+	end
+	-- and match spells don't hurt dummies
+	GameState.setPhase("Battle", 0)
+	Mock.step(4) -- let the practice burns run out
+	StatusService.clear(dummy)
+	dummy.humanoid.Health = 500
+	caster.root.CFrame = CFrame.new(0, 3, 10)
+	giveWand(LootTables.premadeSpell("Fireball"))
+	CastingService.tryCast(caster, Vector3.new(0, 3, -20))
+	Mock.step(1.5)
+	if dummy.humanoid.Health < 500 then
+		fail("match spells should not affect training dummies")
+	end
+	dummy.alive = false
+	dummy.inMatch = false
+	trainee.practice = false
+	Combatants.remove(dummy)
+	Combatants.remove(trainee)
+	dummy.model:Destroy()
+	trainee.model:Destroy()
+end
+
+-- 6. Status effects: burn ticks, frost freezes after three hits, venom stacks.
 resetWorld()
 do
 	local t = targets[1]
@@ -292,7 +364,7 @@ do
 	end
 end
 
--- 6. Inventory: forge, dismantle, slot, unslot through the same entry point the client uses.
+-- 7. Inventory: forge, dismantle, slot, unslot through the same entry point the client uses.
 do
 	local player = Instance.new("Player")
 	player.Name = "Tester"

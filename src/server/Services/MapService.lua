@@ -1,4 +1,5 @@
--- Builds the lobby once and a brand new arena (new seed, new layout) for every match.
+-- Builds the lobby once and a brand new arena for every match: the map players voted for,
+-- with a fresh random layout each time.
 
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,9 +7,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Map = script.Parent.Parent.Map
 local Build = require(Map.Build)
+local MapDefs = require(Map.MapDefs)
 local TerrainGen = require(Map.TerrainGen)
 local Structures = require(Map.Structures)
 local Lobby = require(Map.Lobby)
+
+type MapDef = MapDefs.MapDef
 
 local MapService = {}
 
@@ -16,6 +20,8 @@ local A = Config.Arena
 
 export type Arena = {
 	seed: number,
+	def: MapDef,
+	radius: number,
 	plazaY: number,
 	center: Vector3,
 	pedestals: { CFrame },
@@ -25,176 +31,205 @@ export type Arena = {
 }
 
 MapService.lobbySpawn = CFrame.new(0, A.LobbyHeight + 5, 0)
+MapService.lobby = nil :: Lobby.LobbyInfo?
 MapService.arena = nil :: Arena?
 MapService.generating = false
 
-local function setupLighting()
-	if Lighting:FindFirstChildOfClass("Atmosphere") then
-		return
+local function applyLighting(def: MapDef)
+	for key, value in def.lighting do
+		pcall(function()
+			(Lighting :: any)[key] = value
+		end)
 	end
-	Build.make("Atmosphere", {
-		Density = 0.28,
-		Offset = 0.15,
-		Color = Color3.fromRGB(200, 205, 230),
-		Decay = Color3.fromRGB(110, 100, 140),
-		Glare = 0.25,
-		Haze = 1.4,
-	}, Lighting)
-	Build.make("BloomEffect", { Intensity = 0.7, Size = 26, Threshold = 1.4 }, Lighting)
-	Build.make("ColorCorrectionEffect", { Saturation = 0.1, Contrast = 0.06, Brightness = 0.02 }, Lighting)
-	Build.make("SunRaysEffect", { Intensity = 0.05, Spread = 0.8 }, Lighting)
-	workspace.Terrain.WaterColor = Color3.fromRGB(60, 130, 170)
-	workspace.Terrain.WaterTransparency = 0.6
-	workspace.Terrain.WaterWaveSize = 0.12
+	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+	if not atmosphere then
+		atmosphere = Instance.new("Atmosphere")
+		atmosphere.Parent = Lighting
+	end
+	for key, value in def.atmosphere do
+		pcall(function()
+			(atmosphere :: any)[key] = value
+		end)
+	end
+	if not Lighting:FindFirstChildOfClass("BloomEffect") then
+		Build.make("BloomEffect", { Intensity = 0.7, Size = 26, Threshold = 1.4 }, Lighting)
+		Build.make("ColorCorrectionEffect", { Saturation = 0.1, Contrast = 0.06, Brightness = 0.02 }, Lighting)
+		Build.make("SunRaysEffect", { Intensity = 0.05, Spread = 0.8 }, Lighting)
+	end
 end
 
 function MapService.init()
-	setupLighting()
-	local _, spawnCFrame = Lobby.build()
-	MapService.lobbySpawn = spawnCFrame
+	applyLighting(MapDefs.List[1])
+	local info = Lobby.build()
+	MapService.lobby = info
+	MapService.lobbySpawn = info.spawn
 end
 
--- Generates terrain + structures. Yields for a few seconds.
-function MapService.generate(seed: number): Arena
+function MapService.randomDef(rng: Random): MapDef
+	return MapDefs.List[rng:NextInteger(1, #MapDefs.List)]
+end
+
+-- Generates terrain + structures for a map. Yields for a few seconds.
+function MapService.generate(seed: number, def: MapDef): Arena
+	while MapService.generating do
+		task.wait(0.2)
+	end
 	MapService.generating = true
-	local old = workspace:FindFirstChild("Arena")
-	if old then
-		old:Destroy()
-	end
-	local folder = Instance.new("Folder")
-	folder.Name = "Arena"
-	folder.Parent = workspace
-	local decor = Build.make("Folder", { Name = "Decor" }, folder)
-	Build.make("Folder", { Name = "Chests" }, folder)
-
-	local heightAt = TerrainGen.makeHeight(seed)
-	TerrainGen.generate(heightAt)
-
-	local rng = Random.new(seed)
-	local plazaY = TerrainGen.plazaHeight()
-	local corn = Structures.cornucopia(folder, plazaY)
-	local chestSpots: { Structures.ChestSpot } = table.clone(corn.chests)
-
-	local function polar(angle: number, dist: number): (number, number)
-		return math.cos(angle) * dist, math.sin(angle) * dist
-	end
-
-	local function steep(x: number, z: number): boolean
-		local h = heightAt(x, z)
-		return math.abs(heightAt(x + 3, z) - h) > 2.5 or math.abs(heightAt(x, z + 3) - h) > 2.5
-	end
-
-	-- Points of interest ring
-	local builders = { Structures.ruinedTower, Structures.shrine, Structures.camp, Structures.watchtower }
-	local pois: { Vector3 } = {}
-	for i = 1, A.RuinCount do
-		local x, z
-		for _ = 1, 10 do
-			local angle = (i / A.RuinCount) * math.pi * 2 + rng:NextNumber(-0.3, 0.3)
-			x, z = polar(angle, rng:NextNumber(120, A.Radius - 75))
-			if heightAt(x, z) > A.WaterLevel + 2 then
-				break
-			end
+	local ok, result = pcall(function()
+		local old = workspace:FindFirstChild("Arena")
+		if old then
+			old:Destroy()
 		end
-		local builder = builders[(i - 1) % #builders + 1]
-		local spots = builder(decor, Vector3.new(x, 0, z), heightAt, rng)
-		for _, spot in spots do
-			table.insert(chestSpots, spot)
-		end
-		table.insert(pois, Vector3.new(x, 0, z))
-		task.wait()
-	end
+		local folder = Instance.new("Folder")
+		folder.Name = "Arena"
+		folder.Parent = workspace
+		local decor = Build.make("Folder", { Name = "Decor" }, folder)
+		Build.make("Folder", { Name = "Chests" }, folder)
 
-	local function nearPoi(x: number, z: number, dist: number): boolean
-		for _, p in pois do
-			if (Vector3.new(x, 0, z) - p).Magnitude < dist then
-				return true
-			end
-		end
-		return false
-	end
+		applyLighting(def)
+		local heightAt = TerrainGen.makeHeight(seed, def)
+		TerrainGen.generate(heightAt, def)
 
-	-- Scattered chests
-	local outer: { Vector3 } = {}
-	local attempts = 0
-	while #outer < A.OuterChestCount and attempts < 3000 do
-		attempts += 1
-		local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(70, A.Radius - 30))
-		local h = heightAt(x, z)
-		if h > A.WaterLevel + 1 and not steep(x, z) and not nearPoi(x, z, 24) then
-			local ok = true
-			for _, p in outer do
-				if (Vector3.new(x, 0, z) - p).Magnitude < 30 then
-					ok = false
+		local rng = Random.new(seed)
+		local radius = def.radius
+		local liquid = def.terrain.liquidLevel
+		local plazaY = MapDefs.plazaHeight(def)
+		local corn = Structures.cornucopia(folder, plazaY, def.style)
+		local chestSpots: { Structures.ChestSpot } = table.clone(corn.chests)
+
+		local function polar(angle: number, dist: number): (number, number)
+			return math.cos(angle) * dist, math.sin(angle) * dist
+		end
+
+		local function steep(x: number, z: number): boolean
+			local h = heightAt(x, z)
+			return math.abs(heightAt(x + 3, z) - h) > 2.5 or math.abs(heightAt(x, z + 3) - h) > 2.5
+		end
+
+		-- Points of interest, spread around the island
+		local pois: { Vector3 } = {}
+		for i = 1, def.poiCount do
+			local x, z = 0, 0
+			for _ = 1, 12 do
+				local angle = (i / def.poiCount) * math.pi * 2 + rng:NextNumber(-0.3, 0.3)
+				local ring = if i % 2 == 0 then rng:NextNumber(0.3, 0.55) else rng:NextNumber(0.55, 0.82)
+				x, z = polar(angle, radius * ring)
+				if heightAt(x, z) > liquid + 2 then
 					break
 				end
 			end
-			if ok then
-				table.insert(outer, Vector3.new(x, 0, z))
-				table.insert(chestSpots, {
-					cframe = CFrame.new(x, h + 1, z) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0),
-					tier = "Outer",
-				})
+			local kind = def.pois[(i - 1) % #def.pois + 1]
+			local builder = Structures.Pois[kind]
+			if builder then
+				for _, spot in builder(decor, Vector3.new(x, 0, z), heightAt, rng, def.style) do
+					table.insert(chestSpots, spot)
+				end
 			end
+			table.insert(pois, Vector3.new(x, 0, z))
+			task.wait()
 		end
-	end
 
-	-- Nature
-	local function scatter(count: number, minDist: number, maxDist: number, fn)
-		local placed, tries = 0, 0
-		while placed < count and tries < count * 12 do
-			tries += 1
-			local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(minDist, maxDist))
+		local function nearPoi(x: number, z: number, dist: number): boolean
+			for _, p in pois do
+				if (Vector3.new(x, 0, z) - p).Magnitude < dist then
+					return true
+				end
+			end
+			return false
+		end
+
+		-- Scattered chests, kept well apart so loot is worth travelling for
+		local outer: { Vector3 } = {}
+		local attempts = 0
+		while #outer < def.outerChests and attempts < 4000 do
+			attempts += 1
+			local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(75, radius - 35))
 			local h = heightAt(x, z)
-			if h > A.WaterLevel + 1.5 and h < 60 and not nearPoi(x, z, 18) then
-				local nearChest = false
+			if h > liquid + 1 and not steep(x, z) and not nearPoi(x, z, A.ChestSpacing) then
+				local ok = true
 				for _, p in outer do
-					if (Vector3.new(x, 0, z) - p).Magnitude < 6 then
-						nearChest = true
+					if (Vector3.new(x, 0, z) - p).Magnitude < A.ChestSpacing then
+						ok = false
 						break
 					end
 				end
-				if not nearChest then
-					fn(decor, Vector3.new(x, h, z), rng)
-					placed += 1
-					if placed % 25 == 0 then
-						task.wait()
+				if ok then
+					table.insert(outer, Vector3.new(x, 0, z))
+					table.insert(chestSpots, {
+						cframe = CFrame.new(x, h + 1, z) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0),
+						tier = "Outer",
+					})
+				end
+			end
+		end
+
+		-- Decoration
+		local cliff = def.terrain.cliffHeight + 8
+		for _, entry in def.decor do
+			local placed, tries = 0, 0
+			local minDist = A.PedestalRadius + (if entry.kind == "tree" then 16 else 10)
+			local maxDist = radius + (if entry.kind == "bush" then -10 else 15)
+			while placed < entry.count and tries < entry.count * 12 do
+				tries += 1
+				local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(minDist, maxDist))
+				local h = heightAt(x, z)
+				if h > liquid + 1.5 and h < cliff and not nearPoi(x, z, 18) then
+					local nearChest = false
+					for _, p in outer do
+						if (Vector3.new(x, 0, z) - p).Magnitude < 6 then
+							nearChest = true
+							break
+						end
+					end
+					if not nearChest then
+						local styleName = entry.styles[rng:NextInteger(1, #entry.styles)]
+						Structures.decor(entry.kind, styleName, decor, Vector3.new(x, h, z), rng)
+						placed += 1
+						if placed % 25 == 0 then
+							task.wait()
+						end
 					end
 				end
 			end
 		end
-	end
-	scatter(A.TreeCount, A.PedestalRadius + 16, A.Radius + 20, Structures.tree)
-	scatter(A.RockCount, A.PedestalRadius + 12, A.Radius + 10, Structures.rock)
-	scatter(math.floor(A.TreeCount * 0.6), A.PedestalRadius + 10, A.Radius - 10, Structures.bush)
 
-	-- invisible wall well outside the playable area
-	local wallRadius = A.Radius + 45
-	local segments = 48
-	for i = 1, segments do
-		local angle = (i / segments) * math.pi * 2
-		local pos = Vector3.new(math.cos(angle) * wallRadius, 150, math.sin(angle) * wallRadius)
-		Build.part({
-			Name = "WorldEdge",
-			Size = Vector3.new(2 * math.pi * wallRadius / segments + 2, 400, 4),
-			CFrame = CFrame.lookAt(pos, Vector3.new(0, 150, 0)),
-			Transparency = 1,
-			CanQuery = false,
-		}, folder)
-	end
+		-- invisible wall well outside the playable area
+		local wallRadius = radius + 45
+		local segments = 64
+		for i = 1, segments do
+			local angle = (i / segments) * math.pi * 2
+			local pos = Vector3.new(math.cos(angle) * wallRadius, 150, math.sin(angle) * wallRadius)
+			Build.part({
+				Name = "WorldEdge",
+				Size = Vector3.new(2 * math.pi * wallRadius / segments + 2, 400, 4),
+				CFrame = CFrame.lookAt(pos, Vector3.new(0, 150, 0)),
+				Transparency = 1,
+				CanQuery = false,
+			}, folder)
+		end
 
-	local arena: Arena = {
-		seed = seed,
-		plazaY = plazaY,
-		center = Vector3.new(0, plazaY, 0),
-		pedestals = corn.pedestals,
-		chestSpots = chestSpots,
-		heightAt = heightAt,
-		folder = folder,
-	}
-	MapService.arena = arena
+		local arena: Arena = {
+			seed = seed,
+			def = def,
+			radius = radius,
+			plazaY = plazaY,
+			center = Vector3.new(0, plazaY, 0),
+			pedestals = corn.pedestals,
+			chestSpots = chestSpots,
+			heightAt = heightAt,
+			folder = folder,
+		}
+		return arena
+	end)
 	MapService.generating = false
-	return arena
+	if not ok then
+		error(result)
+	end
+	MapService.arena = result
+	ReplicatedStorage:SetAttribute("MapId", def.id)
+	ReplicatedStorage:SetAttribute("MapName", def.name)
+	ReplicatedStorage:SetAttribute("MapWeather", def.weather or "")
+	return result
 end
 
 -- Ground height at a point, or the plaza height if no arena exists yet.
@@ -203,7 +238,12 @@ function MapService.groundAt(x: number, z: number): number
 	if arena then
 		return arena.heightAt(x, z)
 	end
-	return TerrainGen.plazaHeight()
+	return 13
+end
+
+function MapService.radius(): number
+	local arena = MapService.arena
+	return if arena then arena.radius else 400
 end
 
 return MapService

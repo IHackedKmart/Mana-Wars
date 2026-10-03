@@ -262,7 +262,7 @@ local function stepProjectile(p: Proj, dt: number)
 	local caster = p.ctx.caster
 	local casterRoot = caster.root
 	local casterPos: Vector3? = nil
-	if casterRoot and casterRoot.Parent and caster.alive then
+	if casterRoot and Combatants.canAct(caster) then
 		casterPos = casterRoot.Position
 	end
 	if s.orbit and not casterPos then

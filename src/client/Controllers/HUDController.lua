@@ -245,7 +245,7 @@ local function buildTop()
 		Parent = root,
 	})
 
-	Widgets.button("📖 Spellbook  [Tab]", {
+	local spellbookButton = Widgets.button("📖 Spellbook  [B]", {
 		size = UDim2.fromOffset(190, 36),
 		position = UDim2.fromOffset(16, 64),
 		color = C.Panel3,
@@ -255,6 +255,18 @@ local function buildTop()
 			end
 		end,
 		parent = combat,
+	})
+	spellbookButton.Name = "SpellbookButton"
+	Widgets.button("📜 Grimoire  [H]", {
+		size = UDim2.fromOffset(190, 36),
+		position = UDim2.fromOffset(16, 106),
+		color = Color3.fromRGB(110, 80, 40),
+		onClick = function()
+			if InputController.onToggleGrimoire then
+				InputController.onToggleGrimoire()
+			end
+		end,
+		parent = root,
 	})
 end
 
@@ -537,10 +549,15 @@ local function updatePhase()
 	bigCount.Visible = false
 	if phase == "Waiting" then
 		phaseTitle.Text = "Waiting for players"
-		phaseSub.Text = "The match starts when someone is ready"
-	elseif phase == "Intermission" then
-		phaseTitle.Text = "Next match in " .. fmtTime(remaining)
-		phaseSub.Text = "Choose your class while you wait"
+		phaseSub.Text = "Practise in the Spell Lab while you wait"
+	elseif phase == "Voting" then
+		phaseTitle.Text = "Map vote  " .. fmtTime(remaining)
+		phaseSub.Text = "Vote on the right · practise on the terrace"
+	elseif phase == "Loading" then
+		phaseTitle.Text = "Building "
+			.. tostring(ReplicatedStorage:GetAttribute("NextMapName") or "the island")
+			.. "..."
+		phaseSub.Text = "The match is about to begin"
 	elseif phase == "Countdown" then
 		phaseTitle.Text = "Get ready!"
 		phaseSub.Text = alive .. " mages on the pedestals"
@@ -568,10 +585,10 @@ local function updatePhase()
 end
 
 local function updateCombat()
-	local alive = State.alive()
-	combat.Visible = alive
-	crosshair.Visible = alive and not State.anyMenuOpen()
-	if not alive then
+	local active = State.canAct()
+	combat.Visible = active
+	crosshair.Visible = active and not State.anyMenuOpen()
+	if not active then
 		stormWarning.Visible = false
 		return
 	end
@@ -608,7 +625,7 @@ local function updateCombat()
 	crosshair.Position = UDim2.fromOffset(screen.X / scale, screen.Y / scale)
 
 	local root3 = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if root3 and ReplicatedStorage:GetAttribute("StormActive") then
+	if root3 and State.alive() and ReplicatedStorage:GetAttribute("StormActive") then
 		local center = ReplicatedStorage:GetAttribute("StormCenter") or Vector3.zero
 		local radius = ReplicatedStorage:GetAttribute("StormRadius") or 1e5
 		local d = Vector3.new(root3.Position.X - center.X, 0, root3.Position.Z - center.Z).Magnitude

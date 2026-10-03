@@ -6,10 +6,11 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local DataService = {}
 
-type Stats = { wins: number, kills: number, matches: number }
+type Stats = { wins: number, kills: number, matches: number, tutorial: boolean }
 
 local cache: { [Player]: Stats } = {}
 local store: DataStore? = nil
@@ -38,7 +39,7 @@ local function leaderstats(player: Player, stats: Stats)
 end
 
 function DataService.load(player: Player)
-	local stats: Stats = { wins = 0, kills = 0, matches = 0 }
+	local stats: Stats = { wins = 0, kills = 0, matches = 0, tutorial = false }
 	if store then
 		local ok, data = pcall(function()
 			return (store :: DataStore):GetAsync(key(player))
@@ -47,10 +48,15 @@ function DataService.load(player: Player)
 			stats.wins = tonumber(data.wins) or 0
 			stats.kills = tonumber(data.kills) or 0
 			stats.matches = tonumber(data.matches) or 0
+			stats.tutorial = data.tutorial == true
 		end
 	end
 	cache[player] = stats
 	leaderstats(player, stats)
+	if stats.tutorial then
+		player:SetAttribute("TutorialDone", true)
+	end
+	player:SetAttribute("StatsLoaded", true)
 end
 
 function DataService.save(player: Player)
@@ -60,7 +66,7 @@ function DataService.save(player: Player)
 	end
 	local ok, err = pcall(function()
 		(store :: DataStore):UpdateAsync(key(player), function()
-			return { wins = stats.wins, kills = stats.kills, matches = stats.matches }
+			return { wins = stats.wins, kills = stats.kills, matches = stats.matches, tutorial = stats.tutorial }
 		end)
 	end)
 	if not ok then
@@ -98,6 +104,14 @@ function DataService.init()
 	else
 		warn("[Data] DataStores unavailable, stats will not be saved: " .. tostring(result))
 	end
+	Remotes.event("TutorialDone").OnServerEvent:Connect(function(player)
+		player:SetAttribute("TutorialDone", true)
+		local stats = cache[player]
+		if stats and not stats.tutorial then
+			stats.tutorial = true
+			task.spawn(DataService.save, player)
+		end
+	end)
 	Players.PlayerRemoving:Connect(function(player)
 		DataService.save(player)
 		cache[player] = nil

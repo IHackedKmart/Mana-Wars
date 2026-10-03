@@ -54,6 +54,21 @@ function State.inMatch(): boolean
 	return player:GetAttribute("InMatch") == true
 end
 
+-- In the lobby Spell Lab (practising on dummies between matches).
+function State.practice(): boolean
+	return player:GetAttribute("Practice") == true and not State.alive()
+end
+
+-- Can cast, open the spellbook and drink potions: alive in a match, or practising in the lobby.
+function State.canAct(): boolean
+	if not (State.alive() or State.practice()) then
+		return false
+	end
+	local character = player.Character
+	local hum = character and character:FindFirstChildOfClass("Humanoid")
+	return hum ~= nil and hum.Health > 0
+end
+
 function State.equippedWand(): Items.WandItem?
 	local inv = State.inventory
 	if not inv then

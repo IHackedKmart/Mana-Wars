@@ -708,6 +708,9 @@ function Mock.realm(services: { [string]: any }, isServer: boolean): Realm
 			elseif key == "SetAttribute" then
 				return function(_, name, value)
 					repAttributes[name] = value
+					if Mock.onAttribute then
+						Mock.onAttribute(name, value)
+					end
 				end
 			elseif key == "GetAttribute" then
 				return function(_, name)
@@ -781,6 +784,7 @@ function Mock.realm(services: { [string]: any }, isServer: boolean): Realm
 end
 
 Mock.repAttributes = {}
+Mock.onAttribute = nil :: ((string, any) -> ())?
 
 ---------------------------------------------------------------------------
 -- Common service mocks

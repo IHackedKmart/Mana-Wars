@@ -1,7 +1,8 @@
 -- The survival-games loop:
---   Waiting -> Intermission (new map is generated) -> Countdown on pedestals
---   -> Grace period (no PvP, go loot!) -> Battle (chest refill, mana storm closes in)
---   -> Ended (winner announced) -> back to the lobby.
+--   Waiting -> Voting (pick the next map in the lobby) -> Loading (the island is built)
+--   -> Countdown on pedestals -> Grace period (no PvP, go loot!)
+--   -> Battle (chest refill, mana storm closes in) -> Ended (winner) -> back to the lobby.
+-- While in the lobby, players practise in the Spell Lab (see PracticeService).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,6 +23,7 @@ local ZoneService = require(script.Parent.ZoneService)
 local ClassService = require(script.Parent.ClassService)
 local DataService = require(script.Parent.DataService)
 local BotService = require(script.Parent.BotService)
+local VoteService = require(script.Parent.VoteService)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -34,7 +36,7 @@ local participants: { Combatant } = {}
 local initialCount = 0
 local initialHumans = 0
 local lobbyReady = false
-local arenaUsed = false
+local lastMapId: string? = nil
 local watched: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 local function now(): number
@@ -54,6 +56,7 @@ local function setPlayerFlags(c: Combatant)
 	if c.player then
 		c.player:SetAttribute("InMatch", c.inMatch)
 		c.player:SetAttribute("Alive", c.alive and c.inMatch)
+		c.player:SetAttribute("Practice", c.practice)
 		c.player:SetAttribute("MatchKills", c.kills)
 	end
 	if c.model then
@@ -92,6 +95,15 @@ local function watchCharacter(c: Combatant, model: Model)
 			onDied(c)
 		end
 	end)
+	-- back in the lobby: hand out the Spell Lab practice kit
+	if c.player and not c.inMatch then
+		c.practice = Config.Practice.Enabled
+		c.status = {}
+		InventoryService.reset(c)
+		if c.practice then
+			InventoryService.givePractice(c)
+		end
+	end
 	StatusService.updateMovement(c)
 	setPlayerFlags(c)
 end
@@ -261,17 +273,14 @@ local function cleanupMatch()
 	ChestService.clear()
 	CastingService.clearCache()
 	for _, c in participants do
-		if c.player and c.player.Parent then
-			-- eliminated players are already back in the lobby (or about to be)
-			local stillInArena = c.alive
+		if c.player and c.player.Parent and c.inMatch then
+			-- (eliminated players are already back in the lobby practising)
 			c.inMatch = false
 			c.alive = false
 			StatusService.clear(c)
 			InventoryService.reset(c)
 			setPlayerFlags(c)
-			if stillInArena then
-				sendToLobby(c)
-			end
+			sendToLobby(c)
 		end
 	end
 	table.clear(participants)
@@ -282,29 +291,35 @@ local function cleanupMatch()
 end
 
 local function runMatch()
-	-- Intermission: build a new arena while everyone waits in the sky lobby
-	GameState.setPhase("Intermission", now() + M.IntermissionTime)
-	FX.announce("Banner", { title = "Match starting soon", subtitle = "Pick your class!" })
-	local mapReady = not arenaUsed
-	if arenaUsed then
-		task.spawn(function()
-			ChestService.clear()
-			local ok, err = pcall(MapService.generate, rng:NextInteger(1, 1e9))
-			if not ok then
-				warn("[Match] map generation failed: " .. tostring(err))
-			end
-			arenaUsed = false
-			mapReady = true
-		end)
-	end
-	local completed = waitPhase(M.IntermissionTime, function()
+	-- Voting: everyone in the lobby picks the next map while practising
+	local closesAt = now() + M.VoteTime
+	VoteService.begin(rng, closesAt, lastMapId)
+	GameState.setPhase("Voting", closesAt)
+	FX.announce(
+		"Banner",
+		{ title = "Vote for the next map!", subtitle = "Pick your class and practise in the Spell Lab" }
+	)
+	local completed = waitPhase(M.VoteTime, function()
 		return not canStart()
 	end)
-	while not mapReady do
-		task.wait(0.2)
+	local def = VoteService.finish(rng)
+	if not completed then
+		return
 	end
+
+	-- Loading: build the winning island
+	GameState.setPhase("Loading", 0)
+	GameState.setPublic("NextMapName", def.name)
+	FX.announce("Banner", { title = def.icon .. "  " .. def.name, subtitle = "won the vote! Building the island..." })
+	ChestService.clear()
+	local generated, err = pcall(MapService.generate, rng:NextInteger(1, 1e9), def)
+	if not generated then
+		warn("[Match] map generation failed: " .. tostring(err))
+		return
+	end
+	lastMapId = def.id
 	local arena = MapService.arena
-	if not completed or not arena then
+	if not arena or not canStart() then
 		return
 	end
 
@@ -338,10 +353,10 @@ local function runMatch()
 		end
 	end
 	initialCount = #participants
-	arenaUsed = true
 
 	-- Place everyone on a pedestal with a fresh inventory and their class kit
 	for i, c in participants do
+		c.practice = false
 		c.inMatch = true
 		c.alive = true
 		c.kills = 0
@@ -365,7 +380,9 @@ local function runMatch()
 	local angle = rng:NextNumber(0, math.pi * 2)
 	local offset = rng:NextNumber(0, 50)
 	GameState.stormCenter = Vector3.new(math.cos(angle) * offset, arena.plazaY, math.sin(angle) * offset)
-	local startRadius = Config.Arena.Radius + 40
+	local startRadius = arena.radius + 40
+	local shrinkTime = M.StormShrinkTime * (arena.radius / 450)
+	local lava = if arena.def.hazard == "Lava" then arena.def.terrain.liquidLevel + 4 else nil
 	GameState.stormRadius = startRadius
 	GameState.setPublic("StormCenter", GameState.stormCenter)
 	GameState.setPublic("StormRadius", startRadius)
@@ -418,7 +435,7 @@ local function runMatch()
 				GameState.setPublic("StormActive", true)
 				FX.announce("Banner", { title = "The Mana Storm is closing in", subtitle = "Stay inside the circle" })
 			end
-			local alpha = math.clamp((elapsed - M.StormStartAt) / M.StormShrinkTime, 0, 1)
+			local alpha = math.clamp((elapsed - M.StormStartAt) / shrinkTime, 0, 1)
 			local radius = startRadius + (M.StormFinalRadius - startRadius) * alpha
 			GameState.stormRadius = radius
 			GameState.setPublic("StormRadius", radius)
@@ -437,10 +454,15 @@ local function runMatch()
 			end
 		end
 
-		-- keep anybody who wandered off the map honest
+		-- keep anybody who wandered off the map honest, and let lava burn
 		for _, c in participants do
-			if c.alive and c.root and (c.root :: BasePart).Position.Y < -40 and c.humanoid then
-				(c.humanoid :: Humanoid).Health = 0
+			if c.alive and c.root and c.humanoid then
+				local y = (c.root :: BasePart).Position.Y
+				if y < -40 then
+					(c.humanoid :: Humanoid).Health = 0
+				elseif lava and y < lava then
+					StatusService.apply(c, { kind = "Burn", dps = 10, duration = 1.5 }, nil)
+				end
 			end
 		end
 
@@ -551,8 +573,13 @@ end
 
 function MatchService.start()
 	lobbyReady = true
-	-- First arena so the island below the lobby is never empty
-	MapService.generate(rng:NextInteger(1, 1e9))
+	-- Build a first island in the background so the view below the lobby is never empty
+	task.spawn(function()
+		local ok, err = pcall(MapService.generate, rng:NextInteger(1, 1e9), MapService.randomDef(rng))
+		if not ok then
+			warn("[Match] map generation failed: " .. tostring(err))
+		end
+	end)
 	task.spawn(function()
 		while true do
 			GameState.setPhase("Waiting", 0)

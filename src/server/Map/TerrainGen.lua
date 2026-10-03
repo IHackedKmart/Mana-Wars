@@ -1,9 +1,13 @@
--- Generates a fresh island arena with Roblox smooth terrain: rolling hills, lakes,
--- a flat plaza in the centre for the cornucopia, and mountains around the edge.
+-- Generates a fresh island arena with Roblox smooth terrain: hills, lakes (water, ice or lava),
+-- a flat plaza in the middle for the cornucopia, and mountains around the edge.
+-- Everything about the look comes from the map definition (see MapDefs).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local MapDefs = require(script.Parent.MapDefs)
+
+type MapDef = MapDefs.MapDef
 
 local TerrainGen = {}
 
@@ -17,59 +21,69 @@ local function smoothstep(e0: number, e1: number, x: number): number
 	return t * t * (3 - 2 * t)
 end
 
--- Returns a deterministic height function for a seed. The same function is used to
+-- Returns a deterministic height function for a seed and map. The same function is used to
 -- place trees, chests and ruins so they always sit on the ground.
-function TerrainGen.makeHeight(seed: number): (number, number) -> number
+function TerrainGen.makeHeight(seed: number, def: MapDef): (number, number) -> number
 	local rng = Random.new(seed)
 	local ox, oz = rng:NextNumber(-5000, 5000), rng:NextNumber(-5000, 5000)
+	local T = def.terrain
 	local flatRadius = A.PedestalRadius + 14
-	local edge = A.Radius - 30
+	local edge = def.radius - 30
+	local plaza = MapDefs.plazaHeight(def)
 	return function(x: number, z: number): number
 		local d = math.sqrt(x * x + z * z)
 		local nx, nz = x + ox, z + oz
-		local n = math.noise(nx / 170, nz / 170, 0.37) * 36
-			+ math.noise(nx / 64, nz / 64, 7.13) * 13
-			+ math.noise(nx / 22, nz / 22, 3.31) * 3
-		local h = A.BaseHeight + n
+		local n = math.noise(nx / T.hillScale, nz / T.hillScale, 0.37) * T.hills
+			+ math.noise(nx / 64, nz / 64, 7.13) * T.detail
+			+ math.noise(nx / 22, nz / 22, 3.31) * T.rough
+		local h = T.base + n
 		-- flatten the middle for the cornucopia plaza
 		local t = smoothstep(flatRadius, flatRadius + 45, d)
-		h = (A.BaseHeight + 1) * (1 - t) + h * t
+		h = plaza * (1 - t) + h * t
 		-- raise mountains around the rim so the island has a natural wall
 		if d > edge then
 			local e = (d - edge) / 60
-			h += e * e * 85 + math.noise(x / 40, z / 40, 9.7) * 12 * math.min(e, 1)
+			h += e * e * T.mountains + math.noise(x / 40, z / 40, 9.7) * 12 * math.min(e, 1)
 		end
 		return h
 	end
 end
 
-function TerrainGen.plazaHeight(): number
-	return A.BaseHeight + 1
-end
-
-local function surfaceMaterial(h: number, slope: number, x: number, z: number): Enum.Material
-	if h < A.WaterLevel + 1.5 then
-		return Enum.Material.Sand
-	elseif h > 78 then
-		return Enum.Material.Snow
-	elseif slope > 1.15 or h > 50 then
-		return Enum.Material.Rock
+local function surfaceMaterial(def: MapDef, h: number, slope: number, x: number, z: number): Enum.Material
+	local m = def.materials
+	local T = def.terrain
+	if h < T.liquidLevel + 1.5 then
+		return m.shore
+	elseif h > T.peakHeight then
+		return m.peak
+	elseif slope > 1.15 or h > T.cliffHeight then
+		return m.cliff
 	end
 	local patch = math.noise(x / 45, z / 45, 2.2)
 	if patch > 0.25 then
-		return Enum.Material.LeafyGrass
+		return m.alt
 	elseif patch < -0.35 then
-		return Enum.Material.Ground
+		return m.alt2
 	end
-	return Enum.Material.Grass
+	return m.surface
 end
 
 -- Writes the terrain. Yields between chunks so the server stays responsive.
-function TerrainGen.generate(heightAt: (number, number) -> number)
+function TerrainGen.generate(heightAt: (number, number) -> number, def: MapDef)
 	local terrain = workspace.Terrain
 	terrain:Clear()
+	for material, color in def.colors do
+		pcall(function()
+			terrain:SetMaterialColor(material, color)
+		end)
+	end
+	terrain.WaterColor = def.water.color
+	terrain.WaterTransparency = def.water.transparency
+	terrain.WaterWaveSize = 0.12
 
-	local R = math.ceil((A.Radius + 96) / RES) * RES
+	local T = def.terrain
+	local surfaceSoil = def.materials.under
+	local R = math.ceil((def.radius + 96) / RES) * RES
 	local cells = (2 * R) // RES
 	local ny = (MAX_Y - MIN_Y) // RES
 
@@ -83,6 +97,9 @@ function TerrainGen.generate(heightAt: (number, number) -> number)
 			row[iz] = heightAt(x, z)
 		end
 		heights[ix] = row
+		if ix % 40 == 0 then
+			task.wait()
+		end
 	end
 
 	local CHUNK = 32
@@ -109,7 +126,7 @@ function TerrainGen.generate(heightAt: (number, number) -> number)
 						math.abs(heights[gx + 1][gz] - heights[gx - 1][gz])
 						+ math.abs(heights[gx][gz + 1] - heights[gx][gz - 1])
 					) / (2 * RES)
-					local surface = surfaceMaterial(h, slope, x, z)
+					local surface = surfaceMaterial(def, h, slope, x, z)
 					for iy = 1, ny do
 						local y0 = MIN_Y + (iy - 1) * RES
 						local fill = math.clamp((h - y0) / RES, 0, 1)
@@ -119,14 +136,14 @@ function TerrainGen.generate(heightAt: (number, number) -> number)
 							local depth = h - (y0 + RES)
 							if depth > 12 then
 								mat = Enum.Material.Rock
-							elseif depth > 3 and surface ~= Enum.Material.Sand and surface ~= Enum.Material.Snow then
-								mat = if surface == Enum.Material.Rock then Enum.Material.Rock else Enum.Material.Ground
+							elseif depth > 3 then
+								mat = if surface == def.materials.cliff then surface else surfaceSoil
 							else
 								mat = surface
 							end
 							occ = fill
-						elseif y0 < A.WaterLevel then
-							mat = Enum.Material.Water
+						elseif y0 < T.liquidLevel then
+							mat = T.liquid
 							occ = 1
 						end
 						matX[iy][iz] = mat

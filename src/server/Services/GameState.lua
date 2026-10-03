@@ -4,7 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameState = {
-	phase = "Waiting", -- Waiting | Intermission | Countdown | Grace | Battle | Ended
+	phase = "Waiting", -- Waiting | Voting | Loading | Countdown | Grace | Battle | Ended
 	pvp = false,
 	matchStartedAt = 0,
 	stormCenter = Vector3.new(0, 0, 0),

@@ -9,7 +9,8 @@ Config.GameName = "Mana Wars"
 Config.Match = {
 	MinPlayers = 2, -- real players needed to start when bots are disabled
 	MaxParticipants = 24, -- one per spawn pedestal
-	IntermissionTime = 25, -- lobby countdown once enough players are present
+	VoteTime = 25, -- map vote in the lobby once enough players are present
+	VoteOptions = 3, -- how many maps are offered in each vote
 	PedestalCountdown = 10, -- frozen on pedestals before the gong
 	GracePeriod = 20, -- seconds of no player-vs-player damage after the gong
 	ChestRefillAt = 240, -- seconds after the gong; classic survival-games refill
@@ -26,7 +27,7 @@ Config.Match = {
 -- Bots fill empty slots so that small servers (and solo testing) still get a real match.
 Config.Bots = {
 	Enabled = true,
-	FillTo = 6, -- total participants (players + bots) the game tries to reach
+	FillTo = 8, -- total participants (players + bots); busy servers need no bots at all
 	MinRealPlayers = 1, -- bots only join if at least this many humans are queued
 	Names = {
 		"Mordwyn",
@@ -45,17 +46,22 @@ Config.Bots = {
 }
 
 -- Arena ------------------------------------------------------------------
+-- Map size, chest counts and decoration live in src/server/Map/MapDefs.lua (one entry per map).
 Config.Arena = {
-	Radius = 300, -- playable radius in studs
 	CornucopiaRadius = 34, -- flat plaza in the middle
 	PedestalRadius = 46,
-	BaseHeight = 12,
-	WaterLevel = 4,
-	TreeCount = 140,
-	RockCount = 70,
-	OuterChestCount = 42,
-	RuinCount = 7,
+	CornucopiaChests = 10,
+	ChestSpacing = 55, -- minimum distance between scattered chests
 	LobbyHeight = 420,
+}
+
+-- Lobby practice ("Spell Lab") ------------------------------------------------
+-- While waiting in the lobby every player gets a sandbox kit to try spells on dummies.
+Config.Practice = {
+	Enabled = true,
+	PartCopies = 3, -- copies of every spell part in the practice kit
+	DummyHealth = 500,
+	DummyRegenDelay = 3, -- seconds after the last hit before a dummy heals back up
 }
 
 -- Combat -----------------------------------------------------------------

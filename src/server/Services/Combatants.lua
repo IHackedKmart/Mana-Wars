@@ -34,6 +34,8 @@ export type Combatant = {
 	lastSpellName: string?,
 	status: { [string]: any },
 	locked: boolean,
+	practice: boolean, -- in the lobby Spell Lab: may cast at dummies, can't be hurt
+	isDummy: boolean, -- a training dummy on the practice terrace
 	bot: { [string]: any }?,
 }
 
@@ -73,6 +75,8 @@ function Combatants.create(name: string, player: Player?): Combatant
 		lastSpellName = nil,
 		status = {},
 		locked = false,
+		practice = false,
+		isDummy = false,
 		bot = nil,
 	}
 	byId[c.id] = c
@@ -155,6 +159,15 @@ function Combatants.isActive(c: Combatant): boolean
 		and c.root ~= nil
 		and c.humanoid.Health > 0
 		and c.root.Parent ~= nil
+end
+
+-- Anyone allowed to cast right now: living match fighters, or players practising in the lobby.
+function Combatants.canAct(c: Combatant): boolean
+	local hum, root = c.humanoid, c.root
+	if not hum or not root or hum.Health <= 0 or root.Parent == nil then
+		return false
+	end
+	return (c.inMatch and c.alive) or c.practice
 end
 
 function Combatants.active(): { Combatant }

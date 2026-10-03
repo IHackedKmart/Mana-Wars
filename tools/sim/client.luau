@@ -3,11 +3,12 @@
 
 		lune run tools/sim/client
 
-	Boots the REAL client (src/client/init.client.lua: HUD, Spellbook, chests, lobby, storm,
-	effects) and the REAL server inventory / casting / chest / class services in one process,
-	connected through fake remotes (tools/sim/mock.luau). It then plays through a match by
-	"clicking" UI buttons: forging a spell in the Spellforge, slotting it into a wand, looting a
-	chest, casting spells with the mouse, picking a class and watching the storm close.
+	Boots the REAL client (src/client/init.client.lua: HUD, Spellbook, Grimoire, tutorial, chests,
+	lobby, map vote, storm, effects) and the REAL server inventory / casting / chest / class / vote
+	services in one process, connected through fake remotes (tools/sim/mock.luau). It then plays
+	through a match by "clicking" UI buttons: forging a spell in the Spellforge, slotting it into a
+	wand, looting a chest, casting spells with the mouse, voting for a map, picking a class, reading
+	the Grimoire and finishing the Spell Lab tutorial on a training dummy.
 	Any runtime error or warning on either side fails the run.
 ]]
 
@@ -79,7 +80,7 @@ local FX = server.load("Server/Services/FX")
 local InventoryService = server.load("Server/Services/InventoryService")
 local ChestService = server.load("Server/Services/ChestService")
 local CastingService = server.load("Server/Services/CastingService")
-local Structures = server.load("Server/Map/Structures")
+local VoteService = server.load("Server/Services/VoteService")
 for _, name in
 	{
 		"StatusService",
@@ -91,6 +92,7 @@ for _, name in
 		"InventoryService",
 		"ChestService",
 		"ClassService",
+		"VoteService",
 	}
 do
 	local module = server.load("Server/Services/" .. name)
@@ -156,6 +158,7 @@ local UIS = {
 		return Enum.UserInputType.MouseMovement
 	end,
 }
+local PromptService = { PromptTriggered = Mock.signal() }
 local client = Mock.realm({
 	RunService = Mock.runService(false),
 	Players = PlayersService,
@@ -168,6 +171,7 @@ local client = Mock.realm({
 		UnbindAction = function() end,
 	},
 	StarterGui = { SetCoreGuiEnabled = function() end },
+	ProximityPromptService = PromptService,
 	SoundService = soundService,
 	Debris = { AddItem = function() end },
 	Lighting = Instance.new("Lighting"),
@@ -181,6 +185,8 @@ local client = Mock.realm({
 client.load("Client") -- runs src/client/init.client.lua
 local State = client.load("Client/Controllers/State")
 local InventoryController = client.load("Client/Controllers/InventoryController")
+local GrimoireController = client.load("Client/Controllers/GrimoireController")
+local TutorialController = client.load("Client/Controllers/TutorialController")
 
 ---------------------------------------------------------------------------
 -- UI helpers
@@ -234,6 +240,27 @@ local function clickNamed(container, name: string)
 	target.Activated:Fire()
 	Mock.step(0.05, true)
 	return true
+end
+
+local function key(code)
+	UIS.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = code }, false)
+	UIS.InputEnded:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = code })
+	Mock.step(0.1, true)
+end
+
+local function holdMouse(seconds: number)
+	UIS.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, KeyCode = Enum.KeyCode.Unknown }, false)
+	Mock.step(seconds, true)
+	UIS.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, KeyCode = Enum.KeyCode.Unknown })
+	Mock.step(0.5, true)
+end
+
+-- a lobby ProximityPrompt (lectern / class altar) being used
+local function usePrompt(action: string)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt:SetAttribute("LobbyAction", action)
+	PromptService.PromptTriggered:Fire(prompt, player)
+	Mock.step(0.1, true)
 end
 
 local reported = 0
@@ -336,10 +363,7 @@ end
 
 -- 6. Equip and cast with the mouse; effects should be drawn and the dummy hurt.
 InventoryService.handle(player, "Equip", { index = 1 })
-UIS.InputBegan:Fire({ UserInputType = Enum.UserInputType.MouseButton1, KeyCode = Enum.KeyCode.Unknown }, false)
-Mock.step(2, true)
-UIS.InputEnded:Fire({ UserInputType = Enum.UserInputType.MouseButton1, KeyCode = Enum.KeyCode.Unknown })
-Mock.step(1, true)
+holdMouse(2)
 checkWarnings("casting")
 check((Mock.remoteCounts["CastRequest"] or 0) > 0, "holding the mouse should send cast requests")
 check((Mock.remoteCounts["FX:Cast"] or 0) > 0, "the server should accept casts")
@@ -348,13 +372,16 @@ check(State.wand ~= nil, "the client should track wand mana")
 local fxFolder = Mock.workspace:FindFirstChild("ClientFX")
 check(fxFolder ~= nil, "client effects folder")
 
--- hotkeys: wand switching, potions, inventory toggle
-UIS.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Two }, false)
-UIS.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Z }, false)
-UIS.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Tab }, false)
-Mock.step(0.2, true)
-UIS.InputBegan:Fire({ UserInputType = Enum.UserInputType.Keyboard, KeyCode = Enum.KeyCode.Tab }, false)
-Mock.step(0.2, true)
+-- hotkeys: wand switching, potions, spellbook toggle. Tab belongs to Roblox's player list,
+-- so it must NOT open the spellbook; B does.
+key(Enum.KeyCode.Two)
+key(Enum.KeyCode.Z)
+key(Enum.KeyCode.Tab)
+check(not InventoryController.isOpen(), "Tab should no longer open the spellbook")
+key(Enum.KeyCode.B)
+check(InventoryController.isOpen() and book.Enabled, "B should open the spellbook")
+key(Enum.KeyCode.B)
+check(not InventoryController.isOpen(), "B should close the spellbook again")
 checkWarnings("hotkeys")
 
 -- 7. Announcements, damage numbers and the storm.
@@ -373,23 +400,168 @@ checkWarnings("announcements and storm")
 local storm = Mock.workspace:FindFirstChild("ClientStorm")
 check(storm and #storm:GetChildren() > 0, "storm wall segments should exist")
 
--- 8. Back in the lobby: pick a class from the class picker.
+-- 8. Back in the lobby: vote for the next map and pick a class at the altar.
 player:SetAttribute("Alive", false)
 player:SetAttribute("InMatch", false)
-GameState.setPhase("Intermission", Mock.clock.t + 20)
-Mock.step(2.5, true)
+me.inMatch = false
+me.alive = false
+local ballot = VoteService.begin(Mock.Random.new(7), Mock.clock.t + 25, "Verdant")
+GameState.setPhase("Voting", Mock.clock.t + 25)
+Mock.step(0.5, true)
 local lobby = gui("Lobby")
-click(lobby, "📖  Class: Apprentice")
+local votePanel = lobby:FindFirstChild("MapVote", true)
+check(votePanel and votePanel.Visible, "the map vote should be on screen")
+check(#ballot == 3, "three maps on the ballot")
+for _, def in ballot do
+	check(def.id ~= "Verdant", "the map just played should not be on the ballot")
+end
+local pick = ballot[2]
+clickNamed(lobby, "Vote_" .. pick.id)
+check(VoteService.payload().counts[pick.id] == 1, "clicking a map card should cast a vote")
+-- changing your mind moves the vote
+clickNamed(lobby, "Vote_" .. ballot[1].id)
+local counts = VoteService.payload().counts
+check(counts[ballot[1].id] == 1 and counts[pick.id] == 0, "a second click should move the vote")
+local winner = VoteService.finish(Mock.Random.new(1))
+check(winner.id == ballot[1].id, "the map with the most votes should win")
+Mock.step(0.2, true)
+check(not votePanel.Visible, "the vote panel should hide when voting closes")
+checkWarnings("map vote")
+
+usePrompt("ClassPicker")
 click(lobby, "Stormcaller")
 checkWarnings("class picker")
 check(player:GetAttribute("Class") == "Stormcaller", "picking a class should update the server")
+click(lobby, "⚡  Class: Stormcaller")
 
 -- 9. Spectating during a match.
 GameState.setPhase("Battle", 0)
 Mock.step(0.2, true)
-click(lobby, "👁  Spectate")
+click(lobby, "👁  Spectate the match")
 Mock.step(1.5, true)
 checkWarnings("spectate")
+
+-- 10. The Grimoire: H toggles it, a lectern opens it, every chapter renders.
+GameState.setPhase("Voting", Mock.clock.t + 25)
+Mock.step(0.5, true)
+key(Enum.KeyCode.H)
+local grimoire = gui("Grimoire")
+check(grimoire and grimoire.Enabled and GrimoireController.isOpen(), "H should open the Grimoire")
+for _, chapterId in
+	{ "Welcome", "Crafting", "Wands", "Forms", "Elements", "Modifiers", "Triggers", "Library", "Classes", "Controls" }
+do
+	clickNamed(grimoire, chapterId)
+	local page = grimoire:FindFirstChild("Page", true)
+	check(page and #page:GetDescendants() > 5, "Grimoire chapter '" .. chapterId .. "' should have content")
+	checkWarnings("grimoire " .. chapterId)
+end
+key(Enum.KeyCode.H)
+check(not grimoire.Enabled, "H should close the Grimoire")
+usePrompt("Grimoire")
+check(grimoire.Enabled, "a lectern should open the Grimoire")
+click(grimoire, "✕")
+check(not grimoire.Enabled, "the ✕ should close the Grimoire")
+
+-- 11. The Spell Lab tutorial, start to finish, on a training dummy.
+me.practice = true
+InventoryService.reset(me)
+InventoryService.givePractice(me)
+player:SetAttribute("Practice", true)
+dummy.isDummy = true
+dummy.humanoid.Health = dummy.humanoid.MaxHealth
+dummyRoot.CFrame = CFrame.new(0, 3, -25)
+Mock.step(0.5, true)
+check(State.practice() and State.canAct(), "the lobby player should be in the Spell Lab")
+check((State.inventory.parts.OnHit or 0) >= 1, "the Spell Lab should hand out every part")
+
+-- start it from the Grimoire's Controls chapter, like a player would
+key(Enum.KeyCode.H)
+clickNamed(grimoire, "Controls")
+click(grimoire, "▶  Replay the tutorial")
+local tutorial = gui("Tutorial")
+check(TutorialController.isRunning() and tutorial.Enabled, "the tutorial should start")
+check(not grimoire.Enabled, "replaying the tutorial should close the Grimoire")
+
+local function tutorialStep(): string
+	for _, inst in tutorial:GetDescendants() do
+		if inst.ClassName == "TextLabel" then
+			local text = textOf(inst)
+			if text and string.match(text, "^Step %d+ of %d+$") then
+				return text
+			end
+		end
+	end
+	return "?"
+end
+local function expectStep(n: number, what: string)
+	Mock.step(0.1, true)
+	local text = tutorialStep()
+	check(
+		string.match(text, "^Step " .. n .. " of"),
+		"tutorial should be on step " .. n .. " (" .. what .. "), got " .. text
+	)
+end
+local function glowingOn(name: string): boolean
+	local target = playerGui:FindFirstChild(name, true)
+	return target ~= nil and target:FindFirstChild("TutorialGlow") ~= nil
+end
+
+expectStep(1, "welcome")
+click(tutorial, "Next")
+expectStep(2, "open the spellbook")
+Mock.step(0.1, true)
+check(glowingOn("SpellbookButton"), "the Spellbook button should glow")
+key(Enum.KeyCode.B)
+expectStep(3, "form")
+check(glowingOn("Part_Bolt"), "the Bolt part should glow")
+clickNamed(book, "Part_Bolt")
+expectStep(4, "element")
+clickNamed(book, "Part_Fire")
+expectStep(5, "modifier")
+clickNamed(book, "Part_Explosive")
+expectStep(6, "forge")
+check(glowingOn("ForgeButton"), "the Forge button should glow")
+click(book, "Forge Spell")
+expectStep(7, "slot it")
+check(glowingOn("Slot_1_2"), "the empty wand slot should glow")
+clickNamed(book, "Slot_1_2")
+expectStep(8, "hit a dummy")
+local tutorialSpell = me.inventory.wands[1].slots[2]
+check(tutorialSpell and tutorialSpell.name == "Bursting Ember Bolt", "the forged spell should be in the staff")
+key(Enum.KeyCode.B)
+check(not InventoryController.isOpen(), "B should close the spellbook")
+InventoryService.handle(player, "Equip", { index = 1 })
+local dummyBefore = dummy.humanoid.Health
+holdMouse(2)
+check(dummy.humanoid.Health < dummyBefore, "practice spells should hurt the training dummy")
+check(dummy.humanoid.Health >= 1, "training dummies never die")
+expectStep(9, "trigger + payload")
+key(Enum.KeyCode.B)
+clickNamed(book, "Part_Bolt")
+clickNamed(book, "Part_OnHit")
+local showcase = nil
+for _, spell in me.inventory.spells do
+	if spell.name == "Fireball" then
+		showcase = spell
+	end
+end
+check(showcase ~= nil, "the Spell Lab bag should have showcase spells")
+if showcase then
+	clickNamed(book, "Spell_" .. showcase.uid)
+	click(book, "Use as payload")
+end
+click(book, "Forge Spell")
+checkWarnings("tutorial forge with payload")
+expectStep(10, "done")
+click(tutorial, "Let's go!")
+check(not TutorialController.isRunning() and not tutorial.Enabled, "the tutorial should close at the end")
+check((Mock.remoteCounts["TutorialDone"] or 0) >= 1, "finishing the tutorial should tell the server")
+
+-- the restock button refills the Spell Lab
+click(book, "♻ Restock Spell Lab")
+check((me.inventory.parts.Explosive or 0) == 3, "restocking should refill the parts")
+key(Enum.KeyCode.B)
+checkWarnings("tutorial")
 
 if failures > 0 then
 	print(failures .. " failure(s)")

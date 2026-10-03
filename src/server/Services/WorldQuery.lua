@@ -16,13 +16,10 @@ worldParams.IgnoreWater = true
 worldParams.RespectCanCollide = true
 
 -- Call once per frame (cheap) so new characters are excluded from world casts.
+-- (The lobby is solid too: Spell Lab spells splash against the library walls.
+-- Its invisible barriers have CanQuery off, so spells pass through those.)
 function WorldQuery.refresh()
-	local list: { Instance } = table.clone(Combatants.models()) :: { any }
-	local lobby = workspace:FindFirstChild("Lobby")
-	if lobby then
-		table.insert(list, lobby)
-	end
-	worldParams.FilterDescendantsInstances = list
+	worldParams.FilterDescendantsInstances = table.clone(Combatants.models()) :: { any }
 end
 
 function WorldQuery.raycast(origin: Vector3, delta: Vector3): RaycastResult?

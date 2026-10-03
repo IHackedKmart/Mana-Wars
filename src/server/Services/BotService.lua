@@ -215,7 +215,7 @@ end
 
 local function pickWander(): Vector3
 	local center = GameState.stormCenter
-	local radius = math.min(GameState.stormRadius * 0.7, Config.Arena.Radius * 0.7)
+	local radius = math.min(GameState.stormRadius * 0.7, MapService.radius() * 0.7)
 	local angle = rng:NextNumber(0, math.pi * 2)
 	local dist = rng:NextNumber(0, radius)
 	local x = center.X + math.cos(angle) * dist

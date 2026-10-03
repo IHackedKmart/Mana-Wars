@@ -15,6 +15,9 @@ local InventoryController = require(Controllers.InventoryController)
 local ChestController = require(Controllers.ChestController)
 local LobbyController = require(Controllers.LobbyController)
 local StormController = require(Controllers.StormController)
+local GrimoireController = require(Controllers.GrimoireController)
+local TutorialController = require(Controllers.TutorialController)
+local AmbienceController = require(Controllers.AmbienceController)
 
 State.init()
 Widgets.initTooltip()
@@ -25,7 +28,15 @@ InventoryController.init()
 ChestController.init()
 LobbyController.init()
 StormController.init()
+GrimoireController.init()
+TutorialController.init()
+AmbienceController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
+InputController.onToggleGrimoire = GrimoireController.toggle
+LobbyController.onOpenGrimoire = function()
+	GrimoireController.open()
+end
+GrimoireController.onReplayTutorial = TutorialController.start
 
 print("[Mana Wars] client ready")

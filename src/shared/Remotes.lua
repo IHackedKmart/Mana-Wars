@@ -15,6 +15,8 @@ local EVENTS = {
 	"ChestContents", -- server -> client: (chestId, title, entries | nil)
 	"Announce", -- server -> client: (kind: string, data)
 	"Knockback", -- server -> client: (velocity: Vector3)
+	"VoteState", -- server -> client: (vote payload)
+	"TutorialDone", -- client -> server: the player finished (or skipped) the tutorial
 }
 
 local UNRELIABLE = {
@@ -26,6 +28,7 @@ local FUNCTIONS = {
 	"InventoryAction", -- (action: string, args: table) -> (ok, message, extra)
 	"ChestAction", -- (action: string, chestId: string, index: number?) -> (ok, message)
 	"ClassAction", -- (action: string, classId: string?) -> (ok, message)
+	"VoteAction", -- (action: "Vote", mapId: string) -> (ok, message)
 }
 
 local folder: Folder

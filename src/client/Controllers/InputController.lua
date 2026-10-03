@@ -1,7 +1,8 @@
 -- Casting and hotkeys.
---   PC:      hold Left Mouse to cast at the cursor, 1-4 wands, Tab/B spellbook, Z/X/C/V potions
+--   PC:      hold Left Mouse to cast at the cursor, 1-4 wands, B spellbook, H grimoire, Z/X/C/V potions
+--            (Tab is left alone: Roblox uses it for the player list)
 --   Mobile:  on-screen Cast button (aims at screen centre), tap the hotbar to switch wands
---   Gamepad: R2 cast, L1/R1 switch wands, ButtonY spellbook
+--   Gamepad: R2 cast, L1/R1 switch wands, Y spellbook
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -18,6 +19,7 @@ local State = require(script.Parent.State)
 local InputController = {}
 
 InputController.onToggleInventory = nil :: (() -> ())?
+InputController.onToggleGrimoire = nil :: (() -> ())?
 
 local player = Players.LocalPlayer
 local castRemote = Remotes.event("CastRequest")
@@ -80,21 +82,19 @@ function InputController.aimPoint(): Vector3
 end
 
 local function canCast(): boolean
-	if not State.alive() or State.anyMenuOpen() then
+	if not State.canAct() or State.anyMenuOpen() then
 		return false
+	end
+	if State.practice() then
+		return true
 	end
 	local phase = State.phase()
-	if phase ~= "Grace" and phase ~= "Battle" then
-		return false
-	end
-	local character = player.Character
-	local hum = character and character:FindFirstChildOfClass("Humanoid")
-	return hum ~= nil and hum.Health > 0
+	return phase == "Grace" or phase == "Battle"
 end
 
 function InputController.equip(index: number)
 	local inv = State.inventory
-	if not inv or not inv.wands[index] or not State.alive() then
+	if not inv or not inv.wands[index] or not State.canAct() then
 		return
 	end
 	if inv.equipped ~= index then
@@ -119,7 +119,7 @@ function InputController.cycle(step: number)
 end
 
 function InputController.usePotion(id: string)
-	if State.alive() then
+	if State.canAct() then
 		potionRemote:FireServer(id)
 	end
 end
@@ -160,7 +160,7 @@ local function step()
 	end
 
 	-- custom crosshair replaces the mouse cursor while fighting
-	local fighting = State.alive() and not State.anyMenuOpen()
+	local fighting = State.canAct() and not State.anyMenuOpen()
 	UserInputService.MouseIconEnabled = not fighting or usesCenterAim()
 end
 
@@ -182,12 +182,12 @@ function InputController.init()
 		local wand = KEY_WANDS[input.KeyCode]
 		if wand then
 			InputController.equip(wand)
-		elseif
-			input.KeyCode == Enum.KeyCode.Tab
-			or input.KeyCode == Enum.KeyCode.B
-			or input.KeyCode == Enum.KeyCode.ButtonY
-		then
+		elseif input.KeyCode == Enum.KeyCode.B or input.KeyCode == Enum.KeyCode.ButtonY then
 			toggleInventory()
+		elseif input.KeyCode == Enum.KeyCode.H then
+			if InputController.onToggleGrimoire then
+				InputController.onToggleGrimoire()
+			end
 		elseif input.KeyCode == Enum.KeyCode.ButtonR1 or input.KeyCode == Enum.KeyCode.Q then
 			InputController.cycle(1)
 		elseif input.KeyCode == Enum.KeyCode.ButtonL1 then

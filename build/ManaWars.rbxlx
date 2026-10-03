@@ -408,7 +408,8 @@ Config.GameName = "Mana Wars"
 Config.Match = {
 	MinPlayers = 2, -- real players needed to start when bots are disabled
 	MaxParticipants = 24, -- one per spawn pedestal
-	IntermissionTime = 25, -- lobby countdown once enough players are present
+	VoteTime = 25, -- map vote in the lobby once enough players are present
+	VoteOptions = 3, -- how many maps are offered in each vote
 	PedestalCountdown = 10, -- frozen on pedestals before the gong
 	GracePeriod = 20, -- seconds of no player-vs-player damage after the gong
 	ChestRefillAt = 240, -- seconds after the gong; classic survival-games refill
@@ -425,7 +426,7 @@ Config.Match = {
 -- Bots fill empty slots so that small servers (and solo testing) still get a real match.
 Config.Bots = {
 	Enabled = true,
-	FillTo = 6, -- total participants (players + bots) the game tries to reach
+	FillTo = 8, -- total participants (players + bots); busy servers need no bots at all
 	MinRealPlayers = 1, -- bots only join if at least this many humans are queued
 	Names = {
 		"Mordwyn",
@@ -444,17 +445,22 @@ Config.Bots = {
 }
 
 -- Arena ------------------------------------------------------------------
+-- Map size, chest counts and decoration live in src/server/Map/MapDefs.lua (one entry per map).
 Config.Arena = {
-	Radius = 300, -- playable radius in studs
 	CornucopiaRadius = 34, -- flat plaza in the middle
 	PedestalRadius = 46,
-	BaseHeight = 12,
-	WaterLevel = 4,
-	TreeCount = 140,
-	RockCount = 70,
-	OuterChestCount = 42,
-	RuinCount = 7,
+	CornucopiaChests = 10,
+	ChestSpacing = 55, -- minimum distance between scattered chests
 	LobbyHeight = 420,
+}
+
+-- Lobby practice ("Spell Lab") ------------------------------------------------
+-- While waiting in the lobby every player gets a sandbox kit to try spells on dummies.
+Config.Practice = {
+	Enabled = true,
+	PartCopies = 3, -- copies of every spell part in the practice kit
+	DummyHealth = 500,
+	DummyRegenDelay = 3, -- seconds after the last hit before a dummy heals back up
 }
 
 -- Combat -----------------------------------------------------------------
@@ -1186,6 +1192,8 @@ local EVENTS = {
 	"ChestContents", -- server -> client: (chestId, title, entries | nil)
 	"Announce", -- server -> client: (kind: string, data)
 	"Knockback", -- server -> client: (velocity: Vector3)
+	"VoteState", -- server -> client: (vote payload)
+	"TutorialDone", -- client -> server: the player finished (or skipped) the tutorial
 }
 
 local UNRELIABLE = {
@@ -1197,6 +1205,7 @@ local FUNCTIONS = {
 	"InventoryAction", -- (action: string, args: table) -> (ok, message, extra)
 	"ChestAction", -- (action: string, chestId: string, index: number?) -> (ok, message)
 	"ClassAction", -- (action: string, classId: string?) -> (ok, message)
+	"VoteAction", -- (action: "Vote", mapId: string) -> (ok, message)
 }
 
 local folder: Folder
@@ -3649,6 +3658,8 @@ local order = {
 	"InventoryService",
 	"ChestService",
 	"ClassService",
+	"PracticeService",
+	"VoteService",
 	"BotService",
 	"MatchService",
 }
@@ -3757,8 +3768,11 @@ return Build
         <Item class="ModuleScript" referent="26">
           <Properties>
             <string name="Name">Lobby</string>
-            <string name="Source"><![CDATA[-- The floating Sky Sanctum where players wait between matches. It hovers above the
--- arena with a glass floor in the middle so you can watch the island below.
+            <string name="Source"><![CDATA[-- The Arcane Athenaeum: a floating library where players wait between matches.
+--   * bookshelf walls, marble columns, chandeliers and a rotating orrery (animated on the client)
+--   * a glass "scrying window" in the floor looking down at the arena below
+--   * Grimoire lecterns (open the encyclopedia) and a class altar (open the class picker)
+--   * through the north arch: the open-air Practice Terrace with training dummies
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -3767,177 +3781,830 @@ local Build = require(script.Parent.Build)
 
 local Lobby = {}
 
-local SIZE = 150
-local GLASS = 34
+local M = Enum.Material
 
-function Lobby.build(): (Model, CFrame)
-	local existing = workspace:FindFirstChild("Lobby")
-	if existing then
-		existing:Destroy()
+export type LobbyInfo = {
+	model: Model,
+	spawn: CFrame,
+	dummySpots: { CFrame },
+	floorY: number,
+}
+
+-- Library footprint
+local X0, X1 = -80, 80
+local Z0, Z1 = -60, 60
+local WALL_H = 44
+local WALL_T = 4
+local HOLE = 28 -- scrying window
+local SKYLIGHT = 40
+local ARCH_HALF = 14
+local ARCH_H = 26
+-- Terrace footprint (north of the library)
+local TX0, TX1 = -60, 60
+local TZ0 = -150
+
+local BOOK_COLORS = {
+	Color3.fromRGB(140, 30, 40),
+	Color3.fromRGB(40, 70, 140),
+	Color3.fromRGB(40, 110, 60),
+	Color3.fromRGB(120, 80, 30),
+	Color3.fromRGB(90, 40, 120),
+	Color3.fromRGB(170, 140, 60),
+	Color3.fromRGB(60, 60, 70),
+	Color3.fromRGB(150, 70, 40),
+}
+local WOOD = Color3.fromRGB(92, 62, 40)
+local DARK_WOOD = Color3.fromRGB(62, 42, 30)
+local STONE = Color3.fromRGB(104, 94, 108)
+local MARBLE = Color3.fromRGB(226, 220, 210)
+local GOLD = Color3.fromRGB(212, 175, 55)
+local ARCANE = Color3.fromRGB(165, 115, 255)
+local CANDLE = Color3.fromRGB(255, 200, 120)
+
+local function part(
+	parent: Instance,
+	name: string,
+	size: Vector3,
+	cf: CFrame,
+	material: Enum.Material,
+	color: Color3,
+	extra: { [string]: any }?
+): Part
+	local props: { [string]: any } = { Name = name, Size = size, CFrame = cf, Material = material, Color = color }
+	if extra then
+		for k, v in extra do
+			props[k] = v
+		end
 	end
-	local y = Config.Arena.LobbyHeight
-	local model = Build.model("Lobby", workspace)
+	return Build.part(props, parent)
+end
 
-	local floorColor = Color3.fromRGB(70, 65, 85)
-	local half = SIZE / 2
-	local strip = (SIZE - GLASS) / 2
-	-- four floor slabs around a glass window
-	Build.part({
-		Name = "Floor",
-		Size = Vector3.new(SIZE, 4, strip),
-		CFrame = CFrame.new(0, y - 2, -(GLASS / 2 + strip / 2)),
-		Material = Enum.Material.Slate,
-		Color = floorColor,
-	}, model)
-	Build.part({
-		Name = "Floor",
-		Size = Vector3.new(SIZE, 4, strip),
-		CFrame = CFrame.new(0, y - 2, GLASS / 2 + strip / 2),
-		Material = Enum.Material.Slate,
-		Color = floorColor,
-	}, model)
-	Build.part({
-		Name = "Floor",
-		Size = Vector3.new(strip, 4, GLASS),
-		CFrame = CFrame.new(-(GLASS / 2 + strip / 2), y - 2, 0),
-		Material = Enum.Material.Slate,
-		Color = floorColor,
-	}, model)
-	Build.part({
-		Name = "Floor",
-		Size = Vector3.new(strip, 4, GLASS),
-		CFrame = CFrame.new(GLASS / 2 + strip / 2, y - 2, 0),
-		Material = Enum.Material.Slate,
-		Color = floorColor,
-	}, model)
-	Build.part({
-		Name = "Window",
-		Size = Vector3.new(GLASS, 1, GLASS),
-		CFrame = CFrame.new(0, y - 0.5, 0),
-		Material = Enum.Material.Glass,
-		Color = Color3.fromRGB(180, 210, 255),
-		Transparency = 0.65,
-	}, model)
-	Build.part({
-		Name = "WindowRim",
-		Size = Vector3.new(GLASS + 2, 0.4, GLASS + 2),
-		CFrame = CFrame.new(0, y - 0.15, 0),
-		Material = Enum.Material.Neon,
-		Color = Color3.fromRGB(150, 100, 255),
-		Transparency = 0.6,
+-- A slab with a rectangular hole in the middle, built from four pieces.
+local function holedSlab(
+	parent: Instance,
+	name: string,
+	cx: number,
+	cz: number,
+	w: number,
+	d: number,
+	hole: number,
+	y: number,
+	thick: number,
+	material: Enum.Material,
+	color: Color3
+)
+	local sideW = (w - hole) / 2
+	local sideD = (d - hole) / 2
+	part(parent, name, Vector3.new(w, thick, sideD), CFrame.new(cx, y, cz - hole / 2 - sideD / 2), material, color)
+	part(parent, name, Vector3.new(w, thick, sideD), CFrame.new(cx, y, cz + hole / 2 + sideD / 2), material, color)
+	part(parent, name, Vector3.new(sideW, thick, hole), CFrame.new(cx - hole / 2 - sideW / 2, y, cz), material, color)
+	part(parent, name, Vector3.new(sideW, thick, hole), CFrame.new(cx + hole / 2 + sideW / 2, y, cz), material, color)
+end
+
+-- A bookshelf whose front faces along `cf.LookVector`; `cf` sits on the floor at the shelf's centre.
+local function bookshelf(parent: Instance, cf: CFrame, width: number, height: number, rng: Random)
+	local model = Build.model("Bookshelf", parent)
+	local depth = 2.6
+	part(
+		model,
+		"Back",
+		Vector3.new(width, height, 0.5),
+		cf * CFrame.new(0, height / 2, depth / 2 - 0.25),
+		M.WoodPlanks,
+		DARK_WOOD
+	)
+	part(
+		model,
+		"Side",
+		Vector3.new(0.6, height, depth),
+		cf * CFrame.new(-width / 2 + 0.3, height / 2, 0),
+		M.WoodPlanks,
+		WOOD
+	)
+	part(
+		model,
+		"Side",
+		Vector3.new(0.6, height, depth),
+		cf * CFrame.new(width / 2 - 0.3, height / 2, 0),
+		M.WoodPlanks,
+		WOOD
+	)
+	part(
+		model,
+		"Top",
+		Vector3.new(width + 0.4, 0.6, depth + 0.3),
+		cf * CFrame.new(0, height + 0.3, 0),
+		M.WoodPlanks,
+		WOOD
+	)
+	local rows = 5
+	local rowH = height / rows
+	for r = 0, rows - 1 do
+		local y = r * rowH
+		part(
+			model,
+			"Shelf",
+			Vector3.new(width - 1.2, 0.3, depth - 0.4),
+			cf * CFrame.new(0, y + 0.15, 0),
+			M.WoodPlanks,
+			WOOD
+		)
+		-- clusters of books of different heights
+		local x = -width / 2 + 0.8
+		local limit = width / 2 - 0.8
+		while x < limit - 0.6 do
+			local w = math.min(rng:NextNumber(1.2, 2.6), limit - x)
+			if rng:NextNumber() < 0.85 then
+				local h = rng:NextNumber(rowH * 0.55, rowH * 0.85)
+				local lean = if rng:NextNumber() < 0.12
+					then CFrame.Angles(0, 0, math.rad(rng:NextNumber(-12, 12)))
+					else CFrame.identity
+				part(
+					model,
+					"Books",
+					Vector3.new(w, h, depth - 0.8),
+					cf * CFrame.new(x + w / 2, y + 0.3 + h / 2, -0.1) * lean,
+					M.SmoothPlastic,
+					BOOK_COLORS[rng:NextInteger(1, #BOOK_COLORS)]
+				)
+			end
+			x += w + rng:NextNumber(0.05, 0.4)
+		end
+	end
+end
+
+local function column(parent: Instance, x: number, z: number, y: number)
+	part(parent, "Column", Vector3.new(5, WALL_H, 5), CFrame.new(x, y + WALL_H / 2, z), M.Marble, MARBLE)
+	part(
+		parent,
+		"ColumnBase",
+		Vector3.new(6.5, 2, 6.5),
+		CFrame.new(x, y + 1, z),
+		M.Marble,
+		MARBLE:Lerp(Color3.new(0, 0, 0), 0.1)
+	)
+	part(parent, "Capital", Vector3.new(6.5, 2, 6.5), CFrame.new(x, y + WALL_H - 1, z), M.Metal, GOLD)
+end
+
+local function chandelier(parent: Instance, center: Vector3, ceilingY: number)
+	local model = Build.model("Chandelier", parent)
+	part(
+		model,
+		"Chain",
+		Vector3.new(0.3, ceilingY - center.Y, 0.3),
+		CFrame.new(center.X, (ceilingY + center.Y) / 2, center.Z),
+		M.Metal,
+		Color3.fromRGB(50, 45, 40)
+	)
+	local core = part(
+		model,
+		"Core",
+		Vector3.new(2, 2, 2),
+		CFrame.new(center),
+		M.Neon,
+		CANDLE,
+		{ Shape = Enum.PartType.Ball, CanCollide = false }
+	)
+	Build.make("PointLight", { Color = CANDLE, Range = 48, Brightness = 1.7, Shadows = true }, core)
+	local n = 10
+	for i = 1, n do
+		local a = (i / n) * math.pi * 2
+		local p = center + Vector3.new(math.cos(a) * 5, -1, math.sin(a) * 5)
+		part(
+			model,
+			"Ring",
+			Vector3.new(3.4, 0.4, 0.5),
+			CFrame.lookAt(p, center) * CFrame.Angles(0, math.rad(90), 0),
+			M.Metal,
+			Color3.fromRGB(60, 52, 44)
+		)
+		part(
+			model,
+			"Candle",
+			Vector3.new(0.4, 1.2, 0.4),
+			CFrame.new(p + Vector3.new(0, 0.8, 0)),
+			M.SmoothPlastic,
+			Color3.fromRGB(240, 230, 210),
+			{ CanCollide = false }
+		)
+		part(
+			model,
+			"Flame",
+			Vector3.new(0.3, 0.5, 0.3),
+			CFrame.new(p + Vector3.new(0, 1.65, 0)),
+			M.Neon,
+			CANDLE,
+			{ CanCollide = false }
+		)
+	end
+end
+
+-- An orrery: three tilted rings of beads around a glowing core. The client spins the rings.
+local function orrery(parent: Instance, center: Vector3)
+	local animated = Build.make("Folder", { Name = "Animated" }, parent)
+	local core = part(
+		animated,
+		"OrreryCore",
+		Vector3.new(5, 5, 5),
+		CFrame.new(center),
+		M.Neon,
+		ARCANE,
+		{ Shape = Enum.PartType.Ball, CanCollide = false }
+	)
+	Build.make("PointLight", { Color = ARCANE, Range = 40, Brightness = 2.5 }, core)
+	Build.make("ParticleEmitter", {
+		Color = ColorSequence.new(Color3.fromRGB(210, 180, 255)),
+		LightEmission = 1,
+		Size = NumberSequence.new(0.5, 0),
+		Lifetime = NumberRange.new(1, 2),
+		Rate = 15,
+		Speed = NumberRange.new(1, 3),
+		SpreadAngle = Vector2.new(180, 180),
+	}, core)
+	local rings = {
+		{ radius = 7, tilt = CFrame.Angles(math.rad(70), 0, 0), speed = 0.6, color = GOLD },
+		{
+			radius = 10.5,
+			tilt = CFrame.Angles(math.rad(20), 0, math.rad(35)),
+			speed = -0.4,
+			color = Color3.fromRGB(180, 200, 255),
+		},
+		{ radius = 14, tilt = CFrame.Angles(math.rad(-30), 0, math.rad(-20)), speed = 0.25, color = GOLD },
+	}
+	for i, ring in rings do
+		local model = Build.model("OrreryRing" .. i, animated)
+		model:SetAttribute("Spin", ring.speed)
+		local beads = 24
+		local base = CFrame.new(center) * ring.tilt
+		for b = 1, beads do
+			local a = (b / beads) * math.pi * 2
+			local p = (base * CFrame.new(math.cos(a) * ring.radius, 0, math.sin(a) * ring.radius)).Position
+			part(
+				model,
+				"Bead",
+				Vector3.new(0.6, 0.6, 0.6),
+				CFrame.new(p),
+				M.Metal,
+				ring.color,
+				{ CanCollide = false, CanQuery = false }
+			)
+		end
+		local planet = (base * CFrame.new(ring.radius, 0, 0)).Position
+		part(
+			model,
+			"Planet",
+			Vector3.new(1.6, 1.6, 1.6),
+			CFrame.new(planet),
+			M.Neon,
+			Color3.fromHSV(i * 0.27, 0.5, 1),
+			{
+				Shape = Enum.PartType.Ball,
+				CanCollide = false,
+				CanQuery = false,
+			}
+		)
+	end
+	return animated
+end
+
+local function floatingBooks(animated: Instance, center: Vector3, rng: Random)
+	for i = 1, 12 do
+		local a = (i / 12) * math.pi * 2 + rng:NextNumber(-0.2, 0.2)
+		local r = rng:NextNumber(20, 30)
+		local p = center + Vector3.new(math.cos(a) * r, rng:NextNumber(-6, 6), math.sin(a) * r)
+		local model = Build.model("FloatingBook", animated)
+		model:SetAttribute("Bob", rng:NextNumber(0, math.pi * 2))
+		local cf = CFrame.new(p)
+			* CFrame.Angles(rng:NextNumber(-0.4, 0.4), rng:NextNumber(0, 6), rng:NextNumber(-0.4, 0.4))
+		part(
+			model,
+			"Cover",
+			Vector3.new(2.2, 0.4, 3),
+			cf,
+			M.SmoothPlastic,
+			BOOK_COLORS[rng:NextInteger(1, #BOOK_COLORS)],
+			{
+				CanCollide = false,
+				CanQuery = false,
+			}
+		)
+		local pages =
+			part(model, "Pages", Vector3.new(2, 0.42, 2.8), cf, M.SmoothPlastic, Color3.fromRGB(245, 238, 220), {
+				CanCollide = false,
+				CanQuery = false,
+			})
+		Build.make("Sparkles", { SparkleColor = Color3.fromRGB(220, 200, 255) }, pages)
+	end
+end
+
+local function lectern(parent: Instance, pos: Vector3, facing: Vector3)
+	local model = Build.model("Lectern", parent)
+	local cf = CFrame.lookAt(pos, pos + facing)
+	part(model, "Stand", Vector3.new(1.4, 3.6, 1.4), cf * CFrame.new(0, 1.8, 0), M.WoodPlanks, WOOD)
+	part(model, "Foot", Vector3.new(3, 0.4, 3), cf * CFrame.new(0, 0.2, 0), M.WoodPlanks, DARK_WOOD)
+	local desk = part(
+		model,
+		"Desk",
+		Vector3.new(3.2, 0.3, 2.4),
+		cf * CFrame.new(0, 3.8, 0) * CFrame.Angles(math.rad(-20), 0, 0),
+		M.WoodPlanks,
+		WOOD
+	)
+	for side = -1, 1, 2 do
+		part(
+			model,
+			"Page",
+			Vector3.new(1.35, 0.12, 1.8),
+			desk.CFrame * CFrame.new(side * 0.72, 0.22, 0) * CFrame.Angles(0, 0, math.rad(side * -6)),
+			M.SmoothPlastic,
+			Color3.fromRGB(248, 240, 220)
+		)
+	end
+	local glow = part(model, "Glow", Vector3.new(0.5, 0.5, 0.5), desk.CFrame * CFrame.new(0, 1.2, 0), M.Neon, ARCANE, {
+		Shape = Enum.PartType.Ball,
 		CanCollide = false,
-	}, model)
+	})
+	Build.make("PointLight", { Color = ARCANE, Range = 10, Brightness = 1.5 }, glow)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Read"
+	prompt.ObjectText = "The Grimoire"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 9
+	prompt.RequiresLineOfSight = false
+	prompt:SetAttribute("LobbyAction", "Grimoire")
+	prompt.Parent = desk
+end
 
-	-- decorative low walls + invisible containment
-	for _, side in { Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0), Vector3.new(0, 0, 1), Vector3.new(0, 0, -1) } do
-		local alongX = side.Z ~= 0
-		local size = if alongX then Vector3.new(SIZE, 3, 2) else Vector3.new(2, 3, SIZE)
-		Build.part({
-			Name = "Wall",
-			Size = size,
-			CFrame = CFrame.new(side * (half - 1) + Vector3.new(0, y + 1.5, 0)),
-			Material = Enum.Material.Marble,
-			Color = Color3.fromRGB(220, 215, 205),
-		}, model)
-		local barrier = if alongX then Vector3.new(SIZE, 80, 2) else Vector3.new(2, 80, SIZE)
-		Build.part({
-			Name = "Barrier",
-			Size = barrier,
-			CFrame = CFrame.new(side * (half + 1) + Vector3.new(0, y + 40, 0)),
-			Transparency = 1,
-			CanQuery = false,
-		}, model)
+local function readingTable(parent: Instance, center: Vector3, rng: Random)
+	local model = Build.model("ReadingTable", parent)
+	part(model, "Top", Vector3.new(18, 0.8, 6), CFrame.new(center + Vector3.new(0, 3.2, 0)), M.WoodPlanks, WOOD)
+	for _, o in { Vector3.new(-8, 0, -2.4), Vector3.new(8, 0, -2.4), Vector3.new(-8, 0, 2.4), Vector3.new(8, 0, 2.4) } do
+		part(
+			model,
+			"Leg",
+			Vector3.new(0.8, 3, 0.8),
+			CFrame.new(center + o + Vector3.new(0, 1.5, 0)),
+			M.WoodPlanks,
+			DARK_WOOD
+		)
 	end
-	Build.part({
-		Name = "Ceiling",
-		Size = Vector3.new(SIZE, 2, SIZE),
-		CFrame = CFrame.new(0, y + 80, 0),
-		Transparency = 1,
-		CanQuery = false,
-	}, model)
-
-	-- crystal pillars in the corners
-	for _, c in { Vector3.new(1, 0, 1), Vector3.new(-1, 0, 1), Vector3.new(1, 0, -1), Vector3.new(-1, 0, -1) } do
-		local base = c * (half - 12)
-		Build.part({
-			Name = "Pillar",
-			Size = Vector3.new(4, 14, 4),
-			CFrame = CFrame.new(base + Vector3.new(0, y + 7, 0)),
-			Material = Enum.Material.Marble,
-			Color = Color3.fromRGB(230, 225, 215),
-		}, model)
-		local crystal = Build.part({
-			Name = "Crystal",
-			Size = Vector3.new(3, 6, 3),
-			CFrame = CFrame.new(base + Vector3.new(0, y + 18, 0)) * CFrame.Angles(0, math.rad(45), 0),
-			Material = Enum.Material.Neon,
-			Color = Color3.fromRGB(160, 110, 255),
-			CanCollide = false,
-		}, model)
-		Build.make("PointLight", { Color = crystal.Color, Range = 30, Brightness = 2 }, crystal)
+	for i = -1, 1 do
+		for side = -1, 1, 2 do
+			part(
+				model,
+				"Chair",
+				Vector3.new(2.4, 1.8, 2.4),
+				CFrame.new(center + Vector3.new(i * 5.5, 0.9, side * 5)),
+				M.WoodPlanks,
+				DARK_WOOD
+			)
+			part(
+				model,
+				"ChairBack",
+				Vector3.new(2.4, 3, 0.4),
+				CFrame.new(center + Vector3.new(i * 5.5, 3.3, side * 6.1)),
+				M.WoodPlanks,
+				DARK_WOOD
+			)
+		end
 	end
+	for i = 1, 4 do
+		local p = center + Vector3.new(rng:NextNumber(-7, 7), 3.6, rng:NextNumber(-1.8, 1.8))
+		local h = rng:NextNumber(0.6, 1.6)
+		part(
+			model,
+			"BookStack",
+			Vector3.new(1.6, h, 2.2),
+			CFrame.new(p + Vector3.new(0, h / 2, 0)) * CFrame.Angles(0, rng:NextNumber(0, 3), 0),
+			M.SmoothPlastic,
+			BOOK_COLORS[i]
+		)
+	end
+	local flame = part(
+		model,
+		"Candle",
+		Vector3.new(0.5, 1.4, 0.5),
+		CFrame.new(center + Vector3.new(0, 4.3, 0)),
+		M.Neon,
+		CANDLE,
+		{ CanCollide = false }
+	)
+	Build.make("PointLight", { Color = CANDLE, Range = 14, Brightness = 1.2 }, flame)
+end
 
-	-- floating title sign
-	local sign = Build.part({
-		Name = "Sign",
-		Size = Vector3.new(44, 10, 1),
-		CFrame = CFrame.new(0, y + 16, -half + 6),
-		Material = Enum.Material.SmoothPlastic,
-		Color = Color3.fromRGB(30, 25, 45),
-	}, model)
-	local gui = Build.make("SurfaceGui", { Face = Enum.NormalId.Back, PixelsPerStud = 25 }, sign)
+local function sign(parent: Instance, cf: CFrame, size: Vector2, title: string, subtitle: string)
+	local board = part(parent, "Sign", Vector3.new(size.X, size.Y, 0.6), cf, M.WoodPlanks, DARK_WOOD)
+	part(parent, "SignTrim", Vector3.new(size.X + 1, size.Y + 1, 0.4), cf * CFrame.new(0, 0, 0.3), M.Metal, GOLD)
+	local gui = Build.make("SurfaceGui", { Face = Enum.NormalId.Front, PixelsPerStud = 20, LightInfluence = 0 }, board)
 	Build.make("TextLabel", {
-		Size = UDim2.fromScale(1, 0.7),
+		Size = UDim2.fromScale(1, 0.62),
 		BackgroundTransparency = 1,
-		Text = string.upper(Config.GameName),
+		Text = title,
 		Font = Enum.Font.Fantasy,
 		TextScaled = true,
-		TextColor3 = Color3.fromRGB(220, 190, 255),
+		TextColor3 = Color3.fromRGB(230, 205, 255),
 	}, gui)
 	Build.make("TextLabel", {
-		Size = UDim2.fromScale(1, 0.3),
-		Position = UDim2.fromScale(0, 0.7),
+		Size = UDim2.fromScale(1, 0.32),
+		Position = UDim2.fromScale(0, 0.64),
 		BackgroundTransparency = 1,
-		Text = "Loot. Craft. Survive.",
+		Text = subtitle,
 		Font = Enum.Font.GothamBold,
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(255, 220, 140),
 	}, gui)
+end
 
-	-- the rocky island underneath, built as shrinking rings so the glass window
-	-- still has a clear view shaft down to the arena
-	for i = 1, 4 do
-		local s = SIZE * (1 - i * 0.16)
-		local ring = (s - GLASS) / 2
-		local layerY = y - 8 - (i - 1) * 8
-		local rock = { Material = Enum.Material.Rock, Color = Color3.fromRGB(90, 85, 80), CanQuery = false }
-		local function slab(size: Vector3, pos: Vector3)
-			local props = table.clone(rock)
-			props.Name = "Underside"
-			props.Size = size
-			props.CFrame = CFrame.new(pos)
-			Build.part(props, model)
-		end
-		slab(Vector3.new(s, 8, ring), Vector3.new(0, layerY, -(GLASS / 2 + ring / 2)))
-		slab(Vector3.new(s, 8, ring), Vector3.new(0, layerY, GLASS / 2 + ring / 2))
-		slab(Vector3.new(ring, 8, GLASS), Vector3.new(-(GLASS / 2 + ring / 2), layerY, 0))
-		slab(Vector3.new(ring, 8, GLASS), Vector3.new(GLASS / 2 + ring / 2, layerY, 0))
+function Lobby.build(): LobbyInfo
+	local existing = workspace:FindFirstChild("Lobby")
+	if existing then
+		existing:Destroy()
+	end
+	local rng = Random.new(1337)
+	local y = Config.Arena.LobbyHeight
+	local model = Build.model("Lobby", workspace)
+	local W, D = X1 - X0, Z1 - Z0
+
+	---------------------------------------------------------------- floor
+	holedSlab(model, "Floor", 0, 0, W, D, HOLE, y - 2, 4, M.WoodPlanks, Color3.fromRGB(122, 86, 56))
+	part(
+		model,
+		"ScryingWindow",
+		Vector3.new(HOLE, 1, HOLE),
+		CFrame.new(0, y - 0.5, 0),
+		M.Glass,
+		Color3.fromRGB(180, 210, 255),
+		{
+			Transparency = 0.6,
+		}
+	)
+	holedSlab(model, "Rug", 0, 0, HOLE + 14, HOLE + 14, HOLE + 1, y + 0.05, 0.1, M.Fabric, Color3.fromRGB(120, 30, 45))
+	holedSlab(model, "RugTrim", 0, 0, HOLE + 16, HOLE + 16, HOLE + 14, y + 0.05, 0.12, M.Fabric, GOLD)
+	holedSlab(model, "WindowRim", 0, 0, HOLE + 2, HOLE + 2, HOLE, y + 0.1, 0.25, M.Neon, ARCANE)
+
+	---------------------------------------------------------------- walls
+	local wallY = y + WALL_H / 2
+	part(
+		model,
+		"Wall",
+		Vector3.new(W + WALL_T * 2, WALL_H, WALL_T),
+		CFrame.new(0, wallY, Z1 + WALL_T / 2),
+		M.Brick,
+		STONE
+	)
+	part(model, "Wall", Vector3.new(WALL_T, WALL_H, D), CFrame.new(X0 - WALL_T / 2, wallY, 0), M.Brick, STONE)
+	part(model, "Wall", Vector3.new(WALL_T, WALL_H, D), CFrame.new(X1 + WALL_T / 2, wallY, 0), M.Brick, STONE)
+	-- north wall with the grand arch to the terrace
+	local northZ = Z0 - WALL_T / 2
+	local sideLen = (W / 2 - ARCH_HALF) + WALL_T
+	part(
+		model,
+		"Wall",
+		Vector3.new(sideLen, WALL_H, WALL_T),
+		CFrame.new(X0 - WALL_T + sideLen / 2, wallY, northZ),
+		M.Brick,
+		STONE
+	)
+	part(
+		model,
+		"Wall",
+		Vector3.new(sideLen, WALL_H, WALL_T),
+		CFrame.new(X1 + WALL_T - sideLen / 2, wallY, northZ),
+		M.Brick,
+		STONE
+	)
+	part(
+		model,
+		"ArchLintel",
+		Vector3.new(ARCH_HALF * 2, WALL_H - ARCH_H, WALL_T),
+		CFrame.new(0, y + ARCH_H + (WALL_H - ARCH_H) / 2, northZ),
+		M.Brick,
+		STONE
+	)
+	part(
+		model,
+		"ArchTrim",
+		Vector3.new(ARCH_HALF * 2 + 2, 1.2, WALL_T + 1),
+		CFrame.new(0, y + ARCH_H, northZ),
+		M.Metal,
+		GOLD
+	)
+	part(model, "Threshold", Vector3.new(ARCH_HALF * 2, 4, WALL_T), CFrame.new(0, y - 2, northZ), M.Marble, MARBLE)
+	for side = -1, 1, 2 do
+		part(
+			model,
+			"ArchPillar",
+			Vector3.new(2.5, ARCH_H, WALL_T + 1.5),
+			CFrame.new(side * (ARCH_HALF + 1.25), y + ARCH_H / 2, northZ),
+			M.Marble,
+			MARBLE
+		)
 	end
 
-	local spawnCFrame = CFrame.new(0, y + 0.5, half - 20)
+	-- stained glass windows high on the east and west walls
+	for _, x in { X0 + 0.3, X1 - 0.3 } do
+		for _, z in { -40, -15, 15, 40 } do
+			part(
+				model,
+				"StainedGlass",
+				Vector3.new(0.4, 14, 7),
+				CFrame.new(x, y + 30, z),
+				M.Neon,
+				Color3.fromHSV(rng:NextNumber(0.55, 0.85), 0.45, 0.85),
+				{
+					Transparency = 0.15,
+				}
+			)
+			part(model, "WindowFrame", Vector3.new(0.6, 15, 0.6), CFrame.new(x, y + 30, z), M.Metal, GOLD)
+			part(model, "WindowFrame", Vector3.new(0.6, 0.6, 8), CFrame.new(x, y + 30, z), M.Metal, GOLD)
+		end
+	end
+
+	---------------------------------------------------------------- ceiling with skylight
+	local ceilY = y + WALL_H + 1.5
+	holedSlab(model, "Ceiling", 0, 0, W + WALL_T * 2, D + WALL_T * 2, SKYLIGHT, ceilY, 3, M.WoodPlanks, DARK_WOOD)
+	part(
+		model,
+		"Skylight",
+		Vector3.new(SKYLIGHT, 0.6, SKYLIGHT),
+		CFrame.new(0, ceilY, 0),
+		M.Glass,
+		Color3.fromRGB(200, 220, 255),
+		{
+			Transparency = 0.55,
+		}
+	)
+	for i = -1, 1 do
+		part(model, "Beam", Vector3.new(W, 2, 2), CFrame.new(0, ceilY - 2.5, i * 30), M.WoodPlanks, DARK_WOOD)
+	end
+
+	---------------------------------------------------------------- columns + shelves
+	local columnsX = { -60, -30, 30, 60 }
+	local columnsZ = { -30, 0, 30 }
+	for _, x in columnsX do
+		column(model, x, Z1 - 3, y)
+		column(model, x, Z0 + 3, y)
+	end
+	for _, z in columnsZ do
+		column(model, X0 + 3, z, y)
+		column(model, X1 - 3, z, y)
+	end
+	local SHELF_W, SHELF_H = 8, 20
+	local function nearColumn(v: number, list: { number }): boolean
+		for _, c in list do
+			if math.abs(v - c) < 7.5 then
+				return true
+			end
+		end
+		return false
+	end
+	-- south and north walls (shelves face into the room)
+	for x = X0 + 10, X1 - 10, SHELF_W + 1 do
+		if not nearColumn(x, columnsX) then
+			bookshelf(model, CFrame.lookAt(Vector3.new(x, y, Z1 - 1.4), Vector3.new(x, y, 0)), SHELF_W, SHELF_H, rng)
+			if math.abs(x) > ARCH_HALF + 6 then
+				bookshelf(
+					model,
+					CFrame.lookAt(Vector3.new(x, y, Z0 + 1.4), Vector3.new(x, y, 0)),
+					SHELF_W,
+					SHELF_H,
+					rng
+				)
+			end
+		end
+	end
+	-- east and west walls
+	for z = Z0 + 10, Z1 - 10, SHELF_W + 1 do
+		if not nearColumn(z, columnsZ) then
+			bookshelf(model, CFrame.lookAt(Vector3.new(X0 + 1.4, y, z), Vector3.new(0, y, z)), SHELF_W, SHELF_H, rng)
+			bookshelf(model, CFrame.lookAt(Vector3.new(X1 - 1.4, y, z), Vector3.new(0, y, z)), SHELF_W, SHELF_H, rng)
+		end
+	end
+	-- a free-standing double row of shelves in each side wing
+	for _, x in { -52, 52 } do
+		for _, z in { -32, 32 } do
+			bookshelf(model, CFrame.lookAt(Vector3.new(x, y, z - 1.4), Vector3.new(x, y, z - 10)), SHELF_W * 2, 14, rng)
+			bookshelf(model, CFrame.lookAt(Vector3.new(x, y, z + 1.4), Vector3.new(x, y, z + 10)), SHELF_W * 2, 14, rng)
+		end
+	end
+
+	---------------------------------------------------------------- furniture and light
+	for _, cx in { -45, 45 } do
+		for _, cz in { -22, 22 } do
+			chandelier(model, Vector3.new(cx, y + 32, cz), ceilY - 1.5)
+		end
+	end
+	readingTable(model, Vector3.new(-50, y, 0), rng)
+	readingTable(model, Vector3.new(50, y, 0), rng)
+	for i = 1, 4 do
+		local a = (i / 4) * math.pi * 2 + math.pi / 4
+		local p = Vector3.new(math.cos(a) * 25, y, math.sin(a) * 25)
+		lectern(model, p, Vector3.new(-p.X, 0, -p.Z))
+	end
+
+	local animated = orrery(model, Vector3.new(0, y + 21, 0))
+	floatingBooks(animated, Vector3.new(0, y + 16, 0), rng)
+
+	-- class altar near the south wall
+	local altarPos = Vector3.new(0, y, 46)
+	Build.cylinder(
+		altarPos + Vector3.new(0, 1.5, 0),
+		7,
+		3,
+		{ Name = "ClassAltar", Material = M.Marble, Color = MARBLE },
+		model
+	)
+	Build.cylinder(
+		altarPos + Vector3.new(0, 3.1, 0),
+		7.4,
+		0.3,
+		{ Name = "AltarTrim", Material = M.Metal, Color = GOLD },
+		model
+	)
+	local crystal = part(
+		animated,
+		"AltarCrystal",
+		Vector3.new(2.4, 4.5, 2.4),
+		CFrame.new(altarPos + Vector3.new(0, 7, 0)) * CFrame.Angles(0, math.rad(45), 0),
+		M.Neon,
+		Color3.fromRGB(255, 200, 90),
+		{
+			CanCollide = false,
+			Transparency = 0.1,
+		}
+	)
+	crystal:SetAttribute("Spin", 1.2)
+	Build.make("PointLight", { Color = crystal.Color, Range = 22, Brightness = 2 }, crystal)
+	local altarPrompt = Instance.new("ProximityPrompt")
+	altarPrompt.ActionText = "Choose class"
+	altarPrompt.ObjectText = "Class Altar"
+	altarPrompt.HoldDuration = 0
+	altarPrompt.MaxActivationDistance = 10
+	altarPrompt.RequiresLineOfSight = false
+	altarPrompt:SetAttribute("LobbyAction", "ClassPicker")
+	altarPrompt.Parent = model:FindFirstChild("ClassAltar")
+
+	-- (a part's Front face points along -Z, i.e. into the room for the south wall)
+	sign(
+		model,
+		CFrame.new(0, y + 30, Z1 - 0.8),
+		Vector2.new(44, 9),
+		"THE ARCANE ATHENAEUM",
+		"Mana Wars  ·  Loot. Craft. Survive."
+	)
+
+	-- spawn circle between the window and the altar
+	local spawnPos = Vector3.new(0, y + 0.5, 32)
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "LobbySpawn"
 	spawn.Anchored = true
-	spawn.Size = Vector3.new(14, 1, 14)
-	spawn.CFrame = spawnCFrame
-	spawn.Material = Enum.Material.Neon
-	spawn.Color = Color3.fromRGB(120, 80, 220)
-	spawn.Transparency = 0.3
+	spawn.Size = Vector3.new(10, 1, 10)
+	spawn.CFrame = CFrame.new(spawnPos)
+	spawn.Transparency = 1
+	spawn.CanCollide = false
 	spawn.Neutral = true
 	spawn.Duration = 0
 	spawn.Parent = model
+	Build.cylinder(
+		Vector3.new(0, y + 0.12, 32),
+		10,
+		0.2,
+		{ Name = "SpawnRune", Material = M.Neon, Color = ARCANE, CanCollide = false, Transparency = 0.3 },
+		model
+	)
 
-	return model, spawnCFrame + Vector3.new(0, 4, 0)
+	---------------------------------------------------------------- practice terrace
+	local terrace = Build.model("PracticeTerrace", model)
+	local TW, TD = TX1 - TX0, (Z0 - WALL_T) - TZ0
+	local tz = (Z0 - WALL_T + TZ0) / 2
+	part(terrace, "TerraceFloor", Vector3.new(TW, 4, TD), CFrame.new(0, y - 2, tz), M.Slate, Color3.fromRGB(88, 84, 96))
+	-- checkered inlay
+	for gx = TX0 + 10, TX1 - 10, 20 do
+		for gz = TZ0 + 10, Z0 - WALL_T - 10, 20 do
+			if ((gx + gz) // 20) % 2 == 0 then
+				part(
+					terrace,
+					"Tile",
+					Vector3.new(19.6, 0.1, 19.6),
+					CFrame.new(gx, y + 0.05, gz),
+					M.Marble,
+					Color3.fromRGB(150, 145, 160)
+				)
+			end
+		end
+	end
+	-- crenellated parapet
+	local function parapet(size: Vector3, cf: CFrame)
+		part(terrace, "Parapet", size, cf, M.Brick, STONE)
+	end
+	parapet(Vector3.new(TW, 3, 2), CFrame.new(0, y + 1.5, TZ0 + 1))
+	parapet(Vector3.new(2, 3, TD), CFrame.new(TX0 + 1, y + 1.5, tz))
+	parapet(Vector3.new(2, 3, TD), CFrame.new(TX1 - 1, y + 1.5, tz))
+	for x = TX0 + 4, TX1 - 4, 8 do
+		parapet(Vector3.new(3, 2, 2), CFrame.new(x, y + 4, TZ0 + 1))
+	end
+	for z = TZ0 + 4, Z0 - WALL_T - 4, 8 do
+		parapet(Vector3.new(2, 2, 3), CFrame.new(TX0 + 1, y + 4, z))
+		parapet(Vector3.new(2, 2, 3), CFrame.new(TX1 - 1, y + 4, z))
+	end
+	-- lanterns on the parapet
+	for _, p in
+		{
+			Vector3.new(TX0 + 1, y + 6, -80),
+			Vector3.new(TX1 - 1, y + 6, -80),
+			Vector3.new(TX0 + 1, y + 6, -120),
+			Vector3.new(TX1 - 1, y + 6, -120),
+		}
+	do
+		part(
+			terrace,
+			"LanternPost",
+			Vector3.new(0.6, 3, 0.6),
+			CFrame.new(p - Vector3.new(0, 1.5, 0)),
+			M.Metal,
+			Color3.fromRGB(50, 45, 40)
+		)
+		local lamp = part(
+			terrace,
+			"Lantern",
+			Vector3.new(1.4, 1.6, 1.4),
+			CFrame.new(p + Vector3.new(0, 0.6, 0)),
+			M.Neon,
+			CANDLE,
+			{ CanCollide = false }
+		)
+		Build.make("PointLight", { Color = CANDLE, Range = 30, Brightness = 1.6 }, lamp)
+	end
+	-- firing line
+	part(terrace, "FiringLine", Vector3.new(TW - 8, 0.12, 1), CFrame.new(0, y + 0.08, -85), M.Neon, GOLD)
+	sign(
+		terrace,
+		CFrame.new(0, y + 8, TZ0 + 3) * CFrame.Angles(0, math.pi, 0),
+		Vector2.new(30, 7),
+		"PRACTICE RANGE",
+		"Try your spells on the dummies"
+	)
+	-- dummy platforms
+	local dummySpots: { CFrame } = {}
+	for i = -2, 2 do
+		local p = Vector3.new(i * 22, y, -132)
+		Build.cylinder(
+			p + Vector3.new(0, 0.3, 0),
+			7,
+			0.6,
+			{ Name = "DummyPad", Material = M.Marble, Color = MARBLE },
+			terrace
+		)
+		Build.cylinder(
+			p + Vector3.new(0, 0.62, 0),
+			6,
+			0.1,
+			{ Name = "DummyRune", Material = M.Neon, Color = Color3.fromRGB(255, 90, 90), CanCollide = false },
+			terrace
+		)
+		table.insert(dummySpots, CFrame.lookAt(p + Vector3.new(0, 0.6, 0), Vector3.new(i * 22, y + 0.6, 0)))
+	end
+
+	---------------------------------------------------------------- invisible containment
+	local barrier = { Transparency = 1, CanQuery = false }
+	local function wall(size: Vector3, pos: Vector3)
+		local props = table.clone(barrier)
+		props.Name = "Barrier"
+		props.Size = size
+		props.CFrame = CFrame.new(pos)
+		Build.part(props, terrace)
+	end
+	wall(Vector3.new(TW, 90, 2), Vector3.new(0, y + 45, TZ0 - 1))
+	wall(Vector3.new(2, 90, TD), Vector3.new(TX0 - 1, y + 45, tz))
+	wall(Vector3.new(2, 90, TD), Vector3.new(TX1 + 1, y + 45, tz))
+	wall(Vector3.new(TW, 2, TD), Vector3.new(0, y + 90, tz))
+
+	---------------------------------------------------------------- the island underneath
+	for i = 1, 4 do
+		local shrink = i * 14
+		local layerY = y - 8 - (i - 1) * 8
+		holedSlab(model, "Underside", 0, 0, W - shrink, D - shrink, HOLE, layerY, 8, M.Rock, Color3.fromRGB(90, 85, 80))
+		part(
+			model,
+			"Underside",
+			Vector3.new(TW - shrink, 8, TD - shrink * 0.6),
+			CFrame.new(0, layerY, tz),
+			M.Rock,
+			Color3.fromRGB(90, 85, 80)
+		)
+	end
+	for _, child in model:GetChildren() do
+		if child.Name == "Underside" and child:IsA("BasePart") then
+			child.CanQuery = false
+		end
+	end
+
+	return {
+		model = model,
+		spawn = CFrame.new(spawnPos + Vector3.new(0, 3.5, 0)), -- facing north, toward the orrery and the arch
+		dummySpots = dummySpots,
+		floorY = y,
+	}
 end
 
 return Lobby
@@ -3946,18 +4613,473 @@ return Lobby
         </Item>
         <Item class="ModuleScript" referent="27">
           <Properties>
+            <string name="Name">MapDefs</string>
+            <string name="Source"><![CDATA[-- Every arena players can vote for. Each entry controls the island's size, terrain shape,
+-- materials, decoration, ruin style, lighting and weather. Add a new table to add a map.
+
+local MapDefs = {}
+
+local M = Enum.Material
+
+export type Style = {
+	stone: Enum.Material,
+	stoneColors: { Color3 },
+	floor: Enum.Material,
+	floorColor: Color3,
+	shrine: Enum.Material,
+	shrineColor: Color3,
+	wood: Color3,
+	accent: Color3,
+	plaza: Enum.Material,
+	plazaColor: Color3,
+	dais: Enum.Material,
+	daisColor: Color3,
+}
+
+export type MapDef = {
+	id: string,
+	name: string,
+	icon: string,
+	description: string,
+	radius: number,
+	terrain: {
+		base: number,
+		hills: number,
+		hillScale: number,
+		detail: number,
+		rough: number,
+		mountains: number,
+		liquidLevel: number,
+		liquid: Enum.Material,
+		peakHeight: number,
+		cliffHeight: number,
+	},
+	materials: {
+		surface: Enum.Material,
+		alt: Enum.Material,
+		alt2: Enum.Material,
+		shore: Enum.Material,
+		cliff: Enum.Material,
+		peak: Enum.Material,
+		under: Enum.Material,
+	},
+	colors: { [Enum.Material]: Color3 },
+	decor: { { kind: string, styles: { string }, count: number } },
+	pois: { string },
+	poiCount: number,
+	outerChests: number,
+	style: Style,
+	lighting: { [string]: any },
+	atmosphere: { [string]: any },
+	water: { color: Color3, transparency: number },
+	weather: string?,
+	hazard: string?,
+}
+
+-- Terrain colours shared by every map; each map overrides what it needs.
+local BASE_COLORS = {
+	[M.Grass] = Color3.fromRGB(106, 140, 66),
+	[M.LeafyGrass] = Color3.fromRGB(96, 128, 62),
+	[M.Ground] = Color3.fromRGB(110, 92, 64),
+	[M.Sand] = Color3.fromRGB(196, 178, 128),
+	[M.Rock] = Color3.fromRGB(110, 110, 112),
+	[M.Snow] = Color3.fromRGB(232, 238, 248),
+	[M.Glacier] = Color3.fromRGB(150, 205, 240),
+	[M.Slate] = Color3.fromRGB(88, 92, 98),
+	[M.Basalt] = Color3.fromRGB(42, 40, 44),
+	[M.CrackedLava] = Color3.fromRGB(255, 110, 30),
+	[M.Sandstone] = Color3.fromRGB(196, 150, 104),
+	[M.Mud] = Color3.fromRGB(70, 56, 44),
+}
+
+local function colors(overrides: { [Enum.Material]: Color3 }?): { [Enum.Material]: Color3 }
+	local out = table.clone(BASE_COLORS)
+	for k, v in (overrides or {}) :: { [Enum.Material]: Color3 } do
+		out[k] = v
+	end
+	return out
+end
+
+local ALL_POIS = { "ruinedTower", "shrine", "camp", "watchtower" }
+
+MapDefs.List = {
+	{
+		id = "Verdant",
+		name = "Verdant Isle",
+		icon = "🌳",
+		description = "Rolling green hills, quiet lakes and crumbling ruins. The classic.",
+		radius = 450,
+		terrain = {
+			base = 12,
+			hills = 36,
+			hillScale = 170,
+			detail = 13,
+			rough = 3,
+			mountains = 85,
+			liquidLevel = 4,
+			liquid = M.Water,
+			peakHeight = 80,
+			cliffHeight = 52,
+		},
+		materials = {
+			surface = M.Grass,
+			alt = M.LeafyGrass,
+			alt2 = M.Ground,
+			shore = M.Sand,
+			cliff = M.Rock,
+			peak = M.Snow,
+			under = M.Ground,
+		},
+		colors = colors(),
+		decor = {
+			{ kind = "tree", styles = { "oak", "oak", "pine", "birch" }, count = 300 },
+			{ kind = "rock", styles = { "stone" }, count = 120 },
+			{ kind = "bush", styles = { "bush" }, count = 180 },
+		},
+		pois = ALL_POIS,
+		poiCount = 10,
+		outerChests = 30,
+		style = {
+			stone = M.Cobblestone,
+			stoneColors = {
+				Color3.fromRGB(130, 130, 135),
+				Color3.fromRGB(115, 112, 110),
+				Color3.fromRGB(150, 148, 140),
+			},
+			floor = M.Cobblestone,
+			floorColor = Color3.fromRGB(120, 118, 115),
+			shrine = M.Marble,
+			shrineColor = Color3.fromRGB(235, 232, 225),
+			wood = Color3.fromRGB(110, 80, 50),
+			accent = Color3.fromRGB(150, 100, 255),
+			plaza = M.Slate,
+			plazaColor = Color3.fromRGB(105, 105, 115),
+			dais = M.Marble,
+			daisColor = Color3.fromRGB(225, 220, 210),
+		},
+		lighting = { ClockTime = 14.5, Brightness = 2.5, OutdoorAmbient = Color3.fromRGB(128, 128, 140) },
+		atmosphere = {
+			Density = 0.28,
+			Offset = 0.15,
+			Color = Color3.fromRGB(200, 205, 230),
+			Decay = Color3.fromRGB(110, 100, 140),
+			Glare = 0.25,
+			Haze = 1.4,
+		},
+		water = { color = Color3.fromRGB(60, 130, 170), transparency = 0.6 },
+	},
+	{
+		id = "Frostpeak",
+		name = "Frostpeak",
+		icon = "🏔️",
+		description = "A snowbound island of frozen lakes, pine forests and towering peaks.",
+		radius = 420,
+		terrain = {
+			base = 14,
+			hills = 44,
+			hillScale = 150,
+			detail = 15,
+			rough = 4,
+			mountains = 110,
+			liquidLevel = 5,
+			liquid = M.Glacier,
+			peakHeight = 60,
+			cliffHeight = 48,
+		},
+		materials = {
+			surface = M.Snow,
+			alt = M.Snow,
+			alt2 = M.Glacier,
+			shore = M.Glacier,
+			cliff = M.Slate,
+			peak = M.Snow,
+			under = M.Rock,
+		},
+		colors = colors({ [M.Slate] = Color3.fromRGB(90, 100, 118), [M.Rock] = Color3.fromRGB(105, 112, 125) }),
+		decor = {
+			{ kind = "tree", styles = { "snowpine" }, count = 280 },
+			{ kind = "rock", styles = { "ice", "stone" }, count = 110 },
+			{ kind = "bush", styles = { "snowdrift" }, count = 120 },
+		},
+		pois = ALL_POIS,
+		poiCount = 9,
+		outerChests = 28,
+		style = {
+			stone = M.Slate,
+			stoneColors = {
+				Color3.fromRGB(120, 130, 150),
+				Color3.fromRGB(100, 110, 128),
+				Color3.fromRGB(140, 150, 165),
+			},
+			floor = M.Slate,
+			floorColor = Color3.fromRGB(110, 120, 140),
+			shrine = M.Marble,
+			shrineColor = Color3.fromRGB(215, 230, 245),
+			wood = Color3.fromRGB(90, 70, 55),
+			accent = Color3.fromRGB(110, 220, 255),
+			plaza = M.Slate,
+			plazaColor = Color3.fromRGB(100, 112, 130),
+			dais = M.Marble,
+			daisColor = Color3.fromRGB(220, 232, 245),
+		},
+		lighting = { ClockTime = 9.5, Brightness = 2.2, OutdoorAmbient = Color3.fromRGB(130, 145, 170) },
+		atmosphere = {
+			Density = 0.38,
+			Offset = 0.1,
+			Color = Color3.fromRGB(215, 230, 250),
+			Decay = Color3.fromRGB(140, 160, 200),
+			Glare = 0.1,
+			Haze = 2.2,
+		},
+		water = { color = Color3.fromRGB(80, 140, 180), transparency = 0.5 },
+		weather = "Snow",
+	},
+	{
+		id = "Ashen",
+		name = "Ashen Wastes",
+		icon = "🌋",
+		description = "A volcanic wasteland. Black rock, dead trees, and lava lakes that burn.",
+		radius = 400,
+		terrain = {
+			base = 14,
+			hills = 30,
+			hillScale = 140,
+			detail = 18,
+			rough = 6,
+			mountains = 95,
+			liquidLevel = 6,
+			liquid = M.CrackedLava,
+			peakHeight = 999,
+			cliffHeight = 46,
+		},
+		materials = {
+			surface = M.Basalt,
+			alt = M.Slate,
+			alt2 = M.Ground,
+			shore = M.Basalt,
+			cliff = M.Rock,
+			peak = M.Basalt,
+			under = M.Basalt,
+		},
+		colors = colors({
+			[M.Ground] = Color3.fromRGB(70, 64, 62),
+			[M.Slate] = Color3.fromRGB(60, 56, 58),
+			[M.Rock] = Color3.fromRGB(78, 72, 72),
+		}),
+		decor = {
+			{ kind = "tree", styles = { "dead" }, count = 150 },
+			{ kind = "rock", styles = { "obsidian", "stone" }, count = 110 },
+			{ kind = "bush", styles = { "ashpile" }, count = 70 },
+		},
+		pois = ALL_POIS,
+		poiCount = 9,
+		outerChests = 26,
+		style = {
+			stone = M.Basalt,
+			stoneColors = { Color3.fromRGB(55, 50, 52), Color3.fromRGB(70, 62, 60), Color3.fromRGB(45, 42, 46) },
+			floor = M.Basalt,
+			floorColor = Color3.fromRGB(50, 46, 48),
+			shrine = M.Basalt,
+			shrineColor = Color3.fromRGB(60, 52, 54),
+			wood = Color3.fromRGB(55, 40, 32),
+			accent = Color3.fromRGB(255, 120, 40),
+			plaza = M.Basalt,
+			plazaColor = Color3.fromRGB(48, 44, 46),
+			dais = M.Slate,
+			daisColor = Color3.fromRGB(80, 70, 70),
+		},
+		lighting = { ClockTime = 18.3, Brightness = 1.8, OutdoorAmbient = Color3.fromRGB(150, 100, 80) },
+		atmosphere = {
+			Density = 0.45,
+			Offset = 0.2,
+			Color = Color3.fromRGB(200, 130, 100),
+			Decay = Color3.fromRGB(120, 50, 40),
+			Glare = 0.4,
+			Haze = 2.5,
+		},
+		water = { color = Color3.fromRGB(60, 60, 60), transparency = 0.6 },
+		weather = "Ash",
+		hazard = "Lava",
+	},
+	{
+		id = "Sandsea",
+		name = "Sandsea Ruins",
+		icon = "🏜️",
+		description = "Endless dunes, sandstone ruins and rare oases. The biggest map.",
+		radius = 480,
+		terrain = {
+			base = 12,
+			hills = 28,
+			hillScale = 120,
+			detail = 10,
+			rough = 1.5,
+			mountains = 70,
+			liquidLevel = 2,
+			liquid = M.Water,
+			peakHeight = 999,
+			cliffHeight = 50,
+		},
+		materials = {
+			surface = M.Sand,
+			alt = M.Sand,
+			alt2 = M.Sandstone,
+			shore = M.Sand,
+			cliff = M.Sandstone,
+			peak = M.Sandstone,
+			under = M.Sandstone,
+		},
+		colors = colors({ [M.Sand] = Color3.fromRGB(218, 190, 130) }),
+		decor = {
+			{ kind = "tree", styles = { "cactus", "cactus", "palm" }, count = 170 },
+			{ kind = "rock", styles = { "sandstone" }, count = 120 },
+			{ kind = "bush", styles = { "shrub" }, count = 90 },
+		},
+		pois = ALL_POIS,
+		poiCount = 11,
+		outerChests = 30,
+		style = {
+			stone = M.Sandstone,
+			stoneColors = {
+				Color3.fromRGB(205, 170, 120),
+				Color3.fromRGB(190, 150, 105),
+				Color3.fromRGB(215, 185, 140),
+			},
+			floor = M.Sandstone,
+			floorColor = Color3.fromRGB(200, 165, 115),
+			shrine = M.Sandstone,
+			shrineColor = Color3.fromRGB(225, 195, 150),
+			wood = Color3.fromRGB(120, 90, 55),
+			accent = Color3.fromRGB(255, 200, 80),
+			plaza = M.Sandstone,
+			plazaColor = Color3.fromRGB(190, 155, 110),
+			dais = M.Marble,
+			daisColor = Color3.fromRGB(235, 220, 190),
+		},
+		lighting = { ClockTime = 13, Brightness = 3, OutdoorAmbient = Color3.fromRGB(160, 140, 120) },
+		atmosphere = {
+			Density = 0.32,
+			Offset = 0.1,
+			Color = Color3.fromRGB(240, 215, 170),
+			Decay = Color3.fromRGB(200, 150, 100),
+			Glare = 0.6,
+			Haze = 2,
+		},
+		water = { color = Color3.fromRGB(50, 150, 160), transparency = 0.5 },
+		weather = "Dust",
+	},
+	{
+		id = "Fungal",
+		name = "Fungal Hollow",
+		icon = "🍄",
+		description = "A glowing night forest of giant mushrooms. Small, dark and deadly.",
+		radius = 380,
+		terrain = {
+			base = 12,
+			hills = 30,
+			hillScale = 140,
+			detail = 12,
+			rough = 3,
+			mountains = 90,
+			liquidLevel = 5,
+			liquid = M.Water,
+			peakHeight = 999,
+			cliffHeight = 50,
+		},
+		materials = {
+			surface = M.LeafyGrass,
+			alt = M.Grass,
+			alt2 = M.Mud,
+			shore = M.Mud,
+			cliff = M.Rock,
+			peak = M.Rock,
+			under = M.Mud,
+		},
+		colors = colors({
+			[M.LeafyGrass] = Color3.fromRGB(70, 110, 105),
+			[M.Grass] = Color3.fromRGB(95, 85, 130),
+			[M.Mud] = Color3.fromRGB(50, 42, 55),
+			[M.Rock] = Color3.fromRGB(70, 66, 80),
+		}),
+		decor = {
+			{ kind = "tree", styles = { "bigmushroom" }, count = 130 },
+			{ kind = "rock", styles = { "mossy" }, count = 80 },
+			{ kind = "bush", styles = { "smallmushroom" }, count = 220 },
+		},
+		pois = ALL_POIS,
+		poiCount = 8,
+		outerChests = 24,
+		style = {
+			stone = M.Slate,
+			stoneColors = { Color3.fromRGB(80, 95, 90), Color3.fromRGB(70, 80, 85), Color3.fromRGB(95, 105, 100) },
+			floor = M.Slate,
+			floorColor = Color3.fromRGB(75, 85, 85),
+			shrine = M.Marble,
+			shrineColor = Color3.fromRGB(190, 175, 220),
+			wood = Color3.fromRGB(80, 60, 70),
+			accent = Color3.fromRGB(90, 255, 220),
+			plaza = M.Slate,
+			plazaColor = Color3.fromRGB(70, 75, 90),
+			dais = M.Marble,
+			daisColor = Color3.fromRGB(180, 170, 210),
+		},
+		lighting = { ClockTime = 0.5, Brightness = 1.2, OutdoorAmbient = Color3.fromRGB(110, 95, 150) },
+		atmosphere = {
+			Density = 0.42,
+			Offset = 0.25,
+			Color = Color3.fromRGB(150, 120, 200),
+			Decay = Color3.fromRGB(60, 40, 110),
+			Glare = 0,
+			Haze = 2.4,
+		},
+		water = { color = Color3.fromRGB(70, 60, 120), transparency = 0.5 },
+		weather = "Spores",
+	},
+} :: { MapDef }
+
+MapDefs.ById = {} :: { [string]: MapDef }
+for _, def in MapDefs.List do
+	MapDefs.ById[def.id] = def
+end
+
+-- The plaza (and pedestal ring) are flattened to this height.
+function MapDefs.plazaHeight(def: MapDef): number
+	return def.terrain.base + 1
+end
+
+-- What the vote screen needs to know (plain data so it can go over a remote).
+function MapDefs.summary(def: MapDef): { [string]: any }
+	return {
+		id = def.id,
+		name = def.name,
+		icon = def.icon,
+		description = def.description,
+		radius = def.radius,
+	}
+end
+
+return MapDefs
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="28">
+          <Properties>
             <string name="Name">Structures</string>
             <string name="Source"><![CDATA[-- Everything built out of parts: blocky trees, rocks, ruins, the cornucopia, chests,
 -- pedestals and loot satchels. Purely visual/physical; no game logic in here.
+-- Most builders take a `style` (see MapDefs) so each map gets its own look.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Build = require(script.Parent.Build)
+local MapDefs = require(script.Parent.MapDefs)
+
+type Style = MapDefs.Style
 
 local Structures = {}
 
 local A = Config.Arena
+local M = Enum.Material
 
 local LEAF_COLORS = {
 	Color3.fromRGB(76, 140, 58),
@@ -3970,104 +5092,435 @@ local STONE_COLORS = {
 	Color3.fromRGB(115, 112, 110),
 	Color3.fromRGB(150, 148, 140),
 }
+local MUSHROOM_CAPS = {
+	Color3.fromRGB(200, 60, 80),
+	Color3.fromRGB(140, 70, 200),
+	Color3.fromRGB(60, 120, 220),
+	Color3.fromRGB(230, 120, 60),
+}
+local GLOW_COLORS = {
+	Color3.fromRGB(90, 255, 220),
+	Color3.fromRGB(200, 120, 255),
+	Color3.fromRGB(255, 120, 200),
+	Color3.fromRGB(140, 220, 255),
+}
+
+local function pick<T>(rng: Random, list: { T }): T
+	return list[rng:NextInteger(1, #list)]
+end
+
+local function block(
+	model: Instance,
+	name: string,
+	size: Vector3,
+	cf: CFrame,
+	material: Enum.Material,
+	color: Color3
+): Part
+	return Build.part({ Name = name, Size = size, CFrame = cf, Material = material, Color = color }, model)
+end
 
 ---------------------------------------------------------------------------
--- Nature
+-- Trees
 ---------------------------------------------------------------------------
 
-function Structures.tree(parent: Instance, ground: Vector3, rng: Random)
-	local model = Build.model("Tree", parent)
-	local kind = rng:NextInteger(1, 10)
-	if kind <= 5 then
-		-- oak: thick trunk with a big square canopy
-		local trunkH = rng:NextNumber(8, 12)
-		Build.part({
-			Name = "Trunk",
-			Size = Vector3.new(2.4, trunkH + 2, 2.4),
-			CFrame = CFrame.new(ground + Vector3.new(0, trunkH / 2 - 1, 0)),
-			Material = Enum.Material.Wood,
-			Color = Color3.fromRGB(105, 75, 48),
-		}, model)
-		local w = rng:NextNumber(8, 11)
-		local leaf = LEAF_COLORS[rng:NextInteger(1, #LEAF_COLORS)]
-		Build.part({
-			Name = "Leaves",
-			Size = Vector3.new(w, 6, w),
-			CFrame = CFrame.new(ground + Vector3.new(0, trunkH + 2, 0)),
-			Material = Enum.Material.Grass,
-			Color = leaf,
-		}, model)
-		Build.part({
-			Name = "Leaves",
-			Size = Vector3.new(w * 0.6, 3.5, w * 0.6),
-			CFrame = CFrame.new(ground + Vector3.new(0, trunkH + 6.5, 0)),
-			Material = Enum.Material.Grass,
-			Color = leaf,
-		}, model)
-	elseif kind <= 8 then
-		-- pine: stacked shrinking blocks
-		local trunkH = rng:NextNumber(10, 14)
-		Build.part({
-			Name = "Trunk",
-			Size = Vector3.new(2, trunkH + 2, 2),
-			CFrame = CFrame.new(ground + Vector3.new(0, trunkH / 2 - 1, 0)),
-			Material = Enum.Material.Wood,
-			Color = Color3.fromRGB(85, 60, 40),
-		}, model)
-		local y = trunkH * 0.45
-		local w = rng:NextNumber(8, 10)
-		for _ = 1, 4 do
-			Build.part({
-				Name = "Leaves",
-				Size = Vector3.new(w, 3.2, w),
-				CFrame = CFrame.new(ground + Vector3.new(0, y, 0)),
-				Material = Enum.Material.Grass,
-				Color = Color3.fromRGB(45, 95, 60),
-			}, model)
-			y += 3.2
-			w *= 0.72
+local trees = {}
+
+-- oak: thick trunk with a big square canopy
+function trees.oak(model: Model, ground: Vector3, rng: Random)
+	local trunkH = rng:NextNumber(8, 12)
+	block(
+		model,
+		"Trunk",
+		Vector3.new(2.4, trunkH + 2, 2.4),
+		CFrame.new(ground + Vector3.new(0, trunkH / 2 - 1, 0)),
+		M.Wood,
+		Color3.fromRGB(105, 75, 48)
+	)
+	local w = rng:NextNumber(8, 11)
+	local leaf = pick(rng, LEAF_COLORS)
+	block(model, "Leaves", Vector3.new(w, 6, w), CFrame.new(ground + Vector3.new(0, trunkH + 2, 0)), M.Grass, leaf)
+	block(
+		model,
+		"Leaves",
+		Vector3.new(w * 0.6, 3.5, w * 0.6),
+		CFrame.new(ground + Vector3.new(0, trunkH + 6.5, 0)),
+		M.Grass,
+		leaf
+	)
+end
+
+-- pine: stacked shrinking blocks, optionally snow-capped
+local function pine(model: Model, ground: Vector3, rng: Random, snowy: boolean)
+	local trunkH = rng:NextNumber(10, 14)
+	block(
+		model,
+		"Trunk",
+		Vector3.new(2, trunkH + 2, 2),
+		CFrame.new(ground + Vector3.new(0, trunkH / 2 - 1, 0)),
+		M.Wood,
+		Color3.fromRGB(85, 60, 40)
+	)
+	local y = trunkH * 0.45
+	local w = rng:NextNumber(8, 10)
+	for _ = 1, 4 do
+		block(
+			model,
+			"Leaves",
+			Vector3.new(w, 3.2, w),
+			CFrame.new(ground + Vector3.new(0, y, 0)),
+			M.Grass,
+			Color3.fromRGB(45, 95, 60)
+		)
+		if snowy then
+			block(
+				model,
+				"Snow",
+				Vector3.new(w * 0.8, 0.6, w * 0.8),
+				CFrame.new(ground + Vector3.new(0, y + 1.9, 0)),
+				M.Snow,
+				Color3.fromRGB(240, 245, 255)
+			)
 		end
-	else
-		-- birch: pale and slim
-		local trunkH = rng:NextNumber(10, 13)
-		Build.part({
-			Name = "Trunk",
-			Size = Vector3.new(1.8, trunkH + 2, 1.8),
-			CFrame = CFrame.new(ground + Vector3.new(0, trunkH / 2 - 1, 0)),
-			Material = Enum.Material.Wood,
-			Color = Color3.fromRGB(225, 222, 210),
-		}, model)
-		Build.part({
-			Name = "Leaves",
-			Size = Vector3.new(7, 7, 7),
-			CFrame = CFrame.new(ground + Vector3.new(0, trunkH + 1.5, 0)),
-			Material = Enum.Material.Grass,
-			Color = Color3.fromRGB(130, 175, 70),
-		}, model)
+		y += 3.2
+		w *= 0.72
 	end
 end
 
-function Structures.rock(parent: Instance, ground: Vector3, rng: Random)
-	local size = Vector3.new(rng:NextNumber(4, 12), rng:NextNumber(3, 8), rng:NextNumber(4, 12))
-	Build.part({
-		Name = "Rock",
-		Size = size,
-		CFrame = CFrame.new(ground + Vector3.new(0, size.Y * 0.25, 0))
-			* CFrame.Angles(rng:NextNumber(-0.2, 0.2), rng:NextNumber(0, math.pi * 2), rng:NextNumber(-0.2, 0.2)),
-		Material = if rng:NextNumber() < 0.5 then Enum.Material.Rock else Enum.Material.Slate,
-		Color = STONE_COLORS[rng:NextInteger(1, #STONE_COLORS)],
-	}, parent)
+function trees.pine(model: Model, ground: Vector3, rng: Random)
+	pine(model, ground, rng, false)
 end
 
-function Structures.bush(parent: Instance, ground: Vector3, rng: Random)
+function trees.snowpine(model: Model, ground: Vector3, rng: Random)
+	pine(model, ground, rng, true)
+end
+
+-- birch: pale and slim
+function trees.birch(model: Model, ground: Vector3, rng: Random)
+	local trunkH = rng:NextNumber(10, 13)
+	block(
+		model,
+		"Trunk",
+		Vector3.new(1.8, trunkH + 2, 1.8),
+		CFrame.new(ground + Vector3.new(0, trunkH / 2 - 1, 0)),
+		M.Wood,
+		Color3.fromRGB(225, 222, 210)
+	)
+	block(
+		model,
+		"Leaves",
+		Vector3.new(7, 7, 7),
+		CFrame.new(ground + Vector3.new(0, trunkH + 1.5, 0)),
+		M.Grass,
+		Color3.fromRGB(130, 175, 70)
+	)
+end
+
+-- dead tree: a charred trunk with a few crooked branches
+function trees.dead(model: Model, ground: Vector3, rng: Random)
+	local trunkH = rng:NextNumber(9, 15)
+	local bark = Color3.fromRGB(45, 38, 36)
+	block(
+		model,
+		"Trunk",
+		Vector3.new(1.8, trunkH + 2, 1.8),
+		CFrame.new(ground + Vector3.new(0, trunkH / 2 - 1, 0)),
+		M.Wood,
+		bark
+	)
+	for _ = 1, rng:NextInteger(2, 4) do
+		local y = rng:NextNumber(trunkH * 0.5, trunkH * 0.95)
+		local yaw = rng:NextNumber(0, math.pi * 2)
+		local len = rng:NextNumber(3, 6)
+		local cf = CFrame.new(ground + Vector3.new(0, y, 0))
+			* CFrame.Angles(0, yaw, 0)
+			* CFrame.Angles(0, 0, math.rad(rng:NextNumber(35, 60)))
+			* CFrame.new(0, len / 2, 0)
+		block(model, "Branch", Vector3.new(0.8, len, 0.8), cf, M.Wood, bark)
+	end
+end
+
+-- palm: a leaning segmented trunk with drooping fronds
+function trees.palm(model: Model, ground: Vector3, rng: Random)
+	local lean = CFrame.Angles(math.rad(rng:NextNumber(4, 10)), rng:NextNumber(0, math.pi * 2), 0)
+	local cf = CFrame.new(ground) * lean
+	local segments = rng:NextInteger(5, 7)
+	for i = 1, segments do
+		block(
+			model,
+			"Trunk",
+			Vector3.new(1.6, 2.6, 1.6),
+			cf * CFrame.new(0, (i - 0.5) * 2.4, 0),
+			M.Wood,
+			Color3.fromRGB(150, 115, 70)
+		)
+		cf *= CFrame.Angles(math.rad(3), 0, 0)
+	end
+	local top = cf * CFrame.new(0, segments * 2.4, 0)
+	for i = 1, 6 do
+		local frond = top
+			* CFrame.Angles(0, i * math.pi / 3, 0)
+			* CFrame.Angles(math.rad(-25), 0, 0)
+			* CFrame.new(0, 0, -3)
+		block(model, "Frond", Vector3.new(1.6, 0.4, 6), frond, M.Grass, Color3.fromRGB(70, 150, 60))
+	end
+end
+
+-- cactus: green column with an arm or two
+function trees.cactus(model: Model, ground: Vector3, rng: Random)
+	local green = Color3.fromRGB(70, 135, 60)
+	local h = rng:NextNumber(6, 11)
+	block(model, "Cactus", Vector3.new(2, h, 2), CFrame.new(ground + Vector3.new(0, h / 2 - 0.5, 0)), M.Grass, green)
+	for side = -1, 1, 2 do
+		if rng:NextNumber() < 0.6 then
+			local y = rng:NextNumber(h * 0.35, h * 0.65)
+			local yaw = CFrame.Angles(0, rng:NextNumber(0, math.pi), 0)
+			local base = CFrame.new(ground + Vector3.new(0, y, 0)) * yaw
+			block(model, "Arm", Vector3.new(2.4, 1.4, 1.4), base * CFrame.new(side * 1.8, 0, 0), M.Grass, green)
+			local up = rng:NextNumber(2, 4)
+			block(model, "Arm", Vector3.new(1.4, up, 1.4), base * CFrame.new(side * 2.6, up / 2, 0), M.Grass, green)
+		end
+	end
+end
+
+-- giant mushroom: pale stem, broad coloured cap with glowing spots
+function trees.bigmushroom(model: Model, ground: Vector3, rng: Random)
+	local h = rng:NextNumber(8, 18)
+	local stemW = rng:NextNumber(1.8, 3)
+	Build.cylinder(ground + Vector3.new(0, h / 2 - 0.5, 0), stemW, h, {
+		Name = "Stem",
+		Material = M.SmoothPlastic,
+		Color = Color3.fromRGB(225, 215, 200),
+	}, model)
+	local capW = rng:NextNumber(9, 16)
+	local cap = pick(rng, MUSHROOM_CAPS)
+	Build.cylinder(
+		ground + Vector3.new(0, h + 0.5, 0),
+		capW,
+		3,
+		{ Name = "Cap", Material = M.SmoothPlastic, Color = cap },
+		model
+	)
+	Build.cylinder(
+		ground + Vector3.new(0, h + 2.4, 0),
+		capW * 0.6,
+		1.4,
+		{ Name = "Cap", Material = M.SmoothPlastic, Color = cap },
+		model
+	)
+	local glow = pick(rng, GLOW_COLORS)
+	local gills = Build.cylinder(ground + Vector3.new(0, h - 1.1, 0), capW * 0.85, 0.2, {
+		Name = "Gills",
+		Material = M.Neon,
+		Color = glow,
+		CanCollide = false,
+	}, model)
+	if rng:NextNumber() < 0.35 then
+		Build.make("PointLight", { Color = glow, Range = 18, Brightness = 1.5 }, gills)
+	end
+	for _ = 1, rng:NextInteger(3, 6) do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local r = rng:NextNumber(1, capW * 0.42)
+		block(
+			model,
+			"Spot",
+			Vector3.new(1.2, 0.3, 1.2),
+			CFrame.new(ground + Vector3.new(math.cos(a) * r, h + 2.1, math.sin(a) * r)),
+			M.Neon,
+			Color3.fromRGB(255, 245, 230)
+		).CanCollide =
+			false
+	end
+end
+
+---------------------------------------------------------------------------
+-- Rocks
+---------------------------------------------------------------------------
+
+local rocks = {}
+
+function rocks.stone(parent: Instance, ground: Vector3, rng: Random)
+	local size = Vector3.new(rng:NextNumber(4, 12), rng:NextNumber(3, 8), rng:NextNumber(4, 12))
+	block(
+		parent,
+		"Rock",
+		size,
+		CFrame.new(ground + Vector3.new(0, size.Y * 0.25, 0))
+			* CFrame.Angles(rng:NextNumber(-0.2, 0.2), rng:NextNumber(0, math.pi * 2), rng:NextNumber(-0.2, 0.2)),
+		if rng:NextNumber() < 0.5 then M.Rock else M.Slate,
+		pick(rng, STONE_COLORS)
+	)
+end
+
+-- a cluster of tilted ice shards
+function rocks.ice(parent: Instance, ground: Vector3, rng: Random)
+	local model = Build.model("IceShards", parent)
+	for _ = 1, rng:NextInteger(2, 4) do
+		local h = rng:NextNumber(4, 12)
+		local w = rng:NextNumber(1.5, 3.5)
+		local p = block(
+			model,
+			"Shard",
+			Vector3.new(w, h, w),
+			CFrame.new(ground + Vector3.new(rng:NextNumber(-3, 3), h * 0.35, rng:NextNumber(-3, 3)))
+				* CFrame.Angles(rng:NextNumber(-0.35, 0.35), rng:NextNumber(0, 3), rng:NextNumber(-0.35, 0.35)),
+			M.Ice,
+			Color3.fromRGB(170, 220, 250)
+		)
+		p.Transparency = 0.25
+	end
+end
+
+-- black volcanic glass with a glowing seam
+function rocks.obsidian(parent: Instance, ground: Vector3, rng: Random)
+	local model = Build.model("Obsidian", parent)
+	local h = rng:NextNumber(6, 16)
+	local w = rng:NextNumber(2.5, 5)
+	local cf = CFrame.new(ground + Vector3.new(0, h * 0.4, 0))
+		* CFrame.Angles(rng:NextNumber(-0.2, 0.2), rng:NextNumber(0, 3), rng:NextNumber(-0.2, 0.2))
+	block(model, "Spire", Vector3.new(w, h, w), cf, M.Basalt, Color3.fromRGB(25, 22, 28))
+	local seam = block(model, "Seam", Vector3.new(w + 0.1, h * 0.7, 0.3), cf, M.Neon, Color3.fromRGB(255, 110, 30))
+	seam.CanCollide = false
+end
+
+-- sandstone boulders and broken columns
+function rocks.sandstone(parent: Instance, ground: Vector3, rng: Random)
+	if rng:NextNumber() < 0.35 then
+		local h = rng:NextNumber(5, 14)
+		Build.cylinder(ground + Vector3.new(0, h / 2 - 1, 0), rng:NextNumber(2.5, 3.5), h, {
+			Name = "Column",
+			Material = M.Sandstone,
+			Color = Color3.fromRGB(215, 185, 140),
+		}, parent)
+		return
+	end
+	local size = Vector3.new(rng:NextNumber(4, 11), rng:NextNumber(3, 7), rng:NextNumber(4, 11))
+	block(
+		parent,
+		"Rock",
+		size,
+		CFrame.new(ground + Vector3.new(0, size.Y * 0.25, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0),
+		M.Sandstone,
+		Color3.fromRGB(200, 160, 110)
+	)
+end
+
+-- dark rock with a cap of glowing moss
+function rocks.mossy(parent: Instance, ground: Vector3, rng: Random)
+	local model = Build.model("MossyRock", parent)
+	local size = Vector3.new(rng:NextNumber(4, 10), rng:NextNumber(3, 6), rng:NextNumber(4, 10))
+	local cf = CFrame.new(ground + Vector3.new(0, size.Y * 0.25, 0))
+		* CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
+	block(model, "Rock", size, cf, M.Slate, Color3.fromRGB(60, 58, 70))
+	block(
+		model,
+		"Moss",
+		Vector3.new(size.X * 0.8, 0.5, size.Z * 0.8),
+		cf * CFrame.new(0, size.Y / 2, 0),
+		M.Grass,
+		Color3.fromRGB(60, 140, 120)
+	)
+end
+
+---------------------------------------------------------------------------
+-- Bushes and ground clutter
+---------------------------------------------------------------------------
+
+local bushes = {}
+
+function bushes.bush(parent: Instance, ground: Vector3, rng: Random)
 	local w = rng:NextNumber(3, 5)
-	Build.part({
-		Name = "Bush",
-		Size = Vector3.new(w, rng:NextNumber(2, 3.5), w),
-		CFrame = CFrame.new(ground + Vector3.new(0, 1, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), 0),
-		Material = Enum.Material.Grass,
-		Color = LEAF_COLORS[rng:NextInteger(1, #LEAF_COLORS)],
-	}, parent)
+	block(
+		parent,
+		"Bush",
+		Vector3.new(w, rng:NextNumber(2, 3.5), w),
+		CFrame.new(ground + Vector3.new(0, 1, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), 0),
+		M.Grass,
+		pick(rng, LEAF_COLORS)
+	)
+end
+
+function bushes.snowdrift(parent: Instance, ground: Vector3, rng: Random)
+	local w = rng:NextNumber(4, 8)
+	block(
+		parent,
+		"Snowdrift",
+		Vector3.new(w, rng:NextNumber(1.5, 3), w * rng:NextNumber(0.5, 1)),
+		CFrame.new(ground + Vector3.new(0, 0.6, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), 0),
+		M.Snow,
+		Color3.fromRGB(240, 245, 255)
+	)
+end
+
+function bushes.ashpile(parent: Instance, ground: Vector3, rng: Random)
+	local w = rng:NextNumber(3, 6)
+	local p = block(
+		parent,
+		"Ash",
+		Vector3.new(w, rng:NextNumber(1, 2), w),
+		CFrame.new(ground + Vector3.new(0, 0.4, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), 0),
+		M.Slate,
+		Color3.fromRGB(80, 76, 76)
+	)
+	if rng:NextNumber() < 0.25 then
+		Build.make("Smoke", { Color = Color3.fromRGB(90, 85, 85), Opacity = 0.15, RiseVelocity = 3, Size = 2 }, p)
+	end
+end
+
+function bushes.shrub(parent: Instance, ground: Vector3, rng: Random)
+	local w = rng:NextNumber(2, 3.5)
+	block(
+		parent,
+		"Shrub",
+		Vector3.new(w, rng:NextNumber(1.2, 2.2), w),
+		CFrame.new(ground + Vector3.new(0, 0.7, 0)) * CFrame.Angles(0, rng:NextNumber(0, math.pi), 0),
+		M.Grass,
+		Color3.fromRGB(130, 120, 70)
+	)
+end
+
+function bushes.smallmushroom(parent: Instance, ground: Vector3, rng: Random)
+	local model = Build.model("Mushroom", parent)
+	local h = rng:NextNumber(1, 2.5)
+	block(
+		model,
+		"Stem",
+		Vector3.new(0.5, h, 0.5),
+		CFrame.new(ground + Vector3.new(0, h / 2, 0)),
+		M.SmoothPlastic,
+		Color3.fromRGB(230, 225, 210)
+	)
+	local cap = block(
+		model,
+		"Cap",
+		Vector3.new(1.8, 0.6, 1.8),
+		CFrame.new(ground + Vector3.new(0, h + 0.2, 0)),
+		M.Neon,
+		pick(rng, GLOW_COLORS)
+	)
+	cap.CanCollide = false
+end
+
+local DECOR = { tree = trees, rock = rocks, bush = bushes }
+
+-- Builds one decoration of the given kind ("tree" | "rock" | "bush") and style.
+function Structures.decor(kind: string, styleName: string, parent: Instance, ground: Vector3, rng: Random)
+	local set = DECOR[kind]
+	local fn = set and set[styleName]
+	if not fn then
+		warn("[Structures] unknown decoration " .. kind .. "/" .. styleName)
+		return
+	end
+	if kind == "tree" then
+		fn(Build.model("Tree", parent), ground, rng)
+	else
+		fn(parent, ground, rng)
+	end
+end
+
+function Structures.hasDecor(kind: string, styleName: string): boolean
+	local set = DECOR[kind]
+	return set ~= nil and set[styleName] ~= nil
 end
 
 ---------------------------------------------------------------------------
@@ -4076,7 +5529,7 @@ end
 
 export type ChestSpot = { cframe: CFrame, tier: string }
 
--- Builds a stone floor that reaches down into uneven terrain, returns the floor top Y.
+-- Builds a floor that reaches down into uneven terrain, returns the floor top Y.
 local function foundation(
 	parent: Instance,
 	center: Vector3,
@@ -4105,22 +5558,23 @@ local function foundation(
 	return top
 end
 
-function Structures.ruinedTower(parent: Instance, center: Vector3, heightAt, rng: Random): { ChestSpot }
+function Structures.ruinedTower(parent: Instance, center: Vector3, heightAt, rng: Random, style: Style): { ChestSpot }
 	local model = Build.model("RuinedTower", parent)
-	local floorY = foundation(model, center, 20, heightAt, Enum.Material.Cobblestone, Color3.fromRGB(120, 118, 115))
+	local floorY = foundation(model, center, 20, heightAt, style.floor, style.floorColor)
 	local segments = 14
 	for i = 1, segments do
 		if rng:NextNumber() > 0.22 then
 			local angle = (i / segments) * math.pi * 2
 			local h = rng:NextNumber(3, 14)
 			local pos = Vector3.new(center.X + math.cos(angle) * 8, floorY + h / 2, center.Z + math.sin(angle) * 8)
-			Build.part({
-				Name = "Wall",
-				Size = Vector3.new(3.8, h, 1.6),
-				CFrame = CFrame.lookAt(pos, Vector3.new(center.X, pos.Y, center.Z)),
-				Material = Enum.Material.Cobblestone,
-				Color = STONE_COLORS[rng:NextInteger(1, #STONE_COLORS)],
-			}, model)
+			block(
+				model,
+				"Wall",
+				Vector3.new(3.8, h, 1.6),
+				CFrame.lookAt(pos, Vector3.new(center.X, pos.Y, center.Z)),
+				style.stone,
+				pick(rng, style.stoneColors)
+			)
 		end
 	end
 	-- fallen blocks
@@ -4128,77 +5582,81 @@ function Structures.ruinedTower(parent: Instance, center: Vector3, heightAt, rng
 		local a = rng:NextNumber(0, math.pi * 2)
 		local r = rng:NextNumber(10, 16)
 		local p = Vector3.new(center.X + math.cos(a) * r, 0, center.Z + math.sin(a) * r)
-		Build.part({
-			Name = "Rubble",
-			Size = Vector3.new(rng:NextNumber(2, 4), rng:NextNumber(1.5, 3), rng:NextNumber(2, 4)),
-			CFrame = CFrame.new(p.X, heightAt(p.X, p.Z) + 0.5, p.Z)
+		block(
+			model,
+			"Rubble",
+			Vector3.new(rng:NextNumber(2, 4), rng:NextNumber(1.5, 3), rng:NextNumber(2, 4)),
+			CFrame.new(p.X, heightAt(p.X, p.Z) + 0.5, p.Z)
 				* CFrame.Angles(rng:NextNumber(0, 1), rng:NextNumber(0, 3), 0),
-			Material = Enum.Material.Cobblestone,
-			Color = STONE_COLORS[1],
-		}, model)
+			style.stone,
+			style.stoneColors[1]
+		)
 	end
-	return {
-		{ cframe = CFrame.new(center.X, floorY + 1, center.Z), tier = "Shrine" },
-		{ cframe = CFrame.new(center.X + 4, floorY + 1, center.Z + 3) * CFrame.Angles(0, 2, 0), tier = "Outer" },
-	}
+	local spots = { { cframe = CFrame.new(center.X, floorY + 1, center.Z), tier = "Shrine" } }
+	if rng:NextNumber() < 0.5 then
+		table.insert(spots, {
+			cframe = CFrame.new(center.X + 4, floorY + 1, center.Z + 3) * CFrame.Angles(0, 2, 0),
+			tier = "Outer",
+		})
+	end
+	return spots
 end
 
-function Structures.shrine(parent: Instance, center: Vector3, heightAt, rng: Random): { ChestSpot }
+function Structures.shrine(parent: Instance, center: Vector3, heightAt, rng: Random, style: Style): { ChestSpot }
 	local model = Build.model("Shrine", parent)
-	local floorY = foundation(model, center, 18, heightAt, Enum.Material.Marble, Color3.fromRGB(225, 222, 215))
+	local floorY = foundation(model, center, 18, heightAt, style.shrine, style.shrineColor)
 	local roofY = floorY + 13
 	for _, offset in { Vector3.new(-7, 0, -7), Vector3.new(7, 0, -7), Vector3.new(-7, 0, 7), Vector3.new(7, 0, 7) } do
-		Build.part({
-			Name = "Pillar",
-			Size = Vector3.new(2, 13, 2),
-			CFrame = CFrame.new(center.X + offset.X, floorY + 6.5, center.Z + offset.Z),
-			Material = Enum.Material.Marble,
-			Color = Color3.fromRGB(235, 232, 225),
-		}, model)
+		block(
+			model,
+			"Pillar",
+			Vector3.new(2, 13, 2),
+			CFrame.new(center.X + offset.X, floorY + 6.5, center.Z + offset.Z),
+			style.shrine,
+			style.shrineColor
+		)
 	end
-	Build.part({
-		Name = "Roof",
-		Size = Vector3.new(19, 1.5, 19),
-		CFrame = CFrame.new(center.X, roofY + 0.75, center.Z),
-		Material = Enum.Material.Marble,
-		Color = Color3.fromRGB(210, 205, 195),
-	}, model)
-	Build.part({
-		Name = "Altar",
-		Size = Vector3.new(5, 2.5, 3),
-		CFrame = CFrame.new(center.X, floorY + 1.25, center.Z - 3),
-		Material = Enum.Material.Marble,
-		Color = Color3.fromRGB(180, 175, 170),
-	}, model)
+	block(
+		model,
+		"Roof",
+		Vector3.new(19, 1.5, 19),
+		CFrame.new(center.X, roofY + 0.75, center.Z),
+		style.shrine,
+		style.shrineColor:Lerp(Color3.new(0, 0, 0), 0.08)
+	)
+	block(
+		model,
+		"Altar",
+		Vector3.new(5, 2.5, 3),
+		CFrame.new(center.X, floorY + 1.25, center.Z - 3),
+		style.shrine,
+		style.shrineColor:Lerp(Color3.new(0, 0, 0), 0.2)
+	)
 	local crystal = Build.part({
 		Name = "Crystal",
 		Size = Vector3.new(1.6, 3.5, 1.6),
 		CFrame = CFrame.new(center.X, floorY + 6, center.Z - 3) * CFrame.Angles(0, math.rad(45), math.rad(20)),
-		Material = Enum.Material.Neon,
-		Color = Color3.fromRGB(150, 110, 255),
+		Material = M.Neon,
+		Color = style.accent:Lerp(Color3.fromHSV(rng:NextNumber(), 0.5, 1), 0.25),
 		CanCollide = false,
 	}, model)
 	Build.make("PointLight", { Color = crystal.Color, Range = 18, Brightness = 2 }, crystal)
-	local hue = rng:NextNumber(0.6, 0.85)
-	crystal.Color = Color3.fromHSV(hue, 0.5, 1)
 	return { { cframe = CFrame.new(center.X, floorY + 1, center.Z + 1), tier = "Shrine" } }
 end
 
-function Structures.camp(parent: Instance, center: Vector3, heightAt, rng: Random): { ChestSpot }
+function Structures.camp(parent: Instance, center: Vector3, heightAt, rng: Random, style: Style): { ChestSpot }
 	local model = Build.model("Camp", parent)
 	local groundY = heightAt(center.X, center.Z)
-	-- campfire
 	local fire = Build.part({
 		Name = "Campfire",
 		Size = Vector3.new(3, 0.8, 3),
 		CFrame = CFrame.new(center.X, groundY + 0.2, center.Z),
-		Material = Enum.Material.Wood,
-		Color = Color3.fromRGB(70, 50, 35),
+		Material = M.Wood,
+		Color = style.wood,
 		CanCollide = false,
 	}, model)
 	Build.make("Fire", { Size = 4, Heat = 6 }, fire)
 	Build.make("PointLight", { Color = Color3.fromRGB(255, 160, 80), Range = 20, Brightness = 2 }, fire)
-	-- tents
 	for i = 1, 2 do
 		local angle = rng:NextNumber(0, math.pi * 2) + i * math.pi
 		local p = Vector3.new(center.X + math.cos(angle) * 9, 0, center.Z + math.sin(angle) * 9)
@@ -4210,86 +5668,79 @@ function Structures.camp(parent: Instance, center: Vector3, heightAt, rng: Rando
 			Size = Vector3.new(6, 5, 3),
 			CFrame = look * CFrame.new(0, 0, -1.5),
 			Color = canvas,
-			Material = Enum.Material.Fabric,
+			Material = M.Fabric,
 		}, model)
 		Build.wedge({
 			Name = "Tent",
 			Size = Vector3.new(6, 5, 3),
 			CFrame = look * CFrame.new(0, 0, 1.5) * CFrame.Angles(0, math.pi, 0),
 			Color = canvas,
-			Material = Enum.Material.Fabric,
+			Material = M.Fabric,
 		}, model)
 	end
-	-- crates
 	for _ = 1, 3 do
 		local a = rng:NextNumber(0, math.pi * 2)
 		local p = Vector3.new(center.X + math.cos(a) * 5.5, 0, center.Z + math.sin(a) * 5.5)
-		Build.part({
-			Name = "Crate",
-			Size = Vector3.new(2.5, 2.5, 2.5),
-			CFrame = CFrame.new(p.X, heightAt(p.X, p.Z) + 1.1, p.Z) * CFrame.Angles(0, rng:NextNumber(0, 3), 0),
-			Material = Enum.Material.WoodPlanks,
-			Color = Color3.fromRGB(160, 120, 75),
-		}, model)
+		block(
+			model,
+			"Crate",
+			Vector3.new(2.5, 2.5, 2.5),
+			CFrame.new(p.X, heightAt(p.X, p.Z) + 1.1, p.Z) * CFrame.Angles(0, rng:NextNumber(0, 3), 0),
+			M.WoodPlanks,
+			style.wood:Lerp(Color3.new(1, 1, 1), 0.25)
+		)
 	end
 	local chestAngle = rng:NextNumber(0, math.pi * 2)
 	local cp = Vector3.new(center.X + math.cos(chestAngle) * 4, 0, center.Z + math.sin(chestAngle) * 4)
+	local cy = heightAt(cp.X, cp.Z) + 1
 	return {
-		{
-			cframe = CFrame.lookAt(
-				Vector3.new(cp.X, heightAt(cp.X, cp.Z) + 1, cp.Z),
-				Vector3.new(center.X, heightAt(cp.X, cp.Z) + 1, center.Z)
-			),
-			tier = "Outer",
-		},
+		{ cframe = CFrame.lookAt(Vector3.new(cp.X, cy, cp.Z), Vector3.new(center.X, cy, center.Z)), tier = "Outer" },
 	}
 end
 
-function Structures.watchtower(parent: Instance, center: Vector3, heightAt, rng: Random): { ChestSpot }
+function Structures.watchtower(parent: Instance, center: Vector3, heightAt, rng: Random, style: Style): { ChestSpot }
 	local model = Build.model("Watchtower", parent)
 	local groundY = heightAt(center.X, center.Z)
 	local topY = groundY + 16
 	for _, o in { Vector3.new(-4, 0, -4), Vector3.new(4, 0, -4), Vector3.new(-4, 0, 4), Vector3.new(4, 0, 4) } do
 		local gy = heightAt(center.X + o.X, center.Z + o.Z)
 		local h = topY - gy + 3
-		Build.part({
-			Name = "Leg",
-			Size = Vector3.new(1.4, h, 1.4),
-			CFrame = CFrame.new(center.X + o.X, gy + h / 2 - 3, center.Z + o.Z),
-			Material = Enum.Material.Wood,
-			Color = Color3.fromRGB(110, 80, 50),
-		}, model)
+		block(
+			model,
+			"Leg",
+			Vector3.new(1.4, h, 1.4),
+			CFrame.new(center.X + o.X, gy + h / 2 - 3, center.Z + o.Z),
+			M.Wood,
+			style.wood
+		)
 	end
-	Build.part({
-		Name = "Platform",
-		Size = Vector3.new(11, 1, 11),
-		CFrame = CFrame.new(center.X, topY, center.Z),
-		Material = Enum.Material.WoodPlanks,
-		Color = Color3.fromRGB(150, 110, 70),
-	}, model)
+	local planks = style.wood:Lerp(Color3.new(1, 1, 1), 0.2)
+	block(model, "Platform", Vector3.new(11, 1, 11), CFrame.new(center.X, topY, center.Z), M.WoodPlanks, planks)
 	for _, o in { Vector3.new(0, 0, -5.2), Vector3.new(0, 0, 5.2) } do
-		Build.part({
-			Name = "Rail",
-			Size = Vector3.new(11, 2.5, 0.6),
-			CFrame = CFrame.new(center.X + o.X, topY + 1.75, center.Z + o.Z),
-			Material = Enum.Material.WoodPlanks,
-			Color = Color3.fromRGB(130, 95, 60),
-		}, model)
+		block(
+			model,
+			"Rail",
+			Vector3.new(11, 2.5, 0.6),
+			CFrame.new(center.X + o.X, topY + 1.75, center.Z + o.Z),
+			M.WoodPlanks,
+			planks
+		)
 	end
-	Build.part({
-		Name = "Rail",
-		Size = Vector3.new(0.6, 2.5, 11),
-		CFrame = CFrame.new(center.X - 5.2, topY + 1.75, center.Z),
-		Material = Enum.Material.WoodPlanks,
-		Color = Color3.fromRGB(130, 95, 60),
-	}, model)
+	block(
+		model,
+		"Rail",
+		Vector3.new(0.6, 2.5, 11),
+		CFrame.new(center.X - 5.2, topY + 1.75, center.Z),
+		M.WoodPlanks,
+		planks
+	)
 	-- ladder on the open side
 	local ladderH = topY - groundY + 1
 	local truss = Instance.new("TrussPart")
 	truss.Anchored = true
 	truss.Size = Vector3.new(2, math.max(2, math.floor(ladderH / 2) * 2), 2)
 	truss.CFrame = CFrame.new(center.X + 6.6, groundY + truss.Size.Y / 2 - 0.5, center.Z)
-	truss.Color = Color3.fromRGB(110, 80, 50)
+	truss.Color = style.wood
 	truss.Parent = model
 	return {
 		{
@@ -4299,50 +5750,61 @@ function Structures.watchtower(parent: Instance, center: Vector3, heightAt, rng:
 	}
 end
 
+Structures.Pois = {
+	ruinedTower = Structures.ruinedTower,
+	shrine = Structures.shrine,
+	camp = Structures.camp,
+	watchtower = Structures.watchtower,
+}
+
 ---------------------------------------------------------------------------
 -- Cornucopia
 ---------------------------------------------------------------------------
 
 export type CornucopiaResult = { chests: { ChestSpot }, pedestals: { CFrame } }
 
-function Structures.cornucopia(parent: Instance, plazaY: number): CornucopiaResult
+function Structures.cornucopia(parent: Instance, plazaY: number, style: Style): CornucopiaResult
 	local model = Build.model("Cornucopia", parent)
 	local center = Vector3.new(0, plazaY, 0)
 
 	Build.cylinder(center + Vector3.new(0, 0.2, 0), A.CornucopiaRadius * 2, 1.4, {
 		Name = "Plaza",
-		Material = Enum.Material.Slate,
-		Color = Color3.fromRGB(105, 105, 115),
+		Material = style.plaza,
+		Color = style.plazaColor,
 	}, model)
-	Build.cylinder(center + Vector3.new(0, 1.2, 0), 32, 2, {
-		Name = "Dais",
-		Material = Enum.Material.Marble,
-		Color = Color3.fromRGB(225, 220, 210),
-	}, model)
+	Build.cylinder(
+		center + Vector3.new(0, 1.2, 0),
+		32,
+		2,
+		{ Name = "Dais", Material = style.dais, Color = style.daisColor },
+		model
+	)
 	Build.cylinder(center + Vector3.new(0, 2.25, 0), 33, 0.3, {
 		Name = "DaisTrim",
-		Material = Enum.Material.Metal,
+		Material = M.Metal,
 		Color = Color3.fromRGB(212, 175, 55),
 	}, model)
 
 	-- The Mana Spire: a floating crystal above a stone plinth
-	Build.cylinder(center + Vector3.new(0, 4, 0), 8, 4, {
-		Name = "Plinth",
-		Material = Enum.Material.Basalt,
-		Color = Color3.fromRGB(45, 40, 55),
-	}, model)
+	Build.cylinder(
+		center + Vector3.new(0, 4, 0),
+		8,
+		4,
+		{ Name = "Plinth", Material = M.Basalt, Color = Color3.fromRGB(45, 40, 55) },
+		model
+	)
 	local spire = Build.part({
 		Name = "ManaSpire",
 		Size = Vector3.new(5, 14, 5),
 		CFrame = CFrame.new(center + Vector3.new(0, 14, 0)) * CFrame.Angles(0, math.rad(45), 0),
-		Material = Enum.Material.Neon,
-		Color = Color3.fromRGB(150, 90, 255),
+		Material = M.Neon,
+		Color = style.accent,
 		Transparency = 0.15,
 		CanCollide = false,
 	}, model)
 	Build.make("PointLight", { Color = spire.Color, Range = 45, Brightness = 3 }, spire)
 	Build.make("ParticleEmitter", {
-		Color = ColorSequence.new(Color3.fromRGB(200, 160, 255)),
+		Color = ColorSequence.new(style.accent:Lerp(Color3.new(1, 1, 1), 0.4)),
 		LightEmission = 1,
 		Size = NumberSequence.new(0.6, 0),
 		Lifetime = NumberRange.new(1.5, 3),
@@ -4359,35 +5821,34 @@ function Structures.cornucopia(parent: Instance, plazaY: number): CornucopiaResu
 			plazaY + 5,
 			math.sin(angle) * (A.CornucopiaRadius - 5)
 		)
-		Build.part({
-			Name = "Monolith",
-			Size = Vector3.new(3, 9, 3),
-			CFrame = CFrame.lookAt(pos, Vector3.new(0, pos.Y, 0)),
-			Material = Enum.Material.Slate,
-			Color = Color3.fromRGB(80, 78, 90),
-		}, model)
-		local rune = Build.part({
-			Name = "Rune",
-			Size = Vector3.new(1.2, 1.2, 0.2),
-			CFrame = CFrame.lookAt(pos, Vector3.new(0, pos.Y, 0)) * CFrame.new(0, 1.5, -1.55),
-			Material = Enum.Material.Neon,
-			Color = Color3.fromRGB(170, 120, 255),
-			CanCollide = false,
-		}, model)
-		rune.Name = "Rune"
+		local look = CFrame.lookAt(pos, Vector3.new(0, pos.Y, 0))
+		block(
+			model,
+			"Monolith",
+			Vector3.new(3, 9, 3),
+			look,
+			style.stone,
+			style.stoneColors[1]:Lerp(Color3.new(0, 0, 0), 0.25)
+		)
+		block(model, "Rune", Vector3.new(1.2, 1.2, 0.2), look * CFrame.new(0, 1.5, -1.55), M.Neon, style.accent).CanCollide =
+			false
 	end
 
+	-- Chests: most on the dais around the spire, the rest out on the plaza
 	local chests: { ChestSpot } = {}
-	for i = 1, 12 do
-		local angle = (i / 12) * math.pi * 2
+	local total = A.CornucopiaChests
+	local onDais = math.min(total, 8)
+	for i = 1, onDais do
+		local angle = (i / onDais) * math.pi * 2
 		local pos = Vector3.new(math.cos(angle) * 10.5, plazaY + 3.25, math.sin(angle) * 10.5)
 		table.insert(chests, {
 			cframe = CFrame.lookAt(pos, pos + Vector3.new(math.cos(angle), 0, math.sin(angle))),
 			tier = "Cornucopia",
 		})
 	end
-	for i = 1, 4 do
-		local angle = (i / 4) * math.pi * 2 + math.pi / 4
+	local onPlaza = total - onDais
+	for i = 1, onPlaza do
+		local angle = (i / onPlaza) * math.pi * 2 + math.pi / 4
 		local pos = Vector3.new(math.cos(angle) * 23, plazaY + 1.9, math.sin(angle) * 23)
 		table.insert(chests, {
 			cframe = CFrame.lookAt(pos, pos + Vector3.new(math.cos(angle), 0, math.sin(angle))),
@@ -4401,13 +5862,13 @@ function Structures.cornucopia(parent: Instance, plazaY: number): CornucopiaResu
 		local base = Vector3.new(math.cos(angle) * A.PedestalRadius, plazaY, math.sin(angle) * A.PedestalRadius)
 		Build.cylinder(base + Vector3.new(0, 1.2, 0), 5, 2.4, {
 			Name = "Pedestal",
-			Material = Enum.Material.Marble,
-			Color = Color3.fromRGB(200, 195, 190),
+			Material = style.dais,
+			Color = style.daisColor:Lerp(Color3.new(0, 0, 0), 0.1),
 		}, model)
 		Build.cylinder(base + Vector3.new(0, 2.45, 0), 4, 0.15, {
 			Name = "PedestalRune",
-			Material = Enum.Material.Neon,
-			Color = Color3.fromRGB(150, 100, 255),
+			Material = M.Neon,
+			Color = style.accent,
 			CanCollide = false,
 		}, model)
 		local standAt = base + Vector3.new(0, 2.4 + 3, 0)
@@ -4518,15 +5979,19 @@ return Structures
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="28">
+        <Item class="ModuleScript" referent="29">
           <Properties>
             <string name="Name">TerrainGen</string>
-            <string name="Source"><![CDATA[-- Generates a fresh island arena with Roblox smooth terrain: rolling hills, lakes,
--- a flat plaza in the centre for the cornucopia, and mountains around the edge.
+            <string name="Source"><![CDATA[-- Generates a fresh island arena with Roblox smooth terrain: hills, lakes (water, ice or lava),
+-- a flat plaza in the middle for the cornucopia, and mountains around the edge.
+-- Everything about the look comes from the map definition (see MapDefs).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local MapDefs = require(script.Parent.MapDefs)
+
+type MapDef = MapDefs.MapDef
 
 local TerrainGen = {}
 
@@ -4540,59 +6005,69 @@ local function smoothstep(e0: number, e1: number, x: number): number
 	return t * t * (3 - 2 * t)
 end
 
--- Returns a deterministic height function for a seed. The same function is used to
+-- Returns a deterministic height function for a seed and map. The same function is used to
 -- place trees, chests and ruins so they always sit on the ground.
-function TerrainGen.makeHeight(seed: number): (number, number) -> number
+function TerrainGen.makeHeight(seed: number, def: MapDef): (number, number) -> number
 	local rng = Random.new(seed)
 	local ox, oz = rng:NextNumber(-5000, 5000), rng:NextNumber(-5000, 5000)
+	local T = def.terrain
 	local flatRadius = A.PedestalRadius + 14
-	local edge = A.Radius - 30
+	local edge = def.radius - 30
+	local plaza = MapDefs.plazaHeight(def)
 	return function(x: number, z: number): number
 		local d = math.sqrt(x * x + z * z)
 		local nx, nz = x + ox, z + oz
-		local n = math.noise(nx / 170, nz / 170, 0.37) * 36
-			+ math.noise(nx / 64, nz / 64, 7.13) * 13
-			+ math.noise(nx / 22, nz / 22, 3.31) * 3
-		local h = A.BaseHeight + n
+		local n = math.noise(nx / T.hillScale, nz / T.hillScale, 0.37) * T.hills
+			+ math.noise(nx / 64, nz / 64, 7.13) * T.detail
+			+ math.noise(nx / 22, nz / 22, 3.31) * T.rough
+		local h = T.base + n
 		-- flatten the middle for the cornucopia plaza
 		local t = smoothstep(flatRadius, flatRadius + 45, d)
-		h = (A.BaseHeight + 1) * (1 - t) + h * t
+		h = plaza * (1 - t) + h * t
 		-- raise mountains around the rim so the island has a natural wall
 		if d > edge then
 			local e = (d - edge) / 60
-			h += e * e * 85 + math.noise(x / 40, z / 40, 9.7) * 12 * math.min(e, 1)
+			h += e * e * T.mountains + math.noise(x / 40, z / 40, 9.7) * 12 * math.min(e, 1)
 		end
 		return h
 	end
 end
 
-function TerrainGen.plazaHeight(): number
-	return A.BaseHeight + 1
-end
-
-local function surfaceMaterial(h: number, slope: number, x: number, z: number): Enum.Material
-	if h < A.WaterLevel + 1.5 then
-		return Enum.Material.Sand
-	elseif h > 78 then
-		return Enum.Material.Snow
-	elseif slope > 1.15 or h > 50 then
-		return Enum.Material.Rock
+local function surfaceMaterial(def: MapDef, h: number, slope: number, x: number, z: number): Enum.Material
+	local m = def.materials
+	local T = def.terrain
+	if h < T.liquidLevel + 1.5 then
+		return m.shore
+	elseif h > T.peakHeight then
+		return m.peak
+	elseif slope > 1.15 or h > T.cliffHeight then
+		return m.cliff
 	end
 	local patch = math.noise(x / 45, z / 45, 2.2)
 	if patch > 0.25 then
-		return Enum.Material.LeafyGrass
+		return m.alt
 	elseif patch < -0.35 then
-		return Enum.Material.Ground
+		return m.alt2
 	end
-	return Enum.Material.Grass
+	return m.surface
 end
 
 -- Writes the terrain. Yields between chunks so the server stays responsive.
-function TerrainGen.generate(heightAt: (number, number) -> number)
+function TerrainGen.generate(heightAt: (number, number) -> number, def: MapDef)
 	local terrain = workspace.Terrain
 	terrain:Clear()
+	for material, color in def.colors do
+		pcall(function()
+			terrain:SetMaterialColor(material, color)
+		end)
+	end
+	terrain.WaterColor = def.water.color
+	terrain.WaterTransparency = def.water.transparency
+	terrain.WaterWaveSize = 0.12
 
-	local R = math.ceil((A.Radius + 96) / RES) * RES
+	local T = def.terrain
+	local surfaceSoil = def.materials.under
+	local R = math.ceil((def.radius + 96) / RES) * RES
 	local cells = (2 * R) // RES
 	local ny = (MAX_Y - MIN_Y) // RES
 
@@ -4606,6 +6081,9 @@ function TerrainGen.generate(heightAt: (number, number) -> number)
 			row[iz] = heightAt(x, z)
 		end
 		heights[ix] = row
+		if ix % 40 == 0 then
+			task.wait()
+		end
 	end
 
 	local CHUNK = 32
@@ -4632,7 +6110,7 @@ function TerrainGen.generate(heightAt: (number, number) -> number)
 						math.abs(heights[gx + 1][gz] - heights[gx - 1][gz])
 						+ math.abs(heights[gx][gz + 1] - heights[gx][gz - 1])
 					) / (2 * RES)
-					local surface = surfaceMaterial(h, slope, x, z)
+					local surface = surfaceMaterial(def, h, slope, x, z)
 					for iy = 1, ny do
 						local y0 = MIN_Y + (iy - 1) * RES
 						local fill = math.clamp((h - y0) / RES, 0, 1)
@@ -4642,14 +6120,14 @@ function TerrainGen.generate(heightAt: (number, number) -> number)
 							local depth = h - (y0 + RES)
 							if depth > 12 then
 								mat = Enum.Material.Rock
-							elseif depth > 3 and surface ~= Enum.Material.Sand and surface ~= Enum.Material.Snow then
-								mat = if surface == Enum.Material.Rock then Enum.Material.Rock else Enum.Material.Ground
+							elseif depth > 3 then
+								mat = if surface == def.materials.cliff then surface else surfaceSoil
 							else
 								mat = surface
 							end
 							occ = fill
-						elseif y0 < A.WaterLevel then
-							mat = Enum.Material.Water
+						elseif y0 < T.liquidLevel then
+							mat = T.liquid
 							occ = 1
 						end
 						matX[iy][iz] = mat
@@ -4673,11 +6151,11 @@ return TerrainGen
           </Properties>
         </Item>
       </Item>
-      <Item class="Folder" referent="29">
+      <Item class="Folder" referent="30">
         <Properties>
           <string name="Name">Services</string>
         </Properties>
-        <Item class="ModuleScript" referent="30">
+        <Item class="ModuleScript" referent="31">
           <Properties>
             <string name="Name">BotService</string>
             <string name="Source"><![CDATA[-- AI mages that fill empty slots. They loot chests, slot spells into their wands,
@@ -4897,7 +6375,7 @@ end
 
 local function pickWander(): Vector3
 	local center = GameState.stormCenter
-	local radius = math.min(GameState.stormRadius * 0.7, Config.Arena.Radius * 0.7)
+	local radius = math.min(GameState.stormRadius * 0.7, MapService.radius() * 0.7)
 	local angle = rng:NextNumber(0, math.pi * 2)
 	local dist = rng:NextNumber(0, radius)
 	local x = center.X + math.cos(angle) * dist
@@ -5098,7 +6576,7 @@ return BotService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="31">
+        <Item class="ModuleScript" referent="32">
           <Properties>
             <string name="Name">CastingService</string>
             <string name="Source"><![CDATA[-- Wand casting rules, Noita style: each wand is a deck of spells that it cycles
@@ -5275,10 +6753,11 @@ end
 
 -- Attempts a cast for any combatant. Returns success and a reason when it fails.
 function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string?)
-	if not Combatants.isActive(c) or c.locked then
+	if not Combatants.canAct(c) or c.locked then
 		return false, "inactive"
 	end
-	if not GameState.combatAllowed() then
+	-- match fighters cast during the grace period and the battle; the lobby Spell Lab always works
+	if not c.practice and not GameState.combatAllowed() then
 		return false, "not now"
 	end
 	if (c.status.frozenUntil or 0) > now() then
@@ -5352,7 +6831,7 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 
 	if hpCost > 0 then
 		DamageService.apply(c, hpCost, { attacker = c, selfCost = true, isDot = true, element = "Blood" })
-		if not Combatants.isActive(c) then
+		if not Combatants.canAct(c) then
 			return true, nil
 		end
 	end
@@ -5411,7 +6890,7 @@ return CastingService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="32">
+        <Item class="ModuleScript" referent="33">
           <Properties>
             <string name="Name">ChestService</string>
             <string name="Source"><![CDATA[-- Chests and loot satchels: spawning, rolling loot, opening, taking items,
@@ -5747,7 +7226,7 @@ return ChestService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="33">
+        <Item class="ModuleScript" referent="34">
           <Properties>
             <string name="Name">ClassService</string>
             <string name="Source"><![CDATA[-- Class selection and premium access.
@@ -5852,7 +7331,7 @@ return ClassService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="34">
+        <Item class="ModuleScript" referent="35">
           <Properties>
             <string name="Name">Combatants</string>
             <string name="Source"><![CDATA[-- Registry of everything that can fight: real players and bots share one shape,
@@ -5891,6 +7370,8 @@ export type Combatant = {
 	lastSpellName: string?,
 	status: { [string]: any },
 	locked: boolean,
+	practice: boolean, -- in the lobby Spell Lab: may cast at dummies, can't be hurt
+	isDummy: boolean, -- a training dummy on the practice terrace
 	bot: { [string]: any }?,
 }
 
@@ -5930,6 +7411,8 @@ function Combatants.create(name: string, player: Player?): Combatant
 		lastSpellName = nil,
 		status = {},
 		locked = false,
+		practice = false,
+		isDummy = false,
 		bot = nil,
 	}
 	byId[c.id] = c
@@ -6014,6 +7497,15 @@ function Combatants.isActive(c: Combatant): boolean
 		and c.root.Parent ~= nil
 end
 
+-- Anyone allowed to cast right now: living match fighters, or players practising in the lobby.
+function Combatants.canAct(c: Combatant): boolean
+	local hum, root = c.humanoid, c.root
+	if not hum or not root or hum.Health <= 0 or root.Parent == nil then
+		return false
+	end
+	return (c.inMatch and c.alive) or c.practice
+end
+
 function Combatants.active(): { Combatant }
 	local list = {}
 	for _, c in byId do
@@ -6068,7 +7560,7 @@ return Combatants
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="35">
+        <Item class="ModuleScript" referent="36">
           <Properties>
             <string name="Name">DamageService</string>
             <string name="Source"><![CDATA[-- The single place damage is dealt: grace period, self-damage, crits, marks, shields,
@@ -6139,14 +7631,25 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 	if not hum or hum.Health <= 0 or not target.alive or not target.inMatch then
 		return 0
 	end
-	if not GameState.combatAllowed() then
-		return 0
-	end
 	local attacker = info.attacker
 	local isSelf = attacker == target
-	-- grace period: players (and bots) cannot hurt each other yet
-	if GameState.phase == "Grace" and attacker and not isSelf and not info.isStorm then
-		return 0
+	if target.isDummy then
+		-- training dummies only react to spells from the lobby Spell Lab
+		if not attacker or not attacker.practice then
+			return 0
+		end
+	else
+		-- lobby practice spells never hurt anyone real, even if they somehow reach the arena
+		if attacker and attacker.practice then
+			return 0
+		end
+		if not GameState.combatAllowed() then
+			return 0
+		end
+		-- grace period: players (and bots) cannot hurt each other yet
+		if GameState.phase == "Grace" and attacker and not isSelf and not info.isStorm then
+			return 0
+		end
 	end
 
 	local crit = false
@@ -6172,9 +7675,14 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 	end
 
 	local dealt = math.min(hum.Health, math.max(0, amount))
+	if target.isDummy then
+		-- dummies never die; PracticeService heals them back up
+		dealt = math.min(dealt, hum.Health - 1)
+	end
 	if dealt > 0 then
 		hum.Health -= dealt
 	end
+	local shown = if target.isDummy then math.max(0, amount) else dealt
 
 	if attacker and not isSelf then
 		target.lastAttacker = attacker
@@ -6214,7 +7722,7 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 			damageNumber:FireClient(
 				attacker.player,
 				pos,
-				math.floor(dealt + 0.5),
+				math.floor(shown + 0.5),
 				crit,
 				info.element or "Neutral",
 				false
@@ -6237,7 +7745,7 @@ return DamageService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="36">
+        <Item class="ModuleScript" referent="37">
           <Properties>
             <string name="Name">DataService</string>
             <string name="Source"><![CDATA[-- Lifetime stats (wins / kills / matches) saved with DataStores and shown on the leaderboard.
@@ -6248,10 +7756,11 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local DataService = {}
 
-type Stats = { wins: number, kills: number, matches: number }
+type Stats = { wins: number, kills: number, matches: number, tutorial: boolean }
 
 local cache: { [Player]: Stats } = {}
 local store: DataStore? = nil
@@ -6280,7 +7789,7 @@ local function leaderstats(player: Player, stats: Stats)
 end
 
 function DataService.load(player: Player)
-	local stats: Stats = { wins = 0, kills = 0, matches = 0 }
+	local stats: Stats = { wins = 0, kills = 0, matches = 0, tutorial = false }
 	if store then
 		local ok, data = pcall(function()
 			return (store :: DataStore):GetAsync(key(player))
@@ -6289,10 +7798,15 @@ function DataService.load(player: Player)
 			stats.wins = tonumber(data.wins) or 0
 			stats.kills = tonumber(data.kills) or 0
 			stats.matches = tonumber(data.matches) or 0
+			stats.tutorial = data.tutorial == true
 		end
 	end
 	cache[player] = stats
 	leaderstats(player, stats)
+	if stats.tutorial then
+		player:SetAttribute("TutorialDone", true)
+	end
+	player:SetAttribute("StatsLoaded", true)
 end
 
 function DataService.save(player: Player)
@@ -6302,7 +7816,7 @@ function DataService.save(player: Player)
 	end
 	local ok, err = pcall(function()
 		(store :: DataStore):UpdateAsync(key(player), function()
-			return { wins = stats.wins, kills = stats.kills, matches = stats.matches }
+			return { wins = stats.wins, kills = stats.kills, matches = stats.matches, tutorial = stats.tutorial }
 		end)
 	end)
 	if not ok then
@@ -6340,6 +7854,14 @@ function DataService.init()
 	else
 		warn("[Data] DataStores unavailable, stats will not be saved: " .. tostring(result))
 	end
+	Remotes.event("TutorialDone").OnServerEvent:Connect(function(player)
+		player:SetAttribute("TutorialDone", true)
+		local stats = cache[player]
+		if stats and not stats.tutorial then
+			stats.tutorial = true
+			task.spawn(DataService.save, player)
+		end
+	end)
 	Players.PlayerRemoving:Connect(function(player)
 		DataService.save(player)
 		cache[player] = nil
@@ -6356,7 +7878,7 @@ return DataService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="37">
+        <Item class="ModuleScript" referent="38">
           <Properties>
             <string name="Name">FX</string>
             <string name="Source"><![CDATA[-- Thin wrapper over the FX remote so services can say FX.all("Boom", ...) without
@@ -6396,7 +7918,7 @@ return FX
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="38">
+        <Item class="ModuleScript" referent="39">
           <Properties>
             <string name="Name">GameState</string>
             <string name="Source"><![CDATA[-- Server-wide match state that several services read. MatchService is the only writer.
@@ -6405,7 +7927,7 @@ return FX
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameState = {
-	phase = "Waiting", -- Waiting | Intermission | Countdown | Grace | Battle | Ended
+	phase = "Waiting", -- Waiting | Voting | Loading | Countdown | Grace | Battle | Ended
 	pvp = false,
 	matchStartedAt = 0,
 	stormCenter = Vector3.new(0, 0, 0),
@@ -6434,7 +7956,7 @@ return GameState
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="39">
+        <Item class="ModuleScript" referent="40">
           <Properties>
             <string name="Name">InventoryService</string>
             <string name="Source"><![CDATA[-- Owns every combatant's inventory: wands (with their slotted spells), the spell bag,
@@ -6599,7 +8121,7 @@ function InventoryService.refreshTools(c: Combatant)
 		return
 	end
 	clearTools(c)
-	if not wand or not model or not c.alive or not c.inMatch then
+	if not wand or not model or not Combatants.canAct(c) then
 		return
 	end
 	local tool = buildTool(wand)
@@ -6760,6 +8282,53 @@ function InventoryService.giveKit(c: Combatant, classId: string)
 	InventoryService.sync(c)
 end
 
+-- The lobby Spell Lab kit: a roomy practice staff, a twin-cast scepter, a few showcase
+-- spells and copies of EVERY spell part, so players can learn crafting by experimenting.
+local PRACTICE_SPELLS = { "Fireball", "ChainLightning", "MagicMissile", "ClusterBomb", "Meteor", "Singularity" }
+
+function InventoryService.givePractice(c: Combatant)
+	local inv = c.inventory
+	local staff = WandGenerator.fromTemplate({
+		name = "Spell Lab Staff",
+		rarity = "Rare",
+		wandType = "Staff",
+		color = { 70, 50, 110 },
+		stats = { capacity = 6, castDelay = 0.15, rechargeTime = 0.4, manaMax = 800, manaRegen = 250, spread = 1 },
+	})
+	staff.slots[1] = LootTables.premadeSpell("MagicBolt")
+	local scepter = WandGenerator.fromTemplate({
+		name = "Twincast Practice Scepter",
+		rarity = "Epic",
+		wandType = "Scepter",
+		color = { 200, 170, 90 },
+		stats = {
+			capacity = 4,
+			spellsPerCast = 2,
+			castDelay = 0.25,
+			rechargeTime = 0.6,
+			manaMax = 600,
+			manaRegen = 200,
+			spread = 2,
+		},
+	})
+	scepter.slots[1] = LootTables.premadeSpell("Firebolt")
+	scepter.slots[2] = LootTables.premadeSpell("Frostbolt")
+	inv.wands[1] = staff
+	inv.wands[2] = scepter
+	for _, id in PRACTICE_SPELLS do
+		table.insert(inv.spells, LootTables.premadeSpell(id))
+	end
+	for _, part in SpellParts.List do
+		addPart(c, part.id, Config.Practice.PartCopies)
+	end
+	for _, potion in Consumables.List do
+		addConsumable(c, potion.id, 1)
+	end
+	inv.equipped = 1
+	InventoryService.refreshTools(c)
+	InventoryService.sync(c)
+end
+
 function InventoryService.equip(c: Combatant, index: number): boolean
 	local inv = c.inventory
 	if index < 1 or index > INV.MaxWands or not inv.wands[index] then
@@ -6776,7 +8345,7 @@ end
 ---------------------------------------------------------------------------
 
 function InventoryService.useConsumable(c: Combatant, id: string): (boolean, string?)
-	if not Combatants.isActive(c) or not GameState.combatAllowed() then
+	if not Combatants.canAct(c) or (not c.practice and not GameState.combatAllowed()) then
 		return false, "Not now"
 	end
 	local inv = c.inventory
@@ -7097,6 +8666,16 @@ actions.DropPart = function(c, args)
 	return true
 end
 
+-- Lobby only: throw away the practice inventory and get a fresh Spell Lab kit.
+actions.ResetPractice = function(c, _args)
+	if not c.practice then
+		return false, "Only in the Spell Lab"
+	end
+	InventoryService.reset(c)
+	InventoryService.givePractice(c)
+	return true, "Spell Lab kit restocked"
+end
+
 actions.UseConsumable = function(c, args)
 	if not isString(args.id) then
 		return false, "Bad potion"
@@ -7116,8 +8695,8 @@ function InventoryService.handle(player: Player, action: any, args: any): (boole
 	if not fn then
 		return false, "Unknown action"
 	end
-	if not c.inMatch or not c.alive then
-		return false, "You can only manage your inventory during a match"
+	if not Combatants.canAct(c) then
+		return false, "You can't do that right now"
 	end
 	local ok, okResult, message, extra = pcall(fn, c, args)
 	if not ok then
@@ -7164,10 +8743,11 @@ return InventoryService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="40">
+        <Item class="ModuleScript" referent="41">
           <Properties>
             <string name="Name">MapService</string>
-            <string name="Source"><![CDATA[-- Builds the lobby once and a brand new arena (new seed, new layout) for every match.
+            <string name="Source"><![CDATA[-- Builds the lobby once and a brand new arena for every match: the map players voted for,
+-- with a fresh random layout each time.
 
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -7175,9 +8755,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Map = script.Parent.Parent.Map
 local Build = require(Map.Build)
+local MapDefs = require(Map.MapDefs)
 local TerrainGen = require(Map.TerrainGen)
 local Structures = require(Map.Structures)
 local Lobby = require(Map.Lobby)
+
+type MapDef = MapDefs.MapDef
 
 local MapService = {}
 
@@ -7185,6 +8768,8 @@ local A = Config.Arena
 
 export type Arena = {
 	seed: number,
+	def: MapDef,
+	radius: number,
 	plazaY: number,
 	center: Vector3,
 	pedestals: { CFrame },
@@ -7194,176 +8779,205 @@ export type Arena = {
 }
 
 MapService.lobbySpawn = CFrame.new(0, A.LobbyHeight + 5, 0)
+MapService.lobby = nil :: Lobby.LobbyInfo?
 MapService.arena = nil :: Arena?
 MapService.generating = false
 
-local function setupLighting()
-	if Lighting:FindFirstChildOfClass("Atmosphere") then
-		return
+local function applyLighting(def: MapDef)
+	for key, value in def.lighting do
+		pcall(function()
+			(Lighting :: any)[key] = value
+		end)
 	end
-	Build.make("Atmosphere", {
-		Density = 0.28,
-		Offset = 0.15,
-		Color = Color3.fromRGB(200, 205, 230),
-		Decay = Color3.fromRGB(110, 100, 140),
-		Glare = 0.25,
-		Haze = 1.4,
-	}, Lighting)
-	Build.make("BloomEffect", { Intensity = 0.7, Size = 26, Threshold = 1.4 }, Lighting)
-	Build.make("ColorCorrectionEffect", { Saturation = 0.1, Contrast = 0.06, Brightness = 0.02 }, Lighting)
-	Build.make("SunRaysEffect", { Intensity = 0.05, Spread = 0.8 }, Lighting)
-	workspace.Terrain.WaterColor = Color3.fromRGB(60, 130, 170)
-	workspace.Terrain.WaterTransparency = 0.6
-	workspace.Terrain.WaterWaveSize = 0.12
+	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+	if not atmosphere then
+		atmosphere = Instance.new("Atmosphere")
+		atmosphere.Parent = Lighting
+	end
+	for key, value in def.atmosphere do
+		pcall(function()
+			(atmosphere :: any)[key] = value
+		end)
+	end
+	if not Lighting:FindFirstChildOfClass("BloomEffect") then
+		Build.make("BloomEffect", { Intensity = 0.7, Size = 26, Threshold = 1.4 }, Lighting)
+		Build.make("ColorCorrectionEffect", { Saturation = 0.1, Contrast = 0.06, Brightness = 0.02 }, Lighting)
+		Build.make("SunRaysEffect", { Intensity = 0.05, Spread = 0.8 }, Lighting)
+	end
 end
 
 function MapService.init()
-	setupLighting()
-	local _, spawnCFrame = Lobby.build()
-	MapService.lobbySpawn = spawnCFrame
+	applyLighting(MapDefs.List[1])
+	local info = Lobby.build()
+	MapService.lobby = info
+	MapService.lobbySpawn = info.spawn
 end
 
--- Generates terrain + structures. Yields for a few seconds.
-function MapService.generate(seed: number): Arena
+function MapService.randomDef(rng: Random): MapDef
+	return MapDefs.List[rng:NextInteger(1, #MapDefs.List)]
+end
+
+-- Generates terrain + structures for a map. Yields for a few seconds.
+function MapService.generate(seed: number, def: MapDef): Arena
+	while MapService.generating do
+		task.wait(0.2)
+	end
 	MapService.generating = true
-	local old = workspace:FindFirstChild("Arena")
-	if old then
-		old:Destroy()
-	end
-	local folder = Instance.new("Folder")
-	folder.Name = "Arena"
-	folder.Parent = workspace
-	local decor = Build.make("Folder", { Name = "Decor" }, folder)
-	Build.make("Folder", { Name = "Chests" }, folder)
-
-	local heightAt = TerrainGen.makeHeight(seed)
-	TerrainGen.generate(heightAt)
-
-	local rng = Random.new(seed)
-	local plazaY = TerrainGen.plazaHeight()
-	local corn = Structures.cornucopia(folder, plazaY)
-	local chestSpots: { Structures.ChestSpot } = table.clone(corn.chests)
-
-	local function polar(angle: number, dist: number): (number, number)
-		return math.cos(angle) * dist, math.sin(angle) * dist
-	end
-
-	local function steep(x: number, z: number): boolean
-		local h = heightAt(x, z)
-		return math.abs(heightAt(x + 3, z) - h) > 2.5 or math.abs(heightAt(x, z + 3) - h) > 2.5
-	end
-
-	-- Points of interest ring
-	local builders = { Structures.ruinedTower, Structures.shrine, Structures.camp, Structures.watchtower }
-	local pois: { Vector3 } = {}
-	for i = 1, A.RuinCount do
-		local x, z
-		for _ = 1, 10 do
-			local angle = (i / A.RuinCount) * math.pi * 2 + rng:NextNumber(-0.3, 0.3)
-			x, z = polar(angle, rng:NextNumber(120, A.Radius - 75))
-			if heightAt(x, z) > A.WaterLevel + 2 then
-				break
-			end
+	local ok, result = pcall(function()
+		local old = workspace:FindFirstChild("Arena")
+		if old then
+			old:Destroy()
 		end
-		local builder = builders[(i - 1) % #builders + 1]
-		local spots = builder(decor, Vector3.new(x, 0, z), heightAt, rng)
-		for _, spot in spots do
-			table.insert(chestSpots, spot)
-		end
-		table.insert(pois, Vector3.new(x, 0, z))
-		task.wait()
-	end
+		local folder = Instance.new("Folder")
+		folder.Name = "Arena"
+		folder.Parent = workspace
+		local decor = Build.make("Folder", { Name = "Decor" }, folder)
+		Build.make("Folder", { Name = "Chests" }, folder)
 
-	local function nearPoi(x: number, z: number, dist: number): boolean
-		for _, p in pois do
-			if (Vector3.new(x, 0, z) - p).Magnitude < dist then
-				return true
-			end
-		end
-		return false
-	end
+		applyLighting(def)
+		local heightAt = TerrainGen.makeHeight(seed, def)
+		TerrainGen.generate(heightAt, def)
 
-	-- Scattered chests
-	local outer: { Vector3 } = {}
-	local attempts = 0
-	while #outer < A.OuterChestCount and attempts < 3000 do
-		attempts += 1
-		local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(70, A.Radius - 30))
-		local h = heightAt(x, z)
-		if h > A.WaterLevel + 1 and not steep(x, z) and not nearPoi(x, z, 24) then
-			local ok = true
-			for _, p in outer do
-				if (Vector3.new(x, 0, z) - p).Magnitude < 30 then
-					ok = false
+		local rng = Random.new(seed)
+		local radius = def.radius
+		local liquid = def.terrain.liquidLevel
+		local plazaY = MapDefs.plazaHeight(def)
+		local corn = Structures.cornucopia(folder, plazaY, def.style)
+		local chestSpots: { Structures.ChestSpot } = table.clone(corn.chests)
+
+		local function polar(angle: number, dist: number): (number, number)
+			return math.cos(angle) * dist, math.sin(angle) * dist
+		end
+
+		local function steep(x: number, z: number): boolean
+			local h = heightAt(x, z)
+			return math.abs(heightAt(x + 3, z) - h) > 2.5 or math.abs(heightAt(x, z + 3) - h) > 2.5
+		end
+
+		-- Points of interest, spread around the island
+		local pois: { Vector3 } = {}
+		for i = 1, def.poiCount do
+			local x, z = 0, 0
+			for _ = 1, 12 do
+				local angle = (i / def.poiCount) * math.pi * 2 + rng:NextNumber(-0.3, 0.3)
+				local ring = if i % 2 == 0 then rng:NextNumber(0.3, 0.55) else rng:NextNumber(0.55, 0.82)
+				x, z = polar(angle, radius * ring)
+				if heightAt(x, z) > liquid + 2 then
 					break
 				end
 			end
-			if ok then
-				table.insert(outer, Vector3.new(x, 0, z))
-				table.insert(chestSpots, {
-					cframe = CFrame.new(x, h + 1, z) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0),
-					tier = "Outer",
-				})
+			local kind = def.pois[(i - 1) % #def.pois + 1]
+			local builder = Structures.Pois[kind]
+			if builder then
+				for _, spot in builder(decor, Vector3.new(x, 0, z), heightAt, rng, def.style) do
+					table.insert(chestSpots, spot)
+				end
 			end
+			table.insert(pois, Vector3.new(x, 0, z))
+			task.wait()
 		end
-	end
 
-	-- Nature
-	local function scatter(count: number, minDist: number, maxDist: number, fn)
-		local placed, tries = 0, 0
-		while placed < count and tries < count * 12 do
-			tries += 1
-			local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(minDist, maxDist))
+		local function nearPoi(x: number, z: number, dist: number): boolean
+			for _, p in pois do
+				if (Vector3.new(x, 0, z) - p).Magnitude < dist then
+					return true
+				end
+			end
+			return false
+		end
+
+		-- Scattered chests, kept well apart so loot is worth travelling for
+		local outer: { Vector3 } = {}
+		local attempts = 0
+		while #outer < def.outerChests and attempts < 4000 do
+			attempts += 1
+			local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(75, radius - 35))
 			local h = heightAt(x, z)
-			if h > A.WaterLevel + 1.5 and h < 60 and not nearPoi(x, z, 18) then
-				local nearChest = false
+			if h > liquid + 1 and not steep(x, z) and not nearPoi(x, z, A.ChestSpacing) then
+				local ok = true
 				for _, p in outer do
-					if (Vector3.new(x, 0, z) - p).Magnitude < 6 then
-						nearChest = true
+					if (Vector3.new(x, 0, z) - p).Magnitude < A.ChestSpacing then
+						ok = false
 						break
 					end
 				end
-				if not nearChest then
-					fn(decor, Vector3.new(x, h, z), rng)
-					placed += 1
-					if placed % 25 == 0 then
-						task.wait()
+				if ok then
+					table.insert(outer, Vector3.new(x, 0, z))
+					table.insert(chestSpots, {
+						cframe = CFrame.new(x, h + 1, z) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0),
+						tier = "Outer",
+					})
+				end
+			end
+		end
+
+		-- Decoration
+		local cliff = def.terrain.cliffHeight + 8
+		for _, entry in def.decor do
+			local placed, tries = 0, 0
+			local minDist = A.PedestalRadius + (if entry.kind == "tree" then 16 else 10)
+			local maxDist = radius + (if entry.kind == "bush" then -10 else 15)
+			while placed < entry.count and tries < entry.count * 12 do
+				tries += 1
+				local x, z = polar(rng:NextNumber(0, math.pi * 2), rng:NextNumber(minDist, maxDist))
+				local h = heightAt(x, z)
+				if h > liquid + 1.5 and h < cliff and not nearPoi(x, z, 18) then
+					local nearChest = false
+					for _, p in outer do
+						if (Vector3.new(x, 0, z) - p).Magnitude < 6 then
+							nearChest = true
+							break
+						end
+					end
+					if not nearChest then
+						local styleName = entry.styles[rng:NextInteger(1, #entry.styles)]
+						Structures.decor(entry.kind, styleName, decor, Vector3.new(x, h, z), rng)
+						placed += 1
+						if placed % 25 == 0 then
+							task.wait()
+						end
 					end
 				end
 			end
 		end
-	end
-	scatter(A.TreeCount, A.PedestalRadius + 16, A.Radius + 20, Structures.tree)
-	scatter(A.RockCount, A.PedestalRadius + 12, A.Radius + 10, Structures.rock)
-	scatter(math.floor(A.TreeCount * 0.6), A.PedestalRadius + 10, A.Radius - 10, Structures.bush)
 
-	-- invisible wall well outside the playable area
-	local wallRadius = A.Radius + 45
-	local segments = 48
-	for i = 1, segments do
-		local angle = (i / segments) * math.pi * 2
-		local pos = Vector3.new(math.cos(angle) * wallRadius, 150, math.sin(angle) * wallRadius)
-		Build.part({
-			Name = "WorldEdge",
-			Size = Vector3.new(2 * math.pi * wallRadius / segments + 2, 400, 4),
-			CFrame = CFrame.lookAt(pos, Vector3.new(0, 150, 0)),
-			Transparency = 1,
-			CanQuery = false,
-		}, folder)
-	end
+		-- invisible wall well outside the playable area
+		local wallRadius = radius + 45
+		local segments = 64
+		for i = 1, segments do
+			local angle = (i / segments) * math.pi * 2
+			local pos = Vector3.new(math.cos(angle) * wallRadius, 150, math.sin(angle) * wallRadius)
+			Build.part({
+				Name = "WorldEdge",
+				Size = Vector3.new(2 * math.pi * wallRadius / segments + 2, 400, 4),
+				CFrame = CFrame.lookAt(pos, Vector3.new(0, 150, 0)),
+				Transparency = 1,
+				CanQuery = false,
+			}, folder)
+		end
 
-	local arena: Arena = {
-		seed = seed,
-		plazaY = plazaY,
-		center = Vector3.new(0, plazaY, 0),
-		pedestals = corn.pedestals,
-		chestSpots = chestSpots,
-		heightAt = heightAt,
-		folder = folder,
-	}
-	MapService.arena = arena
+		local arena: Arena = {
+			seed = seed,
+			def = def,
+			radius = radius,
+			plazaY = plazaY,
+			center = Vector3.new(0, plazaY, 0),
+			pedestals = corn.pedestals,
+			chestSpots = chestSpots,
+			heightAt = heightAt,
+			folder = folder,
+		}
+		return arena
+	end)
 	MapService.generating = false
-	return arena
+	if not ok then
+		error(result)
+	end
+	MapService.arena = result
+	ReplicatedStorage:SetAttribute("MapId", def.id)
+	ReplicatedStorage:SetAttribute("MapName", def.name)
+	ReplicatedStorage:SetAttribute("MapWeather", def.weather or "")
+	return result
 end
 
 -- Ground height at a point, or the plaza height if no arena exists yet.
@@ -7372,20 +8986,26 @@ function MapService.groundAt(x: number, z: number): number
 	if arena then
 		return arena.heightAt(x, z)
 	end
-	return TerrainGen.plazaHeight()
+	return 13
+end
+
+function MapService.radius(): number
+	local arena = MapService.arena
+	return if arena then arena.radius else 400
 end
 
 return MapService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="41">
+        <Item class="ModuleScript" referent="42">
           <Properties>
             <string name="Name">MatchService</string>
             <string name="Source"><![CDATA[-- The survival-games loop:
---   Waiting -> Intermission (new map is generated) -> Countdown on pedestals
---   -> Grace period (no PvP, go loot!) -> Battle (chest refill, mana storm closes in)
---   -> Ended (winner announced) -> back to the lobby.
+--   Waiting -> Voting (pick the next map in the lobby) -> Loading (the island is built)
+--   -> Countdown on pedestals -> Grace period (no PvP, go loot!)
+--   -> Battle (chest refill, mana storm closes in) -> Ended (winner) -> back to the lobby.
+-- While in the lobby, players practise in the Spell Lab (see PracticeService).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -7406,6 +9026,7 @@ local ZoneService = require(script.Parent.ZoneService)
 local ClassService = require(script.Parent.ClassService)
 local DataService = require(script.Parent.DataService)
 local BotService = require(script.Parent.BotService)
+local VoteService = require(script.Parent.VoteService)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -7418,7 +9039,7 @@ local participants: { Combatant } = {}
 local initialCount = 0
 local initialHumans = 0
 local lobbyReady = false
-local arenaUsed = false
+local lastMapId: string? = nil
 local watched: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 local function now(): number
@@ -7438,6 +9059,7 @@ local function setPlayerFlags(c: Combatant)
 	if c.player then
 		c.player:SetAttribute("InMatch", c.inMatch)
 		c.player:SetAttribute("Alive", c.alive and c.inMatch)
+		c.player:SetAttribute("Practice", c.practice)
 		c.player:SetAttribute("MatchKills", c.kills)
 	end
 	if c.model then
@@ -7476,6 +9098,15 @@ local function watchCharacter(c: Combatant, model: Model)
 			onDied(c)
 		end
 	end)
+	-- back in the lobby: hand out the Spell Lab practice kit
+	if c.player and not c.inMatch then
+		c.practice = Config.Practice.Enabled
+		c.status = {}
+		InventoryService.reset(c)
+		if c.practice then
+			InventoryService.givePractice(c)
+		end
+	end
 	StatusService.updateMovement(c)
 	setPlayerFlags(c)
 end
@@ -7645,17 +9276,14 @@ local function cleanupMatch()
 	ChestService.clear()
 	CastingService.clearCache()
 	for _, c in participants do
-		if c.player and c.player.Parent then
-			-- eliminated players are already back in the lobby (or about to be)
-			local stillInArena = c.alive
+		if c.player and c.player.Parent and c.inMatch then
+			-- (eliminated players are already back in the lobby practising)
 			c.inMatch = false
 			c.alive = false
 			StatusService.clear(c)
 			InventoryService.reset(c)
 			setPlayerFlags(c)
-			if stillInArena then
-				sendToLobby(c)
-			end
+			sendToLobby(c)
 		end
 	end
 	table.clear(participants)
@@ -7666,29 +9294,35 @@ local function cleanupMatch()
 end
 
 local function runMatch()
-	-- Intermission: build a new arena while everyone waits in the sky lobby
-	GameState.setPhase("Intermission", now() + M.IntermissionTime)
-	FX.announce("Banner", { title = "Match starting soon", subtitle = "Pick your class!" })
-	local mapReady = not arenaUsed
-	if arenaUsed then
-		task.spawn(function()
-			ChestService.clear()
-			local ok, err = pcall(MapService.generate, rng:NextInteger(1, 1e9))
-			if not ok then
-				warn("[Match] map generation failed: " .. tostring(err))
-			end
-			arenaUsed = false
-			mapReady = true
-		end)
-	end
-	local completed = waitPhase(M.IntermissionTime, function()
+	-- Voting: everyone in the lobby picks the next map while practising
+	local closesAt = now() + M.VoteTime
+	VoteService.begin(rng, closesAt, lastMapId)
+	GameState.setPhase("Voting", closesAt)
+	FX.announce(
+		"Banner",
+		{ title = "Vote for the next map!", subtitle = "Pick your class and practise in the Spell Lab" }
+	)
+	local completed = waitPhase(M.VoteTime, function()
 		return not canStart()
 	end)
-	while not mapReady do
-		task.wait(0.2)
+	local def = VoteService.finish(rng)
+	if not completed then
+		return
 	end
+
+	-- Loading: build the winning island
+	GameState.setPhase("Loading", 0)
+	GameState.setPublic("NextMapName", def.name)
+	FX.announce("Banner", { title = def.icon .. "  " .. def.name, subtitle = "won the vote! Building the island..." })
+	ChestService.clear()
+	local generated, err = pcall(MapService.generate, rng:NextInteger(1, 1e9), def)
+	if not generated then
+		warn("[Match] map generation failed: " .. tostring(err))
+		return
+	end
+	lastMapId = def.id
 	local arena = MapService.arena
-	if not completed or not arena then
+	if not arena or not canStart() then
 		return
 	end
 
@@ -7722,10 +9356,10 @@ local function runMatch()
 		end
 	end
 	initialCount = #participants
-	arenaUsed = true
 
 	-- Place everyone on a pedestal with a fresh inventory and their class kit
 	for i, c in participants do
+		c.practice = false
 		c.inMatch = true
 		c.alive = true
 		c.kills = 0
@@ -7749,7 +9383,9 @@ local function runMatch()
 	local angle = rng:NextNumber(0, math.pi * 2)
 	local offset = rng:NextNumber(0, 50)
 	GameState.stormCenter = Vector3.new(math.cos(angle) * offset, arena.plazaY, math.sin(angle) * offset)
-	local startRadius = Config.Arena.Radius + 40
+	local startRadius = arena.radius + 40
+	local shrinkTime = M.StormShrinkTime * (arena.radius / 450)
+	local lava = if arena.def.hazard == "Lava" then arena.def.terrain.liquidLevel + 4 else nil
 	GameState.stormRadius = startRadius
 	GameState.setPublic("StormCenter", GameState.stormCenter)
 	GameState.setPublic("StormRadius", startRadius)
@@ -7802,7 +9438,7 @@ local function runMatch()
 				GameState.setPublic("StormActive", true)
 				FX.announce("Banner", { title = "The Mana Storm is closing in", subtitle = "Stay inside the circle" })
 			end
-			local alpha = math.clamp((elapsed - M.StormStartAt) / M.StormShrinkTime, 0, 1)
+			local alpha = math.clamp((elapsed - M.StormStartAt) / shrinkTime, 0, 1)
 			local radius = startRadius + (M.StormFinalRadius - startRadius) * alpha
 			GameState.stormRadius = radius
 			GameState.setPublic("StormRadius", radius)
@@ -7821,10 +9457,15 @@ local function runMatch()
 			end
 		end
 
-		-- keep anybody who wandered off the map honest
+		-- keep anybody who wandered off the map honest, and let lava burn
 		for _, c in participants do
-			if c.alive and c.root and (c.root :: BasePart).Position.Y < -40 and c.humanoid then
-				(c.humanoid :: Humanoid).Health = 0
+			if c.alive and c.root and c.humanoid then
+				local y = (c.root :: BasePart).Position.Y
+				if y < -40 then
+					(c.humanoid :: Humanoid).Health = 0
+				elseif lava and y < lava then
+					StatusService.apply(c, { kind = "Burn", dps = 10, duration = 1.5 }, nil)
+				end
 			end
 		end
 
@@ -7935,8 +9576,13 @@ end
 
 function MatchService.start()
 	lobbyReady = true
-	-- First arena so the island below the lobby is never empty
-	MapService.generate(rng:NextInteger(1, 1e9))
+	-- Build a first island in the background so the view below the lobby is never empty
+	task.spawn(function()
+		local ok, err = pcall(MapService.generate, rng:NextInteger(1, 1e9), MapService.randomDef(rng))
+		if not ok then
+			warn("[Match] map generation failed: " .. tostring(err))
+		end
+	end)
 	task.spawn(function()
 		while true do
 			GameState.setPhase("Waiting", 0)
@@ -7957,7 +9603,155 @@ return MatchService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="42">
+        <Item class="ModuleScript" referent="43">
+          <Properties>
+            <string name="Name">PracticeService</string>
+            <string name="Source"><![CDATA[-- Training dummies on the lobby's Practice Terrace. They take damage (with damage numbers
+-- and status effects) only from players practising in the Spell Lab, never die, and heal
+-- back to full a few seconds after the last hit.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Build = require(script.Parent.Parent.Map.Build)
+local Combatants = require(script.Parent.Combatants)
+local MapService = require(script.Parent.MapService)
+
+type Combatant = Combatants.Combatant
+
+local PracticeService = {}
+
+local dummies: { Combatant } = {}
+local STRAW = Color3.fromRGB(205, 175, 105)
+local BURLAP = Color3.fromRGB(170, 140, 95)
+
+local function buildDummy(spot: CFrame): Model
+	local model = Build.model("TrainingDummy", workspace:FindFirstChild("Lobby") or workspace)
+	local function piece(
+		name: string,
+		size: Vector3,
+		offset: CFrame,
+		material: Enum.Material,
+		color: Color3,
+		shape: Enum.PartType?
+	): Part
+		local p =
+			Build.part({ Name = name, Size = size, CFrame = spot * offset, Material = material, Color = color }, model)
+		if shape then
+			p.Shape = shape
+		end
+		return p
+	end
+	piece("Post", Vector3.new(0.8, 4, 0.8), CFrame.new(0, 2, 0), Enum.Material.Wood, Color3.fromRGB(100, 70, 45))
+	piece("Torso", Vector3.new(2.6, 3, 1.6), CFrame.new(0, 5.2, 0), Enum.Material.Fabric, STRAW)
+	piece("Head", Vector3.new(1.9, 1.9, 1.9), CFrame.new(0, 7.7, 0), Enum.Material.Fabric, BURLAP, Enum.PartType.Ball)
+	piece(
+		"Arm",
+		Vector3.new(3.4, 0.8, 0.8),
+		CFrame.new(-2.6, 5.9, 0) * CFrame.Angles(0, 0, math.rad(-15)),
+		Enum.Material.Wood,
+		Color3.fromRGB(100, 70, 45)
+	)
+	piece(
+		"Arm",
+		Vector3.new(3.4, 0.8, 0.8),
+		CFrame.new(2.6, 5.9, 0) * CFrame.Angles(0, 0, math.rad(15)),
+		Enum.Material.Wood,
+		Color3.fromRGB(100, 70, 45)
+	)
+	-- bullseye on the chest (the dummy faces along spot's look vector)
+	local ring = piece(
+		"Target",
+		Vector3.new(0.15, 2, 2),
+		CFrame.new(0, 5.3, -0.85) * CFrame.Angles(0, math.rad(90), 0),
+		Enum.Material.Neon,
+		Color3.fromRGB(230, 60, 60),
+		Enum.PartType.Cylinder
+	)
+	ring.CanCollide = false
+	local dot = piece(
+		"Bullseye",
+		Vector3.new(0.2, 0.9, 0.9),
+		CFrame.new(0, 5.3, -0.9) * CFrame.Angles(0, math.rad(90), 0),
+		Enum.Material.Neon,
+		Color3.new(1, 1, 1),
+		Enum.PartType.Cylinder
+	)
+	dot.CanCollide = false
+
+	local root = piece(
+		"HumanoidRootPart",
+		Vector3.new(2, 2, 1),
+		CFrame.new(0, 5.2, 0),
+		Enum.Material.SmoothPlastic,
+		Color3.new(1, 1, 1)
+	)
+	root.Transparency = 1
+	root.CanCollide = false
+	model.PrimaryPart = root
+
+	local hum = Instance.new("Humanoid")
+	hum.RequiresNeck = false
+	hum.BreakJointsOnDeath = false
+	hum.MaxHealth = Config.Practice.DummyHealth
+	hum.Health = Config.Practice.DummyHealth
+	hum.DisplayName = "Training Dummy"
+	hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOn
+	hum.NameDisplayDistance = 80
+	hum.HealthDisplayDistance = 80
+	hum.Parent = model
+	pcall(function()
+		hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+	end)
+	return model
+end
+
+function PracticeService.dummies(): { Combatant }
+	return dummies
+end
+
+function PracticeService.init()
+	if not Config.Practice.Enabled then
+		return
+	end
+	local lobby = MapService.lobby
+	if not lobby then
+		return
+	end
+	for _, spot in lobby.dummySpots do
+		local model = buildDummy(spot)
+		local c = Combatants.create("Training Dummy", nil)
+		c.isDummy = true
+		c.inMatch = true
+		c.alive = true
+		Combatants.setModel(c, model)
+		table.insert(dummies, c)
+	end
+
+	local acc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		acc += dt
+		if acc < 0.5 then
+			return
+		end
+		acc = 0
+		local t = workspace:GetServerTimeNow()
+		for _, c in dummies do
+			local hum = c.humanoid
+			local idle = t - c.lastAttackTime > Config.Practice.DummyRegenDelay
+			if hum and hum.Health < hum.MaxHealth and (idle or hum.Health < 1) then
+				hum.Health = hum.MaxHealth
+			end
+		end
+	end)
+end
+
+return PracticeService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="44">
           <Properties>
             <string name="Name">ProjectileService</string>
             <string name="Source"><![CDATA[-- Authoritative projectile simulation. Every frame each projectile moves (ProjectileSim),
@@ -8224,7 +10018,7 @@ local function stepProjectile(p: Proj, dt: number)
 	local caster = p.ctx.caster
 	local casterRoot = caster.root
 	local casterPos: Vector3? = nil
-	if casterRoot and casterRoot.Parent and caster.alive then
+	if casterRoot and Combatants.canAct(caster) then
 		casterPos = casterRoot.Position
 	end
 	if s.orbit and not casterPos then
@@ -8366,7 +10160,7 @@ return ProjectileService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="43">
+        <Item class="ModuleScript" referent="45">
           <Properties>
             <string name="Name">SpellExecutor</string>
             <string name="Source"><![CDATA[-- Executes compiled spells: spawns projectiles, fires beams, novas, chains, meteors,
@@ -8741,7 +10535,7 @@ local function doMeteor(
 	spec: Spec,
 	ctx: CastCtx,
 	origin: Vector3,
-	dir: Vector3,
+	_dir: Vector3,
 	index: number,
 	count: number,
 	fromCaster: boolean?
@@ -8773,7 +10567,7 @@ end
 
 local function doBlink(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3)
 	local caster = ctx.caster
-	if not Combatants.isActive(caster) or not caster.model then
+	if not Combatants.canAct(caster) or not caster.model then
 		return
 	end
 	local root = caster.root :: BasePart
@@ -8808,14 +10602,14 @@ end
 
 local function doAegis(spec: Spec, ctx: CastCtx)
 	local caster = ctx.caster
-	if not Combatants.isActive(caster) then
+	if not Combatants.canAct(caster) then
 		return
 	end
 	StatusService.addShield(caster, spec.shieldAmount, spec.shieldDuration, {
 		color = spec.color,
 		thorns = spec.status,
 		onEnd = function(pos: Vector3, look: Vector3)
-			if spec.trigger and spec.payload and Combatants.isActive(caster) then
+			if spec.trigger and spec.payload and Combatants.canAct(caster) then
 				SpellExecutor.castPayload(spec, ctx, pos, look)
 			end
 		end,
@@ -8891,7 +10685,7 @@ function SpellExecutor.cast(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vect
 		local again = echoless(spec)
 		for e = 1, spec.echo do
 			task.delay(ECHO_DELAY * e, function()
-				if not Combatants.isActive(ctx.caster) then
+				if not Combatants.canAct(ctx.caster) then
 					return
 				end
 				local o = origin
@@ -8915,7 +10709,7 @@ return SpellExecutor
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="44">
+        <Item class="ModuleScript" referent="46">
           <Properties>
             <string name="Name">StatusService</string>
             <string name="Source"><![CDATA[-- Burning, venom, chill/freeze, radiant marks, shields, haste and regeneration.
@@ -9292,7 +11086,140 @@ return StatusService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="45">
+        <Item class="ModuleScript" referent="47">
+          <Properties>
+            <string name="Name">VoteService</string>
+            <string name="Source"><![CDATA[-- The map vote held in the lobby before every match.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local MapDefs = require(script.Parent.Parent.Map.MapDefs)
+
+type MapDef = MapDefs.MapDef
+
+local VoteService = {}
+
+local stateEvent = Remotes.event("VoteState")
+local options: { MapDef } = {}
+local votes: { [Player]: string } = {}
+local endsAt = 0
+local open = false
+
+local function counts(): { [string]: number }
+	local out: { [string]: number } = {}
+	for _, def in options do
+		out[def.id] = 0
+	end
+	for _, id in votes do
+		out[id] = (out[id] or 0) + 1
+	end
+	return out
+end
+
+-- Everything the vote screen shows. `options` is nil once voting has closed.
+function VoteService.payload(): { [string]: any }
+	if not open then
+		return { open = false }
+	end
+	local summaries = {}
+	for _, def in options do
+		table.insert(summaries, MapDefs.summary(def))
+	end
+	return { open = true, options = summaries, counts = counts(), endsAt = endsAt }
+end
+
+local function broadcast()
+	stateEvent:FireAllClients(VoteService.payload())
+end
+
+-- Opens a vote between a few random maps (avoiding the one just played when possible).
+function VoteService.begin(rng: Random, closesAt: number, lastMapId: string?): { MapDef }
+	local pool = {}
+	for _, def in MapDefs.List do
+		if def.id ~= lastMapId or #MapDefs.List <= Config.Match.VoteOptions then
+			table.insert(pool, def)
+		end
+	end
+	for i = #pool, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		pool[i], pool[j] = pool[j], pool[i]
+	end
+	options = {}
+	for i = 1, math.min(Config.Match.VoteOptions, #pool) do
+		options[i] = pool[i]
+	end
+	table.clear(votes)
+	endsAt = closesAt
+	open = true
+	broadcast()
+	return options
+end
+
+-- Closes the vote and returns the winner (ties are broken randomly).
+function VoteService.finish(rng: Random): MapDef
+	local tally = counts()
+	local best, bestCount = {}, -1
+	for _, def in options do
+		local n = tally[def.id] or 0
+		if n > bestCount then
+			best, bestCount = { def }, n
+		elseif n == bestCount then
+			table.insert(best, def)
+		end
+	end
+	open = false
+	broadcast()
+	if #best == 0 then
+		return MapDefs.List[1]
+	end
+	return best[rng:NextInteger(1, #best)]
+end
+
+function VoteService.vote(player: Player, mapId: any): (boolean, string?)
+	if not open then
+		return false, "Voting is closed"
+	end
+	if type(mapId) ~= "string" then
+		return false, "Bad map"
+	end
+	for _, def in options do
+		if def.id == mapId then
+			votes[player] = mapId
+			broadcast()
+			return true, "Voted for " .. def.name
+		end
+	end
+	return false, "That map isn't on the ballot"
+end
+
+function VoteService.init()
+	Remotes.func("VoteAction").OnServerInvoke = function(player, action, mapId)
+		if action == "Vote" then
+			return VoteService.vote(player, mapId)
+		end
+		return false, "Unknown action"
+	end
+	Players.PlayerAdded:Connect(function(player)
+		stateEvent:FireClient(player, VoteService.payload())
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		if votes[player] then
+			votes[player] = nil
+			if open then
+				broadcast()
+			end
+		end
+	end)
+end
+
+return VoteService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="48">
           <Properties>
             <string name="Name">WorldQuery</string>
             <string name="Source"><![CDATA[-- Raycasts against the world (never characters) and sweeps against combatant capsules.
@@ -9313,13 +11240,10 @@ worldParams.IgnoreWater = true
 worldParams.RespectCanCollide = true
 
 -- Call once per frame (cheap) so new characters are excluded from world casts.
+-- (The lobby is solid too: Spell Lab spells splash against the library walls.
+-- Its invisible barriers have CanQuery off, so spells pass through those.)
 function WorldQuery.refresh()
-	local list: { Instance } = table.clone(Combatants.models()) :: { any }
-	local lobby = workspace:FindFirstChild("Lobby")
-	if lobby then
-		table.insert(list, lobby)
-	end
-	worldParams.FilterDescendantsInstances = list
+	worldParams.FilterDescendantsInstances = table.clone(Combatants.models()) :: { any }
 end
 
 function WorldQuery.raycast(origin: Vector3, delta: Vector3): RaycastResult?
@@ -9372,7 +11296,7 @@ return WorldQuery
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="46">
+        <Item class="ModuleScript" referent="49">
           <Properties>
             <string name="Name">ZoneService</string>
             <string name="Source"><![CDATA[-- Lingering ground effects left by Cloud spells and the Lingering modifier.
@@ -9479,17 +11403,17 @@ return ZoneService
       </Item>
     </Item>
   </Item>
-  <Item class="StarterPlayer" referent="47">
+  <Item class="StarterPlayer" referent="50">
     <Properties>
       <string name="Name">StarterPlayer</string>
       <float name="CameraMaxZoomDistance">60</float>
       <float name="CharacterWalkSpeed">16</float>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="48">
+    <Item class="StarterPlayerScripts" referent="51">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="49">
+      <Item class="LocalScript" referent="52">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[-- Mana Wars client entry point.
@@ -9509,6 +11433,9 @@ local InventoryController = require(Controllers.InventoryController)
 local ChestController = require(Controllers.ChestController)
 local LobbyController = require(Controllers.LobbyController)
 local StormController = require(Controllers.StormController)
+local GrimoireController = require(Controllers.GrimoireController)
+local TutorialController = require(Controllers.TutorialController)
+local AmbienceController = require(Controllers.AmbienceController)
 
 State.init()
 Widgets.initTooltip()
@@ -9519,17 +11446,131 @@ InventoryController.init()
 ChestController.init()
 LobbyController.init()
 StormController.init()
+GrimoireController.init()
+TutorialController.init()
+AmbienceController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
+InputController.onToggleGrimoire = GrimoireController.toggle
+LobbyController.onOpenGrimoire = function()
+	GrimoireController.open()
+end
+GrimoireController.onReplayTutorial = TutorialController.start
 
 print("[Mana Wars] client ready")
 ]]></string>
         </Properties>
-        <Item class="Folder" referent="50">
+        <Item class="Folder" referent="53">
           <Properties>
             <string name="Name">Controllers</string>
           </Properties>
-          <Item class="ModuleScript" referent="51">
+          <Item class="ModuleScript" referent="54">
+            <Properties>
+              <string name="Name">AmbienceController</string>
+              <string name="Source"><![CDATA[-- Per-map weather drawn around the camera while you're on the island:
+-- snow on Frostpeak, falling ash on Ashen Wastes, drifting dust on Sandsea, glowing spores in Fungal Hollow.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+
+local AmbienceController = {}
+
+local WEATHER: { [string]: { [string]: any } } = {
+	Snow = {
+		Color = ColorSequence.new(Color3.fromRGB(245, 250, 255)),
+		Size = NumberSequence.new(0.35),
+		Transparency = NumberSequence.new(0.1, 0.4),
+		Lifetime = NumberRange.new(4, 6),
+		Rate = 160,
+		Speed = NumberRange.new(8, 12),
+		SpreadAngle = Vector2.new(15, 15),
+		LightEmission = 0.2,
+	},
+	Ash = {
+		Color = ColorSequence.new(Color3.fromRGB(90, 85, 85), Color3.fromRGB(255, 140, 60)),
+		Size = NumberSequence.new(0.3, 0.15),
+		Transparency = NumberSequence.new(0.2, 0.7),
+		Lifetime = NumberRange.new(4, 7),
+		Rate = 110,
+		Speed = NumberRange.new(3, 6),
+		SpreadAngle = Vector2.new(30, 30),
+		LightEmission = 0.3,
+	},
+	Spores = {
+		Color = ColorSequence.new(Color3.fromRGB(110, 255, 220), Color3.fromRGB(210, 130, 255)),
+		Size = NumberSequence.new(0.25, 0.05),
+		Transparency = NumberSequence.new(0, 0.6),
+		Lifetime = NumberRange.new(5, 9),
+		Rate = 60,
+		Speed = NumberRange.new(0.5, 2),
+		SpreadAngle = Vector2.new(180, 180),
+		LightEmission = 1,
+	},
+	Dust = {
+		Color = ColorSequence.new(Color3.fromRGB(225, 200, 150)),
+		Size = NumberSequence.new(1.2, 2.2),
+		Transparency = NumberSequence.new(0.75, 1),
+		Lifetime = NumberRange.new(4, 6),
+		Rate = 35,
+		Speed = NumberRange.new(4, 7),
+		SpreadAngle = Vector2.new(60, 10),
+		LightEmission = 0,
+	},
+}
+
+local emitterPart: Part
+local emitter: ParticleEmitter
+local current = ""
+
+local function setWeather(name: string)
+	if name == current then
+		return
+	end
+	current = name
+	local def = WEATHER[name]
+	emitter.Enabled = def ~= nil
+	if def then
+		for key, value in def do
+			(emitter :: any)[key] = value
+		end
+	end
+end
+
+function AmbienceController.init()
+	emitterPart = Instance.new("Part")
+	emitterPart.Name = "Weather"
+	emitterPart.Anchored = true
+	emitterPart.CanCollide = false
+	emitterPart.CanQuery = false
+	emitterPart.CanTouch = false
+	emitterPart.Transparency = 1
+	emitterPart.Size = Vector3.new(90, 1, 90)
+	emitterPart.Parent = workspace
+	emitter = Instance.new("ParticleEmitter")
+	emitter.EmissionDirection = Enum.NormalId.Bottom
+	emitter.Enabled = false
+	emitter.Parent = emitterPart
+
+	RunService.RenderStepped:Connect(function()
+		local camera = workspace.CurrentCamera
+		if not camera then
+			return
+		end
+		local pos = camera.CFrame.Position
+		-- no weather up in the lobby (or while the lobby is watching through the window)
+		local onIsland = pos.Y < Config.Arena.LobbyHeight - 100
+		setWeather(if onIsland then tostring(ReplicatedStorage:GetAttribute("MapWeather") or "") else "")
+		emitterPart.CFrame = CFrame.new(pos + Vector3.new(0, 25, 0))
+	end)
+end
+
+return AmbienceController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="55">
             <Properties>
               <string name="Name">ChestController</string>
               <string name="Source"><![CDATA[-- The loot window shown when you open a chest or a dead mage's satchel.
@@ -9790,7 +11831,7 @@ return ChestController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="52">
+          <Item class="ModuleScript" referent="56">
             <Properties>
               <string name="Name">FXController</string>
               <string name="Source"><![CDATA[-- Draws every spell. The server only sends compact events; all parts here are local
@@ -10469,7 +12510,644 @@ return FXController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="53">
+          <Item class="ModuleScript" referent="57">
+            <Properties>
+              <string name="Name">GrimoireController</string>
+              <string name="Source"><![CDATA[-- The Grimoire: an in-game encyclopedia that explains how to play and how to craft spells,
+-- and lists every spell part, premade spell and class. Open with H, the Grimoire button,
+-- or by reading one of the lecterns in the lobby library.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local Shared = ReplicatedStorage.Shared
+local Config = require(Shared.Config)
+local Classes = require(Shared.Classes)
+local Consumables = require(Shared.Consumables)
+local SpellParts = require(Shared.Spells.SpellParts)
+local SpellBuilder = require(Shared.Spells.SpellBuilder)
+local SpellTypes = require(Shared.Spells.SpellTypes)
+local PremadeSpells = require(Shared.Spells.PremadeSpells)
+local UI = script.Parent.Parent.UI
+local Create = require(UI.Create)
+local Theme = require(UI.Theme)
+local Widgets = require(UI.Widgets)
+local ItemInfo = require(UI.ItemInfo)
+local State = require(script.Parent.State)
+local Sounds = require(script.Parent.Sounds)
+
+local GrimoireController = {}
+
+GrimoireController.onReplayTutorial = nil :: (() -> ())?
+
+local C = Theme.Colors
+local COVER = Color3.fromRGB(70, 38, 30)
+local PAGE = Color3.fromRGB(242, 230, 202)
+local INK = Color3.fromRGB(58, 38, 28)
+local INK_SOFT = Color3.fromRGB(110, 85, 65)
+local RUBRIC = Color3.fromRGB(130, 50, 150)
+
+local gui: ScreenGui
+local chapterList: Frame
+local content: ScrollingFrame
+local isOpen = false
+local currentChapter = "Welcome"
+local closeBook: () -> () -- assigned below (chapters are declared before the open/close functions)
+
+---------------------------------------------------------------------------
+-- Writing helpers (dark ink on parchment)
+---------------------------------------------------------------------------
+
+local order = 0
+local function nextOrder(): number
+	order += 1
+	return order
+end
+
+local function heading(text: string)
+	Widgets.label({
+		Text = text,
+		Font = Theme.Title,
+		TextSize = 30,
+		TextColor3 = RUBRIC,
+		Size = UDim2.new(1, 0, 0, 36),
+		LayoutOrder = nextOrder(),
+		Parent = content,
+	})
+end
+
+local function subheading(text: string)
+	Widgets.label({
+		Text = text,
+		Font = Theme.Black,
+		TextSize = 17,
+		TextColor3 = INK,
+		Size = UDim2.new(1, 0, 0, 24),
+		LayoutOrder = nextOrder(),
+		Parent = content,
+	})
+end
+
+local function para(text: string)
+	Widgets.label({
+		Text = text,
+		RichText = true,
+		TextWrapped = true,
+		TextSize = 15,
+		TextColor3 = INK,
+		Font = Theme.Font,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, -8, 0, 18),
+		LayoutOrder = nextOrder(),
+		Parent = content,
+	})
+end
+
+local function spacer(h: number?)
+	Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, h or 8),
+		LayoutOrder = nextOrder(),
+		Parent = content,
+	})
+end
+
+local function partTile(id: string, size: number, parent: Instance, layoutOrder: number)
+	local part = SpellParts.ById[id]
+	Widgets.tile({
+		size = size,
+		icon = part.icon,
+		iconColor = Theme.CategoryColors[part.category],
+		border = Theme.rarity(part.rarity),
+		layoutOrder = layoutOrder,
+		info = function()
+			return ItemInfo.part(id)
+		end,
+		parent = parent,
+	})
+end
+
+local function plusSign(parent: Instance, text: string, layoutOrder: number)
+	Widgets.label({
+		Text = text,
+		Font = Theme.Black,
+		TextSize = 20,
+		TextColor3 = INK_SOFT,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromOffset(if #text > 2 then 34 else 18, 44),
+		LayoutOrder = layoutOrder,
+		Parent = parent,
+	})
+end
+
+-- A visual recipe: [Bolt] + [Fire] + [Explosive]  =  Fireball
+local function recipeRow(recipe: SpellTypes.Recipe, label: string?)
+	local row = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 48),
+		LayoutOrder = nextOrder(),
+		Parent = content,
+	}, {
+		Create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 4),
+		}),
+	})
+	local n = 0
+	local function add(id: string?)
+		if not id then
+			return
+		end
+		if n > 0 then
+			n += 1
+			plusSign(row, "+", n)
+		end
+		n += 1
+		partTile(id, 42, row, n)
+	end
+	add(recipe.form)
+	add(recipe.element)
+	for _, m in (recipe.mods or {}) :: { string } do
+		add(m)
+	end
+	if recipe.trigger and recipe.payload then
+		add(recipe.trigger)
+		n += 1
+		plusSign(row, "→", n)
+		local payload = recipe.payload :: SpellTypes.Recipe
+		local ids = { payload.form }
+		if payload.element then
+			table.insert(ids, payload.element)
+		end
+		for _, m in (payload.mods or {}) :: { string } do
+			table.insert(ids, m)
+		end
+		for i, id in ids do
+			if i > 1 then
+				n += 1
+				plusSign(row, "+", n)
+			end
+			n += 1
+			partTile(id, 34, row, n)
+		end
+	end
+	local spec = SpellBuilder.compile(recipe)
+	n += 1
+	Widgets.label({
+		Text = "  =  " .. (label or (if spec then spec.name else "?")),
+		Font = Theme.Bold,
+		TextSize = 16,
+		TextColor3 = RUBRIC,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 44),
+		LayoutOrder = n,
+		Parent = row,
+	})
+end
+
+---------------------------------------------------------------------------
+-- Chapters
+---------------------------------------------------------------------------
+
+local chapters: { { id: string, title: string, build: () -> () } } = {}
+
+local function chapter(id: string, title: string, build: () -> ())
+	table.insert(chapters, { id = id, title = title, build = build })
+end
+
+chapter("Welcome", "📖  Welcome", function()
+	heading("Welcome, Mage")
+	para(
+		"<b>Mana Wars</b> is a survival-games battle royale. Up to 24 mages drop onto an island, loot chests, craft spells, and fight until one is left standing."
+	)
+	subheading("How a match plays out")
+	para(
+		"<b>1. Vote.</b> In the library lobby, vote for the next map on the right of your screen.\n"
+			.. "<b>2. Pedestals.</b> Everyone is placed around the <b>cornucopia</b>, the ring of chests in the middle. Wait for the gong!\n"
+			.. "<b>3. Grace period.</b> For "
+			.. Config.Match.GracePeriod
+			.. " seconds nobody can hurt anybody. Rush the cornucopia for great loot, or run for the woods.\n"
+			.. "<b>4. Battle.</b> Spells now hurt. Chests are scattered across the island, and every chest <b>refills</b> halfway through.\n"
+			.. "<b>5. The Mana Storm.</b> A purple wall closes in. Stay inside it or burn.\n"
+			.. "<b>6. Last mage standing wins.</b> Fallen mages drop a satchel with everything they carried."
+	)
+	subheading("What's in the chests")
+	para(
+		"<b>Wands</b> cast your spells. <b>Spells</b> go into wand slots. <b>Spell parts</b> are ingredients: combine them in the <b>Spellforge</b> to create your own spells. <b>Potions</b> heal, restore mana or speed you up."
+	)
+	subheading("Practise first!")
+	para(
+		"While you wait, walk through the big arch to the <b>Practice Terrace</b>. In the lobby you get a <b>Spell Lab</b> kit with every spell part, so you can try anything on the training dummies. Nothing you do there carries into the match."
+	)
+end)
+
+chapter("Crafting", "✨  Spellcrafting", function()
+	heading("Spellcrafting")
+	para(
+		"Every spell is built from <b>parts</b>. Open your <b>Spellbook (B)</b> and look at the <b>Spellforge</b> on the right."
+	)
+	subheading("The four kinds of parts")
+	para(
+		"<b>Form</b> (required): what the spell physically is: a bolt, an orb, a beam, a mine, a meteor, a teleport, a shield...\n"
+			.. "<b>Element</b> (optional): what it's made of. Fire burns, Frost slows and freezes, Lightning arcs, Poison stacks, Void heals you...\n"
+			.. "<b>Modifiers</b> (up to "
+			.. Config.Spell.MaxModifiers
+			.. "): how it behaves. Homing, Twin, Triple, Explosive, Bounce, Pierce, Orbit... Add the same one twice to stack it.\n"
+			.. "<b>Trigger + Payload</b> (optional): makes your spell cast a <i>whole second spell</i> when it hits something, when it ends, after a timer, or every pulse."
+	)
+	subheading("Forging a spell, step by step")
+	para(
+		"<b>1.</b> Click a <b>Form</b> part in your bag. It jumps into the FORM slot.\n"
+			.. "<b>2.</b> Click an <b>Element</b> part, then any <b>Modifiers</b> you like.\n"
+			.. "<b>3.</b> Check the preview: name, damage, mana cost.\n"
+			.. "<b>4.</b> Press <b>Forge Spell</b>. The parts are used up and the new spell appears in your bag.\n"
+			.. "<b>5.</b> Click the new spell, then click an <b>empty wand slot</b> to equip it."
+	)
+	subheading("Examples")
+	recipeRow({ form = "Bolt", element = "Fire", mods = { "Explosive" } }, "Fireball")
+	recipeRow({ form = "Spark", element = "Arcane", mods = { "Homing", "Triple" } }, "Magic Missile")
+	recipeRow({ form = "Orb", element = "Frost", mods = { "Enlarge" } }, "Frost Orb")
+	recipeRow({ form = "Mine", element = "Poison", mods = { "Lingering" } }, "Tick Bomb")
+	subheading("Spells inside spells (triggers)")
+	para(
+		"Add a <b>Trigger</b> part, then pick a <b>payload</b>: select any spell in your bag and press <b>Use as payload</b> (or click the PAYLOAD slot). When your spell hits or ends, it casts the payload from that spot. Payloads can carry their own triggers, up to "
+			.. Config.Spell.MaxDepth
+			.. " spells deep!"
+	)
+	recipeRow({
+		form = "Grenade",
+		element = "Fire",
+		trigger = "OnExpire",
+		payload = { form = "Spray", element = "Fire" },
+	}, "Cluster Bomb")
+	recipeRow({
+		form = "Blink",
+		element = "Void",
+		trigger = "OnHit",
+		payload = { form = "Nova", element = "Void" },
+	}, "Blink Strike")
+	subheading("Dismantling")
+	para(
+		"Select a spell in your bag and press <b>Dismantle</b> to break it back into parts (its payload comes back as its own spell). Rare spells from chests are a great source of rare parts!"
+	)
+	subheading("Mana")
+	para(
+		"Every part adds to the spell's <b>mana</b> cost, and payloads are paid for up front. If your wand runs out of mana it fizzles until it regenerates. The <b>Efficient</b> modifier makes the whole spell cheaper."
+	)
+end)
+
+chapter("Wands", "🔮  Wands", function()
+	heading("Wands")
+	para(
+		"A wand is a <b>deck of spells</b>. Each time you cast, it fires the next spell in its slots, <b>left to right</b>. After the last slot it <b>recharges</b> and starts again from the first."
+	)
+	subheading("Wand stats")
+	para(
+		"<b>Mana / regen:</b> how much the wand can spend, and how fast it refills. Every wand has its own mana, so swapping wands is a real trick.\n"
+			.. "<b>Cast delay:</b> wait between casts. Spells add their own delay too.\n"
+			.. "<b>Recharge:</b> wait after the last spell before the deck starts over.\n"
+			.. "<b>Spell slots:</b> how many spells it holds.\n"
+			.. "<b>Spells per cast:</b> multicast wands fire 2-3 spells at once.\n"
+			.. "<b>Spread:</b> how inaccurate it is.\n"
+			.. "<b>Shuffled:</b> fires its spells in a random order instead of left to right.\n"
+			.. "<b>Damage / speed:</b> multiplies every spell it casts."
+	)
+	subheading("Perks (rare wands)")
+	para(
+		"<b>Affinity:</b> bonus damage for one element.  <b>Always casts:</b> adds a free modifier to every spell.  <b>Siphon:</b> restores mana when you hit.  <b>Vampiric:</b> heals you for part of the damage."
+	)
+	subheading("Tips")
+	para(
+		"• Put a cheap, fast spell (like Spark Bolt) between big expensive ones.\n"
+			.. "• Keep a utility wand with Blink or Aegis on key 2-4 for emergencies.\n"
+			.. "• Rarer wands (green → blue → purple → orange → red) have better stats."
+	)
+end)
+
+local function partCatalog(category: string, title: string, intro: string)
+	heading(title)
+	para(intro)
+	local holder = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = nextOrder(),
+		Parent = content,
+	})
+	local grid = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0.56, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = holder,
+	}, {
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(84, 92),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
+	local detail = Widgets.panel({
+		Size = UDim2.new(0.42, 0, 0, 320),
+		Position = UDim2.fromScale(0.58, 0),
+		BackgroundColor3 = C.Panel,
+		Parent = holder,
+	})
+	local detailInfo = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -20, 1, -16),
+		Position = UDim2.fromOffset(10, 8),
+		Parent = detail,
+	})
+	local list = table.clone(SpellParts.ByCategory[category])
+	local function show(id: string)
+		Widgets.fillInfo(detailInfo, ItemInfo.part(id))
+	end
+	for i, part in list do
+		local cell = Create("Frame", { BackgroundTransparency = 1, LayoutOrder = i, Parent = grid })
+		Widgets.tile({
+			size = 64,
+			icon = part.icon,
+			iconColor = Theme.CategoryColors[category],
+			border = Theme.rarity(part.rarity),
+			onClick = function()
+				Sounds.play("Click")
+				show(part.id)
+			end,
+			parent = cell,
+		}).Position =
+			UDim2.fromOffset(10, 0)
+		Widgets.label({
+			Text = part.name,
+			Font = Theme.Bold,
+			TextSize = 12,
+			TextColor3 = INK,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Size = UDim2.new(1, 0, 0, 22),
+			Position = UDim2.fromOffset(0, 68),
+			Parent = cell,
+		})
+	end
+	show(list[1].id)
+end
+
+chapter("Forms", "🔹  Forms", function()
+	partCatalog("Form", "Forms", "The shape of a spell. Every spell needs exactly one. Click a part to read about it.")
+end)
+
+chapter("Elements", "🔥  Elements", function()
+	partCatalog("Element", "Elements", "What a spell is made of. Optional, but each element adds a powerful effect.")
+end)
+
+chapter("Modifiers", "💥  Modifiers", function()
+	partCatalog(
+		"Modifier",
+		"Modifiers",
+		"Up to " .. Config.Spell.MaxModifiers .. " per spell. Stack the same modifier for a bigger effect."
+	)
+end)
+
+chapter("Triggers", "🎇  Triggers", function()
+	partCatalog(
+		"Trigger",
+		"Triggers",
+		"A trigger needs a PAYLOAD spell. Select a spell in your bag and press 'Use as payload' in the Spellbook."
+	)
+end)
+
+chapter("Library", "📚  Spell Library", function()
+	heading("Spell Library")
+	para("Every hand-made spell you can find in chests. Hover the parts to read them.")
+	for _, rarity in { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" } do
+		local any = false
+		for _, premade in PremadeSpells.List do
+			if premade.rarity == rarity then
+				if not any then
+					subheading(rarity)
+					any = true
+				end
+				recipeRow(premade.recipe, premade.name)
+				para('<font color="#6e5541"><i>' .. premade.flavor .. "</i></font>")
+			end
+		end
+	end
+end)
+
+chapter("Classes", "🎓  Classes", function()
+	heading("Classes")
+	para(
+		"Your class decides the wand, spells and parts you start each match with. Pick one at the <b>Class Altar</b> in the library. Premium classes unlock with Roblox Premium."
+	)
+	for _, class in Classes.List do
+		subheading(class.icon .. "  " .. class.name .. (if class.premium then "  (Premium)" else "  (Free)"))
+		local spells = {}
+		for _, id in class.kit.wands[1].spells do
+			table.insert(spells, PremadeSpells.ById[id].name)
+		end
+		local parts = {}
+		for id, n in (class.kit.parts or {}) :: { [string]: number } do
+			table.insert(parts, SpellParts.ById[id].name .. (if n > 1 then " x" .. n else ""))
+		end
+		table.sort(parts)
+		para(
+			class.tagline
+				.. "\n<b>Wand:</b> "
+				.. class.kit.wands[1].template.name
+				.. "   <b>Spells:</b> "
+				.. table.concat(spells, ", ")
+				.. "   <b>Parts:</b> "
+				.. table.concat(parts, ", ")
+		)
+	end
+end)
+
+chapter("Controls", "🎮  Controls", function()
+	heading("Controls")
+	local potions = {}
+	for _, c in Consumables.List do
+		table.insert(potions, c.key .. " " .. c.name)
+	end
+	para(
+		"<b>Cast:</b> hold Left Mouse (mobile: the Cast button, gamepad: R2)\n"
+			.. "<b>Switch wand:</b> 1-4, or Q to cycle (gamepad: L1/R1)\n"
+			.. "<b>Spellbook & Spellforge:</b> B (gamepad: Y)\n"
+			.. "<b>Grimoire:</b> H\n"
+			.. "<b>Open chests:</b> E (hold).  <b>Take everything:</b> F\n"
+			.. "<b>Potions:</b> "
+			.. table.concat(potions, ",  ")
+			.. "\n<b>Unslot a spell:</b> right-click it in the Spellbook\n"
+			.. "<b>Camera:</b> hold right mouse and drag"
+	)
+	spacer(10)
+	Widgets.button("▶  Replay the tutorial", {
+		size = UDim2.fromOffset(240, 40),
+		layoutOrder = nextOrder(),
+		color = RUBRIC,
+		onClick = function()
+			closeBook()
+			if GrimoireController.onReplayTutorial then
+				GrimoireController.onReplayTutorial()
+			end
+		end,
+		parent = content,
+	})
+end)
+
+---------------------------------------------------------------------------
+-- Book UI
+---------------------------------------------------------------------------
+
+local function showChapter(id: string)
+	currentChapter = id
+	Widgets.clear(content, true)
+	order = 0
+	for _, ch in chapters do
+		if ch.id == id then
+			ch.build()
+		end
+	end
+	content.CanvasPosition = Vector2.zero
+	for _, button in chapterList:GetChildren() do
+		if button:IsA("TextButton") then
+			button.BackgroundTransparency = if button.Name == id then 0 else 1
+		end
+	end
+end
+
+local function build()
+	gui = Widgets.screen("Grimoire", 12)
+	gui.Enabled = false
+	local root = Widgets.scaledRoot(gui)
+	local book = Create("Frame", {
+		Size = UDim2.fromOffset(1140, 630),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = COVER,
+		Parent = root,
+	}, { Create.corner(14), Create.stroke(Color3.fromRGB(212, 175, 55), 3) })
+
+	local left = Create("Frame", {
+		Size = UDim2.new(0, 270, 1, -30),
+		Position = UDim2.fromOffset(15, 15),
+		BackgroundColor3 = PAGE:Lerp(Color3.new(0, 0, 0), 0.06),
+		Parent = book,
+	}, { Create.corner(8) })
+	Widgets.label({
+		Text = "THE GRIMOIRE",
+		Font = Theme.Title,
+		TextSize = 30,
+		TextColor3 = RUBRIC,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.new(1, 0, 0, 50),
+		Position = UDim2.fromOffset(0, 10),
+		Parent = left,
+	})
+	chapterList = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -24, 1, -80),
+		Position = UDim2.fromOffset(12, 68),
+		Parent = left,
+	}, { Create.list(Enum.FillDirection.Vertical, 4) })
+	for i, ch in chapters do
+		local button = Create("TextButton", {
+			Name = ch.id,
+			Text = "  " .. ch.title,
+			Font = Theme.Bold,
+			TextSize = 17,
+			TextColor3 = INK,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			AutoButtonColor = false,
+			BackgroundColor3 = Color3.fromRGB(225, 205, 165),
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 36),
+			LayoutOrder = i,
+			Parent = chapterList,
+		}, { Create.corner(6) })
+		button.Activated:Connect(function()
+			Sounds.play("Click")
+			showChapter(ch.id)
+		end)
+	end
+
+	local right = Create("Frame", {
+		Size = UDim2.new(1, -315, 1, -30),
+		Position = UDim2.fromOffset(300, 15),
+		BackgroundColor3 = PAGE,
+		Parent = book,
+	}, { Create.corner(8) })
+	content = Create("ScrollingFrame", {
+		Name = "Page",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -40, 1, -30),
+		Position = UDim2.fromOffset(24, 15),
+		ScrollBarThickness = 8,
+		ScrollBarImageColor3 = INK_SOFT,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(),
+		Parent = right,
+	}, { Create.list(Enum.FillDirection.Vertical, 8) })
+
+	Widgets.button("✕", {
+		size = UDim2.fromOffset(36, 36),
+		position = UDim2.new(1, -30, 0, -12),
+		color = COVER:Lerp(Color3.new(1, 1, 1), 0.15),
+		onClick = function()
+			GrimoireController.close()
+		end,
+		parent = book,
+	})
+end
+
+function GrimoireController.open(chapterId: string?)
+	if not isOpen then
+		isOpen = true
+		gui.Enabled = true
+		State.setMenu("grimoire", true)
+		Sounds.play("Click")
+	end
+	showChapter(chapterId or currentChapter)
+end
+
+function GrimoireController.close()
+	if not isOpen then
+		return
+	end
+	isOpen = false
+	gui.Enabled = false
+	Widgets.hideTooltip()
+	State.setMenu("grimoire", false)
+end
+
+closeBook = GrimoireController.close
+
+function GrimoireController.toggle()
+	if isOpen then
+		GrimoireController.close()
+	else
+		GrimoireController.open()
+	end
+end
+
+function GrimoireController.isOpen(): boolean
+	return isOpen
+end
+
+function GrimoireController.init()
+	build()
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if input.KeyCode == Enum.KeyCode.Escape and isOpen and not processed then
+			GrimoireController.close()
+		end
+	end)
+end
+
+return GrimoireController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="58">
             <Properties>
               <string name="Name">HUDController</string>
               <string name="Source"><![CDATA[-- In-match HUD: health/shield, mana, wand hotbar with the spell deck, potions,
@@ -10719,7 +13397,7 @@ local function buildTop()
 		Parent = root,
 	})
 
-	Widgets.button("📖 Spellbook  [Tab]", {
+	local spellbookButton = Widgets.button("📖 Spellbook  [B]", {
 		size = UDim2.fromOffset(190, 36),
 		position = UDim2.fromOffset(16, 64),
 		color = C.Panel3,
@@ -10729,6 +13407,18 @@ local function buildTop()
 			end
 		end,
 		parent = combat,
+	})
+	spellbookButton.Name = "SpellbookButton"
+	Widgets.button("📜 Grimoire  [H]", {
+		size = UDim2.fromOffset(190, 36),
+		position = UDim2.fromOffset(16, 106),
+		color = Color3.fromRGB(110, 80, 40),
+		onClick = function()
+			if InputController.onToggleGrimoire then
+				InputController.onToggleGrimoire()
+			end
+		end,
+		parent = root,
 	})
 end
 
@@ -11011,10 +13701,15 @@ local function updatePhase()
 	bigCount.Visible = false
 	if phase == "Waiting" then
 		phaseTitle.Text = "Waiting for players"
-		phaseSub.Text = "The match starts when someone is ready"
-	elseif phase == "Intermission" then
-		phaseTitle.Text = "Next match in " .. fmtTime(remaining)
-		phaseSub.Text = "Choose your class while you wait"
+		phaseSub.Text = "Practise in the Spell Lab while you wait"
+	elseif phase == "Voting" then
+		phaseTitle.Text = "Map vote  " .. fmtTime(remaining)
+		phaseSub.Text = "Vote on the right · practise on the terrace"
+	elseif phase == "Loading" then
+		phaseTitle.Text = "Building "
+			.. tostring(ReplicatedStorage:GetAttribute("NextMapName") or "the island")
+			.. "..."
+		phaseSub.Text = "The match is about to begin"
 	elseif phase == "Countdown" then
 		phaseTitle.Text = "Get ready!"
 		phaseSub.Text = alive .. " mages on the pedestals"
@@ -11042,10 +13737,10 @@ local function updatePhase()
 end
 
 local function updateCombat()
-	local alive = State.alive()
-	combat.Visible = alive
-	crosshair.Visible = alive and not State.anyMenuOpen()
-	if not alive then
+	local active = State.canAct()
+	combat.Visible = active
+	crosshair.Visible = active and not State.anyMenuOpen()
+	if not active then
 		stormWarning.Visible = false
 		return
 	end
@@ -11082,7 +13777,7 @@ local function updateCombat()
 	crosshair.Position = UDim2.fromOffset(screen.X / scale, screen.Y / scale)
 
 	local root3 = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if root3 and ReplicatedStorage:GetAttribute("StormActive") then
+	if root3 and State.alive() and ReplicatedStorage:GetAttribute("StormActive") then
 		local center = ReplicatedStorage:GetAttribute("StormCenter") or Vector3.zero
 		local radius = ReplicatedStorage:GetAttribute("StormRadius") or 1e5
 		local d = Vector3.new(root3.Position.X - center.X, 0, root3.Position.Z - center.Z).Magnitude
@@ -11197,13 +13892,14 @@ return HUDController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="54">
+          <Item class="ModuleScript" referent="59">
             <Properties>
               <string name="Name">InputController</string>
               <string name="Source"><![CDATA[-- Casting and hotkeys.
---   PC:      hold Left Mouse to cast at the cursor, 1-4 wands, Tab/B spellbook, Z/X/C/V potions
+--   PC:      hold Left Mouse to cast at the cursor, 1-4 wands, B spellbook, H grimoire, Z/X/C/V potions
+--            (Tab is left alone: Roblox uses it for the player list)
 --   Mobile:  on-screen Cast button (aims at screen centre), tap the hotbar to switch wands
---   Gamepad: R2 cast, L1/R1 switch wands, ButtonY spellbook
+--   Gamepad: R2 cast, L1/R1 switch wands, Y spellbook
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -11220,6 +13916,7 @@ local State = require(script.Parent.State)
 local InputController = {}
 
 InputController.onToggleInventory = nil :: (() -> ())?
+InputController.onToggleGrimoire = nil :: (() -> ())?
 
 local player = Players.LocalPlayer
 local castRemote = Remotes.event("CastRequest")
@@ -11282,21 +13979,19 @@ function InputController.aimPoint(): Vector3
 end
 
 local function canCast(): boolean
-	if not State.alive() or State.anyMenuOpen() then
+	if not State.canAct() or State.anyMenuOpen() then
 		return false
+	end
+	if State.practice() then
+		return true
 	end
 	local phase = State.phase()
-	if phase ~= "Grace" and phase ~= "Battle" then
-		return false
-	end
-	local character = player.Character
-	local hum = character and character:FindFirstChildOfClass("Humanoid")
-	return hum ~= nil and hum.Health > 0
+	return phase == "Grace" or phase == "Battle"
 end
 
 function InputController.equip(index: number)
 	local inv = State.inventory
-	if not inv or not inv.wands[index] or not State.alive() then
+	if not inv or not inv.wands[index] or not State.canAct() then
 		return
 	end
 	if inv.equipped ~= index then
@@ -11321,7 +14016,7 @@ function InputController.cycle(step: number)
 end
 
 function InputController.usePotion(id: string)
-	if State.alive() then
+	if State.canAct() then
 		potionRemote:FireServer(id)
 	end
 end
@@ -11362,7 +14057,7 @@ local function step()
 	end
 
 	-- custom crosshair replaces the mouse cursor while fighting
-	local fighting = State.alive() and not State.anyMenuOpen()
+	local fighting = State.canAct() and not State.anyMenuOpen()
 	UserInputService.MouseIconEnabled = not fighting or usesCenterAim()
 end
 
@@ -11384,12 +14079,12 @@ function InputController.init()
 		local wand = KEY_WANDS[input.KeyCode]
 		if wand then
 			InputController.equip(wand)
-		elseif
-			input.KeyCode == Enum.KeyCode.Tab
-			or input.KeyCode == Enum.KeyCode.B
-			or input.KeyCode == Enum.KeyCode.ButtonY
-		then
+		elseif input.KeyCode == Enum.KeyCode.B or input.KeyCode == Enum.KeyCode.ButtonY then
 			toggleInventory()
+		elseif input.KeyCode == Enum.KeyCode.H then
+			if InputController.onToggleGrimoire then
+				InputController.onToggleGrimoire()
+			end
 		elseif input.KeyCode == Enum.KeyCode.ButtonR1 or input.KeyCode == Enum.KeyCode.Q then
 			InputController.cycle(1)
 		elseif input.KeyCode == Enum.KeyCode.ButtonL1 then
@@ -11441,7 +14136,7 @@ return InputController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="55">
+          <Item class="ModuleScript" referent="60">
             <Properties>
               <string name="Name">InventoryController</string>
               <string name="Source"><![CDATA[-- The Spellbook: manage wands, slot spells into them, and craft new spells in the Spellforge.
@@ -11466,6 +14161,7 @@ local WandGenerator = require(Shared.WandGenerator)
 local SpellParts = require(Shared.Spells.SpellParts)
 local SpellBuilder = require(Shared.Spells.SpellBuilder)
 local SpellTypes = require(Shared.Spells.SpellTypes)
+local Signal = require(Shared.Util.Signal)
 local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
@@ -11475,6 +14171,11 @@ local State = require(script.Parent.State)
 local Sounds = require(script.Parent.Sounds)
 
 local InventoryController = {}
+
+-- Fired after every redraw (draft or inventory changed) and when a spell is forged.
+-- The tutorial listens to these to know when each step is done.
+InventoryController.Changed = Signal.new()
+InventoryController.Forged = Signal.new()
 
 local C = Theme.Colors
 local action = Remotes.func("InventoryAction")
@@ -11495,6 +14196,7 @@ local forgeFrame: Frame
 local detailsInfo: Frame
 local detailsButtons: Frame
 local isOpen = false
+local restockButton: TextButton
 local selected: Selection? = nil
 local draft = {
 	form = nil :: string?,
@@ -12186,7 +14888,7 @@ local function buildForge()
 		end
 	end
 
-	Widgets.button("Forge Spell", {
+	local forgeButton = Widgets.button("Forge Spell", {
 		size = UDim2.new(0.62, -16, 0, 34),
 		position = UDim2.new(0, 12, 1, -44),
 		color = if recipe then C.Accent else C.Panel3,
@@ -12204,6 +14906,9 @@ local function buildForge()
 			})
 			if ok then
 				Sounds.play("Forge")
+				if type(newUid) == "string" then
+					InventoryController.Forged:Fire(newUid)
+				end
 				clearDraft()
 				if type(newUid) == "string" then
 					selected = { kind = "Spell", uid = newUid }
@@ -12213,6 +14918,8 @@ local function buildForge()
 		end,
 		parent = forgeFrame,
 	})
+	forgeButton.Name = "ForgeButton"
+
 	Widgets.button("Clear", {
 		size = UDim2.new(0.38, -12, 0, 34),
 		position = UDim2.new(0.62, 0, 1, -44),
@@ -12355,6 +15062,8 @@ refresh = function()
 	buildBag()
 	buildForge()
 	buildDetails()
+	restockButton.Visible = State.practice()
+	InventoryController.Changed:Fire()
 end
 
 local function build()
@@ -12393,6 +15102,18 @@ local function build()
 		color = C.Panel3,
 		onClick = function()
 			InventoryController.close()
+		end,
+		parent = panel,
+	})
+	restockButton = Widgets.button("♻ Restock Spell Lab", {
+		size = UDim2.fromOffset(170, 34),
+		position = UDim2.new(1, -224, 0, 8),
+		color = Color3.fromRGB(60, 120, 90),
+		textSize = 13,
+		onClick = function()
+			clearDraft()
+			selected = nil
+			invoke("ResetPractice", {})
 		end,
 		parent = panel,
 	})
@@ -12481,7 +15202,7 @@ local function build()
 end
 
 function InventoryController.open()
-	if isOpen or not State.alive() then
+	if isOpen or not State.canAct() then
 		return
 	end
 	isOpen = true
@@ -12518,25 +15239,42 @@ function InventoryController.init()
 			InventoryController.close()
 		end
 	end)
-	Players.LocalPlayer:GetAttributeChangedSignal("Alive"):Connect(function()
-		if not State.alive() then
-			clearDraft()
-			selected = nil
-			InventoryController.close()
-		end
-	end)
+	-- moving between the lobby Spell Lab and a match swaps the whole inventory
+	local function resetView()
+		clearDraft()
+		selected = nil
+		InventoryController.close()
+	end
+	Players.LocalPlayer:GetAttributeChangedSignal("Alive"):Connect(resetView)
+	Players.LocalPlayer:GetAttributeChangedSignal("Practice"):Connect(resetView)
+end
+
+function InventoryController.isOpen(): boolean
+	return isOpen
+end
+
+function InventoryController.getDraft()
+	return {
+		form = draft.form,
+		element = draft.element,
+		mods = table.clone(draft.mods),
+		trigger = draft.trigger,
+		payloadUid = draft.payloadUid,
+	}
 end
 
 return InventoryController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="56">
+          <Item class="ModuleScript" referent="61">
             <Properties>
               <string name="Name">LobbyController</string>
-              <string name="Source"><![CDATA[-- Sky Sanctum UI: class selection (premium classes), lobby status, and spectating.
+              <string name="Source"><![CDATA[-- Lobby UI for the Arcane Athenaeum: class selection (premium classes), the map vote,
+-- spectating, the lectern/altar prompts, and the animated orrery and floating books.
 
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -12556,6 +15294,8 @@ local Sounds = require(script.Parent.Sounds)
 
 local LobbyController = {}
 
+LobbyController.onOpenGrimoire = nil :: (() -> ())?
+
 local C = Theme.Colors
 local player = Players.LocalPlayer
 local classAction = Remotes.func("ClassAction")
@@ -12571,6 +15311,11 @@ local spectateName: TextLabel
 local spectateButton: TextButton
 local spectating = false
 local spectateIndex = 1
+local votePanel: Frame
+local voteList: Frame
+local voteTimer: TextLabel
+local voteState: { [string]: any } = { open = false }
+local myVote: string? = nil
 
 local function kitInfo(class: Classes.ClassDef): ItemInfo.Info
 	local lines = {}
@@ -12799,10 +15544,9 @@ local function updateSpectate()
 end
 
 local function buildSpectate()
-	spectateButton = Widgets.button("👁  Spectate", {
-		size = UDim2.fromOffset(160, 38),
-		position = UDim2.new(0.5, 0, 1, -70),
-		anchor = Vector2.new(0.5, 0),
+	spectateButton = Widgets.button("👁  Spectate the match", {
+		size = UDim2.fromOffset(230, 38),
+		position = UDim2.fromOffset(16, 190),
 		color = C.Panel3,
 		onClick = function()
 			setSpectate(true)
@@ -12812,7 +15556,7 @@ local function buildSpectate()
 	})
 	spectateBar = Widgets.panel({
 		Size = UDim2.fromOffset(420, 50),
-		Position = UDim2.new(0.5, 0, 1, -76),
+		Position = UDim2.new(0.5, 0, 0, 74),
 		AnchorPoint = Vector2.new(0.5, 0),
 		BackgroundTransparency = 0.15,
 		Visible = false,
@@ -12857,15 +15601,210 @@ local function buildSpectate()
 	})
 end
 
+---------------------------------------------------------------------------
+-- Map vote
+---------------------------------------------------------------------------
+
+local voteAction = Remotes.func("VoteAction")
+
+local function renderVote()
+	Widgets.clear(voteList, true)
+	local options = voteState.options
+	if not voteState.open or not options then
+		return
+	end
+	local counts = voteState.counts or {}
+	for i, option in options do
+		local chosen = myVote == option.id
+		local card = Create("TextButton", {
+			Name = "Vote_" .. option.id,
+			Text = "",
+			AutoButtonColor = false,
+			Size = UDim2.new(1, 0, 0, 84),
+			BackgroundColor3 = if chosen then C.Panel3 else C.Panel2,
+			LayoutOrder = i,
+			Parent = voteList,
+		}, {
+			Create.corner(10),
+			Create.stroke(if chosen then C.Gold else C.Stroke, if chosen then 3 else 1.5),
+		})
+		Widgets.label({
+			Text = option.icon,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Size = UDim2.fromOffset(52, 52),
+			Position = UDim2.fromOffset(8, 16),
+			Parent = card,
+		})
+		Widgets.label({
+			Text = option.name,
+			Font = Theme.Black,
+			TextSize = 17,
+			TextColor3 = if chosen then C.Gold else C.Text,
+			Size = UDim2.new(1, -140, 0, 22),
+			Position = UDim2.fromOffset(68, 8),
+			Parent = card,
+		})
+		Widgets.label({
+			Text = option.description,
+			TextSize = 12,
+			TextColor3 = C.Dim,
+			TextWrapped = true,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			Size = UDim2.new(1, -80, 0, 48),
+			Position = UDim2.fromOffset(68, 32),
+			Parent = card,
+		})
+		local votes = counts[option.id] or 0
+		Widgets.label({
+			Text = votes .. (if votes == 1 then " vote" else " votes"),
+			Font = Theme.Bold,
+			TextSize = 13,
+			TextColor3 = C.Gold,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Size = UDim2.fromOffset(70, 20),
+			Position = UDim2.new(1, -78, 0, 9),
+			Parent = card,
+		})
+		card.Activated:Connect(function()
+			Sounds.play("Click")
+			local ok, success = pcall(function()
+				return voteAction:InvokeServer("Vote", option.id)
+			end)
+			if ok and success then
+				myVote = option.id
+				renderVote()
+			end
+		end)
+	end
+end
+
+local function buildVote()
+	votePanel = Widgets.panel({
+		Name = "MapVote",
+		Size = UDim2.fromOffset(330, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Position = UDim2.new(1, -16, 0, 74),
+		AnchorPoint = Vector2.new(1, 0),
+		BackgroundColor3 = C.Background,
+		BackgroundTransparency = 0.1,
+		Visible = false,
+		Parent = root,
+	})
+	Create.padding(12, 10).Parent = votePanel
+	Create.list(Enum.FillDirection.Vertical, 8).Parent = votePanel
+	Widgets.label({
+		Text = "🗳  VOTE FOR THE NEXT MAP",
+		Font = Theme.Black,
+		TextSize = 16,
+		TextColor3 = C.Gold,
+		Size = UDim2.new(1, 0, 0, 20),
+		LayoutOrder = 1,
+		Parent = votePanel,
+	})
+	voteTimer = Widgets.label({
+		Text = "",
+		TextSize = 12,
+		TextColor3 = C.Dim,
+		Size = UDim2.new(1, 0, 0, 14),
+		LayoutOrder = 2,
+		Parent = votePanel,
+	})
+	voteList = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 3,
+		Parent = votePanel,
+	}, { Create.list(Enum.FillDirection.Vertical, 8) })
+
+	Remotes.event("VoteState").OnClientEvent:Connect(function(payload)
+		if type(payload) ~= "table" then
+			return
+		end
+		if payload.open and not voteState.open then
+			myVote = nil -- a new vote has started
+		end
+		voteState = payload
+		renderVote()
+	end)
+end
+
+---------------------------------------------------------------------------
+-- Library ambience: spin the orrery rings and the altar crystal, bob the floating books
+---------------------------------------------------------------------------
+
+local function animateLobby()
+	local lobby = workspace:WaitForChild("Lobby", 30)
+	local animated = lobby and lobby:WaitForChild("Animated", 10)
+	if not animated then
+		return
+	end
+	local entries = {}
+	for _, child in animated:GetChildren() do
+		local spin = child:GetAttribute("Spin")
+		local bob = child:GetAttribute("Bob")
+		if spin or bob then
+			local base = if child:IsA("Model")
+				then child:GetPivot()
+				elseif child:IsA("BasePart") then child.CFrame
+				else nil
+			if base then
+				table.insert(entries, { inst = child, base = base, spin = spin, bob = bob })
+			end
+		end
+	end
+	local orreryCore = animated:FindFirstChild("OrreryCore") :: BasePart?
+	local center = if orreryCore then orreryCore.Position else Vector3.zero
+	RunService.RenderStepped:Connect(function()
+		local t = os.clock()
+		for _, e in entries do
+			local cf: CFrame
+			if e.bob then
+				cf = e.base
+					* CFrame.new(0, math.sin(t * 1.3 + e.bob) * 0.9, 0)
+					* CFrame.Angles(0, math.sin(t * 0.4 + e.bob) * 0.3, 0)
+			elseif e.inst:IsA("Model") then
+				-- orrery rings turn around the orrery's centre
+				local pivot = CFrame.new(center)
+				cf = pivot * CFrame.Angles(0, t * e.spin, 0) * pivot:Inverse() * e.base
+			else
+				cf = e.base * CFrame.Angles(0, t * e.spin, 0)
+			end
+			if e.inst:IsA("Model") then
+				e.inst:PivotTo(cf)
+			else
+				(e.inst :: BasePart).CFrame = cf
+			end
+		end
+	end)
+end
+
 function LobbyController.init()
 	gui = Widgets.screen("Lobby", 5)
 	root = Widgets.scaledRoot(gui)
 	buildClassPanel()
 	buildSpectate()
+	buildVote()
+	task.spawn(animateLobby)
+
+	-- lecterns open the Grimoire, the altar opens the class picker
+	ProximityPromptService.PromptTriggered:Connect(function(prompt, who)
+		if who ~= player then
+			return
+		end
+		local action = prompt:GetAttribute("LobbyAction")
+		if action == "Grimoire" and LobbyController.onOpenGrimoire then
+			LobbyController.onOpenGrimoire()
+		elseif action == "ClassPicker" then
+			classPanel.Visible = true
+			renderClasses()
+		end
+	end)
 
 	classButton = Widgets.button("🎓  Class: Apprentice", {
 		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 64),
+		position = UDim2.fromOffset(16, 148),
 		color = C.Accent,
 		onClick = function()
 			classPanel.Visible = not classPanel.Visible
@@ -12889,14 +15828,6 @@ function LobbyController.init()
 	player:GetAttributeChangedSignal("PremiumAccess"):Connect(updateClassButton)
 	updateClassButton()
 
-	-- show the class picker once when you first arrive
-	task.delay(2, function()
-		if not State.alive() then
-			classPanel.Visible = true
-			renderClasses()
-		end
-	end)
-
 	local lastTarget = 0
 	RunService.RenderStepped:Connect(function()
 		local inLobby = not State.alive()
@@ -12908,6 +15839,11 @@ function LobbyController.init()
 		end
 		spectateButton.Visible = inLobby and matchRunning and not spectating
 		spectateBar.Visible = spectating
+		votePanel.Visible = inLobby and voteState.open == true
+		if votePanel.Visible then
+			local left = math.max(0, math.ceil(State.phaseEndsAt() - State.now()))
+			voteTimer.Text = "Voting closes in " .. left .. "s · the most votes wins"
+		end
 		if spectating and (not matchRunning or not inLobby) then
 			setSpectate(false)
 		end
@@ -12926,7 +15862,7 @@ return LobbyController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="57">
+          <Item class="ModuleScript" referent="62">
             <Properties>
               <string name="Name">Sounds</string>
               <string name="Source"><![CDATA[-- Sound effects. These use sounds that ship with every Roblox client so the game works
@@ -13011,7 +15947,7 @@ return Sounds
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="58">
+          <Item class="ModuleScript" referent="63">
             <Properties>
               <string name="Name">State</string>
               <string name="Source"><![CDATA[-- Client-side cache of everything the UI shows: inventory, equipped wand state,
@@ -13070,6 +16006,21 @@ function State.inMatch(): boolean
 	return player:GetAttribute("InMatch") == true
 end
 
+-- In the lobby Spell Lab (practising on dummies between matches).
+function State.practice(): boolean
+	return player:GetAttribute("Practice") == true and not State.alive()
+end
+
+-- Can cast, open the spellbook and drink potions: alive in a match, or practising in the lobby.
+function State.canAct(): boolean
+	if not (State.alive() or State.practice()) then
+		return false
+	end
+	local character = player.Character
+	local hum = character and character:FindFirstChildOfClass("Humanoid")
+	return hum ~= nil and hum.Health > 0
+end
+
 function State.equippedWand(): Items.WandItem?
 	local inv = State.inventory
 	if not inv then
@@ -13125,7 +16076,7 @@ return State
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="59">
+          <Item class="ModuleScript" referent="64">
             <Properties>
               <string name="Name">StormController</string>
               <string name="Source"><![CDATA[-- Draws the shrinking Mana Storm wall locally from replicated attributes,
@@ -13236,12 +16187,397 @@ return StormController
 ]]></string>
             </Properties>
           </Item>
+          <Item class="ModuleScript" referent="65">
+            <Properties>
+              <string name="Name">TutorialController</string>
+              <string name="Source"><![CDATA[-- A hands-on tutorial in the lobby Spell Lab: open the Spellbook, forge a spell from parts,
+-- slot it into a wand, blast a training dummy, then build a spell with a trigger + payload.
+-- Each step finishes itself when you do the thing, and the next UI element glows.
+-- Shown automatically on a player's first visit; replay it from the Grimoire.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage.Shared
+local Remotes = require(Shared.Remotes)
+local UI = script.Parent.Parent.UI
+local Create = require(UI.Create)
+local Theme = require(UI.Theme)
+local Widgets = require(UI.Widgets)
+local State = require(script.Parent.State)
+local Sounds = require(script.Parent.Sounds)
+local InventoryController = require(script.Parent.InventoryController)
+local FXController = require(script.Parent.FXController)
+
+local TutorialController = {}
+
+local C = Theme.Colors
+local player = Players.LocalPlayer
+
+type Step = {
+	title: string,
+	text: string,
+	highlight: string?, -- name of a GUI element to make glow
+	manual: boolean?, -- needs a Next button instead of finishing itself
+	enter: (() -> ())?,
+	done: (() -> boolean)?,
+}
+
+local gui: ScreenGui
+local panel: Frame
+local titleLabel: TextLabel
+local bodyLabel: TextLabel
+local progressLabel: TextLabel
+local nextButton: TextButton
+local glow: Frame? = nil
+
+local running = false
+local stepIndex = 0
+local lastForged: string? = nil
+local hitDummy = false
+
+local function inventorySpell(uid: string?)
+	local inv = State.inventory
+	if not inv or not uid then
+		return nil
+	end
+	for _, spell in inv.spells do
+		if spell.uid == uid then
+			return spell
+		end
+	end
+	for _, wand in inv.wands do
+		if wand then
+			for _, slot in wand.slots do
+				if slot and slot.uid == uid then
+					return slot
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function slotted(uid: string?): boolean
+	local inv = State.inventory
+	if not inv or not uid then
+		return false
+	end
+	for _, wand in inv.wands do
+		if wand then
+			for _, slot in wand.slots do
+				if slot and slot.uid == uid then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+local steps: { Step } = {
+	{
+		title = "Welcome to the Arcane Athenaeum!",
+		text = "This floating library is the lobby. While you wait for a match you can practise in the <b>Spell Lab</b>: you have copies of every spell part. Let's craft your first spell!",
+		manual = true,
+	},
+	{
+		title = "Open your Spellbook",
+		text = "Press <b>B</b> or click the glowing <b>📖 Spellbook</b> button.",
+		highlight = "SpellbookButton",
+		done = function()
+			return InventoryController.isOpen()
+		end,
+	},
+	{
+		title = "1. Pick a Form",
+		text = "Every spell starts with a <b>Form</b>, its shape. Click the glowing <b>🔹 Bolt</b> part in your bag (middle column).",
+		highlight = "Part_Bolt",
+		done = function()
+			return InventoryController.getDraft().form ~= nil
+		end,
+	},
+	{
+		title = "2. Add an Element",
+		text = "Elements add an effect. Click <b>🔥 Fire</b> to make it set enemies ablaze.",
+		highlight = "Part_Fire",
+		done = function()
+			return InventoryController.getDraft().element ~= nil
+		end,
+	},
+	{
+		title = "3. Add a Modifier",
+		text = "Modifiers change how a spell behaves. Click <b>💥 Explosive</b>. You can add up to 4, even the same one twice!",
+		highlight = "Part_Explosive",
+		done = function()
+			return #InventoryController.getDraft().mods > 0
+		end,
+	},
+	{
+		title = "4. Forge it!",
+		text = "Check the preview on the right, then press <b>Forge Spell</b>. The parts are used up and your new spell appears in your bag.",
+		highlight = "ForgeButton",
+		enter = function()
+			lastForged = nil
+		end,
+		done = function()
+			return lastForged ~= nil
+		end,
+	},
+	{
+		title = "5. Put it in a wand",
+		text = "Your new spell is selected. Click the glowing <b>empty slot</b> on your Spell Lab Staff to equip it. Wands cast their spells left to right.",
+		highlight = "Slot_1_2",
+		done = function()
+			return slotted(lastForged)
+		end,
+	},
+	{
+		title = "6. Try it out!",
+		text = "Close the Spellbook (<b>B</b>), walk north through the big arch to the <b>Practice Terrace</b>, and <b>hold Left Click</b> on a training dummy.",
+		enter = function()
+			hitDummy = false
+		end,
+		done = function()
+			return hitDummy
+		end,
+	},
+	{
+		title = "7. Spells inside spells",
+		text = "<b>Triggers</b> cast a whole second spell. In the Spellbook add <b>🔹 Bolt</b> + <b>🎇 On Hit</b>, then click any spell in your bag and press <b>Use as payload</b>. Forge it and see what happens!",
+		highlight = "Part_OnHit",
+		enter = function()
+			lastForged = nil
+		end,
+		done = function()
+			local spell = inventorySpell(lastForged)
+			return spell ~= nil and spell.recipe.payload ~= nil
+		end,
+	},
+	{
+		title = "You're ready, mage!",
+		text = "Open the <b>📜 Grimoire (H)</b> any time to read about every part and spell. Pick your class at the <b>Class Altar</b>, vote for a map, and good luck out there!",
+		manual = true,
+	},
+}
+
+local function clearGlow()
+	if glow then
+		glow:Destroy()
+		glow = nil
+	end
+end
+
+local function findTarget(name: string): GuiObject?
+	local playerGui = player:FindFirstChild("PlayerGui")
+	if not playerGui then
+		return nil
+	end
+	local found = playerGui:FindFirstChild(name, true)
+	if found and found:IsA("GuiObject") and found.Visible then
+		return found
+	end
+	return nil
+end
+
+local function finish(markDone: boolean)
+	running = false
+	clearGlow()
+	gui.Enabled = false
+	if markDone then
+		Remotes.event("TutorialDone"):FireServer()
+	end
+end
+
+local function showStep(i: number)
+	stepIndex = i
+	clearGlow()
+	local step = steps[i]
+	if not step then
+		finish(true)
+		return
+	end
+	if step.enter then
+		step.enter()
+	end
+	titleLabel.Text = step.title
+	bodyLabel.Text = step.text
+	progressLabel.Text = string.format("Step %d of %d", i, #steps)
+	nextButton.Visible = step.manual == true
+	nextButton.Text = if i == #steps then "Let's go!" else "Next"
+	Sounds.play("Pickup")
+end
+
+local function update()
+	if not running then
+		return
+	end
+	-- only in the lobby Spell Lab; hide (but remember the step) during a match
+	local inLab = State.practice()
+	gui.Enabled = inLab
+	if not inLab then
+		clearGlow()
+		return
+	end
+	-- dock low on the left so the Spellbook stays usable
+	panel.Position = if InventoryController.isOpen() then UDim2.new(0, 16, 1, -14) else UDim2.new(0, 16, 0.62, 0)
+	panel.AnchorPoint = if InventoryController.isOpen() then Vector2.new(0, 1) else Vector2.new(0, 0.5)
+
+	local step = steps[stepIndex]
+	if not step then
+		return
+	end
+	if step.done and step.done() then
+		showStep(stepIndex + 1)
+		return
+	end
+	-- make the next thing to click glow
+	if step.highlight then
+		local target = findTarget(step.highlight)
+		if target and (not glow or glow.Parent ~= target) then
+			clearGlow()
+			local g = Create("Frame", {
+				Name = "TutorialGlow",
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 10, 1, 10),
+				Position = UDim2.fromOffset(-5, -5),
+				ZIndex = 50,
+				Parent = target,
+			}, { Create.corner(10), Create.stroke(C.Gold, 4) })
+			glow = g
+		end
+		if glow then
+			local stroke = glow:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				stroke.Transparency = 0.5 + 0.5 * math.sin(os.clock() * 6)
+			end
+		end
+	else
+		clearGlow()
+	end
+end
+
+function TutorialController.start()
+	running = true
+	showStep(1)
+	gui.Enabled = State.practice()
+	if not State.practice() then
+		State.toast("The tutorial starts when you're back in the lobby", C.Dim)
+	end
+end
+
+function TutorialController.isRunning(): boolean
+	return running
+end
+
+local function build()
+	gui = Widgets.screen("Tutorial", 40)
+	gui.Enabled = false
+	local root = Widgets.scaledRoot(gui)
+	panel = Widgets.panel({
+		Size = UDim2.fromOffset(380, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Position = UDim2.new(0, 16, 0.62, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
+		BackgroundColor3 = Color3.fromRGB(30, 22, 48),
+		Parent = root,
+	})
+	local stroke = panel:FindFirstChildOfClass("UIStroke") :: UIStroke
+	stroke.Color = C.Gold
+	stroke.Thickness = 2
+	Create.padding(14, 12).Parent = panel
+	Create.list(Enum.FillDirection.Vertical, 6).Parent = panel
+	progressLabel = Widgets.label({
+		Text = "",
+		TextSize = 12,
+		Font = Theme.Bold,
+		TextColor3 = C.Gold,
+		Size = UDim2.new(1, 0, 0, 14),
+		LayoutOrder = 1,
+		Parent = panel,
+	})
+	titleLabel = Widgets.label({
+		Text = "",
+		TextSize = 19,
+		Font = Theme.Black,
+		TextWrapped = true,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 22),
+		LayoutOrder = 2,
+		Parent = panel,
+	})
+	bodyLabel = Widgets.label({
+		Text = "",
+		RichText = true,
+		TextSize = 15,
+		TextWrapped = true,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 18),
+		LayoutOrder = 3,
+		Parent = panel,
+	})
+	local buttons = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 32),
+		LayoutOrder = 4,
+		Parent = panel,
+	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
+	nextButton = Widgets.button("Next", {
+		size = UDim2.fromOffset(120, 32),
+		color = C.Accent,
+		layoutOrder = 1,
+		onClick = function()
+			showStep(stepIndex + 1)
+		end,
+		parent = buttons,
+	})
+	Widgets.button("Skip tutorial", {
+		size = UDim2.fromOffset(130, 32),
+		color = C.Panel3,
+		textSize = 13,
+		layoutOrder = 2,
+		onClick = function()
+			finish(true)
+		end,
+		parent = buttons,
+	})
+end
+
+function TutorialController.init()
+	build()
+	InventoryController.Forged:Connect(function(uid)
+		lastForged = uid
+	end)
+	FXController.Hit:Connect(function()
+		hitDummy = true
+	end)
+	RunService.RenderStepped:Connect(update)
+
+	-- First visit: start automatically once saved data has loaded.
+	task.spawn(function()
+		local waited = 0
+		while not player:GetAttribute("StatsLoaded") and waited < 15 do
+			task.wait(0.5)
+			waited += 0.5
+		end
+		task.wait(2)
+		if not player:GetAttribute("TutorialDone") and not running then
+			TutorialController.start()
+		end
+	end)
+end
+
+return TutorialController
+]]></string>
+            </Properties>
+          </Item>
         </Item>
-        <Item class="Folder" referent="60">
+        <Item class="Folder" referent="66">
           <Properties>
             <string name="Name">UI</string>
           </Properties>
-          <Item class="ModuleScript" referent="61">
+          <Item class="ModuleScript" referent="67">
             <Properties>
               <string name="Name">Create</string>
               <string name="Source"><![CDATA[-- Declarative-ish instance builder:
@@ -13334,7 +16670,7 @@ return Create
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="62">
+          <Item class="ModuleScript" referent="68">
             <Properties>
               <string name="Name">ItemInfo</string>
               <string name="Source"><![CDATA[-- Builds tooltip / details content for every kind of item.
@@ -13502,7 +16838,7 @@ return ItemInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="63">
+          <Item class="ModuleScript" referent="69">
             <Properties>
               <string name="Name">Theme</string>
               <string name="Source"><![CDATA[-- Colours and fonts for every screen. Tweak here to re-skin the whole UI.
@@ -13562,7 +16898,7 @@ return Theme
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="64">
+          <Item class="ModuleScript" referent="70">
             <Properties>
               <string name="Name">Widgets</string>
               <string name="Source"><![CDATA[-- Reusable UI pieces: item tiles, buttons, bars, info cards, the hover tooltip,
@@ -14065,7 +17401,7 @@ return Widgets
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="65">
+  <Item class="Workspace" referent="71">
     <Properties>
       <string name="Name">Workspace</string>
       <float name="FallenPartsDestroyHeight">-150</float>

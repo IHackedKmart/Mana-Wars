@@ -66,14 +66,25 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 	if not hum or hum.Health <= 0 or not target.alive or not target.inMatch then
 		return 0
 	end
-	if not GameState.combatAllowed() then
-		return 0
-	end
 	local attacker = info.attacker
 	local isSelf = attacker == target
-	-- grace period: players (and bots) cannot hurt each other yet
-	if GameState.phase == "Grace" and attacker and not isSelf and not info.isStorm then
-		return 0
+	if target.isDummy then
+		-- training dummies only react to spells from the lobby Spell Lab
+		if not attacker or not attacker.practice then
+			return 0
+		end
+	else
+		-- lobby practice spells never hurt anyone real, even if they somehow reach the arena
+		if attacker and attacker.practice then
+			return 0
+		end
+		if not GameState.combatAllowed() then
+			return 0
+		end
+		-- grace period: players (and bots) cannot hurt each other yet
+		if GameState.phase == "Grace" and attacker and not isSelf and not info.isStorm then
+			return 0
+		end
 	end
 
 	local crit = false
@@ -99,9 +110,14 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 	end
 
 	local dealt = math.min(hum.Health, math.max(0, amount))
+	if target.isDummy then
+		-- dummies never die; PracticeService heals them back up
+		dealt = math.min(dealt, hum.Health - 1)
+	end
 	if dealt > 0 then
 		hum.Health -= dealt
 	end
+	local shown = if target.isDummy then math.max(0, amount) else dealt
 
 	if attacker and not isSelf then
 		target.lastAttacker = attacker
@@ -141,7 +157,7 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 			damageNumber:FireClient(
 				attacker.player,
 				pos,
-				math.floor(dealt + 0.5),
+				math.floor(shown + 0.5),
 				crit,
 				info.element or "Neutral",
 				false

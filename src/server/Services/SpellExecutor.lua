@@ -370,7 +370,7 @@ local function doMeteor(
 	spec: Spec,
 	ctx: CastCtx,
 	origin: Vector3,
-	dir: Vector3,
+	_dir: Vector3,
 	index: number,
 	count: number,
 	fromCaster: boolean?
@@ -402,7 +402,7 @@ end
 
 local function doBlink(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vector3)
 	local caster = ctx.caster
-	if not Combatants.isActive(caster) or not caster.model then
+	if not Combatants.canAct(caster) or not caster.model then
 		return
 	end
 	local root = caster.root :: BasePart
@@ -437,14 +437,14 @@ end
 
 local function doAegis(spec: Spec, ctx: CastCtx)
 	local caster = ctx.caster
-	if not Combatants.isActive(caster) then
+	if not Combatants.canAct(caster) then
 		return
 	end
 	StatusService.addShield(caster, spec.shieldAmount, spec.shieldDuration, {
 		color = spec.color,
 		thorns = spec.status,
 		onEnd = function(pos: Vector3, look: Vector3)
-			if spec.trigger and spec.payload and Combatants.isActive(caster) then
+			if spec.trigger and spec.payload and Combatants.canAct(caster) then
 				SpellExecutor.castPayload(spec, ctx, pos, look)
 			end
 		end,
@@ -520,7 +520,7 @@ function SpellExecutor.cast(spec: Spec, ctx: CastCtx, origin: Vector3, dir: Vect
 		local again = echoless(spec)
 		for e = 1, spec.echo do
 			task.delay(ECHO_DELAY * e, function()
-				if not Combatants.isActive(ctx.caster) then
+				if not Combatants.canAct(ctx.caster) then
 					return
 				end
 				local o = origin

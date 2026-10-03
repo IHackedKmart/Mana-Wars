@@ -160,7 +160,7 @@ function InventoryService.refreshTools(c: Combatant)
 		return
 	end
 	clearTools(c)
-	if not wand or not model or not c.alive or not c.inMatch then
+	if not wand or not model or not Combatants.canAct(c) then
 		return
 	end
 	local tool = buildTool(wand)
@@ -321,6 +321,53 @@ function InventoryService.giveKit(c: Combatant, classId: string)
 	InventoryService.sync(c)
 end
 
+-- The lobby Spell Lab kit: a roomy practice staff, a twin-cast scepter, a few showcase
+-- spells and copies of EVERY spell part, so players can learn crafting by experimenting.
+local PRACTICE_SPELLS = { "Fireball", "ChainLightning", "MagicMissile", "ClusterBomb", "Meteor", "Singularity" }
+
+function InventoryService.givePractice(c: Combatant)
+	local inv = c.inventory
+	local staff = WandGenerator.fromTemplate({
+		name = "Spell Lab Staff",
+		rarity = "Rare",
+		wandType = "Staff",
+		color = { 70, 50, 110 },
+		stats = { capacity = 6, castDelay = 0.15, rechargeTime = 0.4, manaMax = 800, manaRegen = 250, spread = 1 },
+	})
+	staff.slots[1] = LootTables.premadeSpell("MagicBolt")
+	local scepter = WandGenerator.fromTemplate({
+		name = "Twincast Practice Scepter",
+		rarity = "Epic",
+		wandType = "Scepter",
+		color = { 200, 170, 90 },
+		stats = {
+			capacity = 4,
+			spellsPerCast = 2,
+			castDelay = 0.25,
+			rechargeTime = 0.6,
+			manaMax = 600,
+			manaRegen = 200,
+			spread = 2,
+		},
+	})
+	scepter.slots[1] = LootTables.premadeSpell("Firebolt")
+	scepter.slots[2] = LootTables.premadeSpell("Frostbolt")
+	inv.wands[1] = staff
+	inv.wands[2] = scepter
+	for _, id in PRACTICE_SPELLS do
+		table.insert(inv.spells, LootTables.premadeSpell(id))
+	end
+	for _, part in SpellParts.List do
+		addPart(c, part.id, Config.Practice.PartCopies)
+	end
+	for _, potion in Consumables.List do
+		addConsumable(c, potion.id, 1)
+	end
+	inv.equipped = 1
+	InventoryService.refreshTools(c)
+	InventoryService.sync(c)
+end
+
 function InventoryService.equip(c: Combatant, index: number): boolean
 	local inv = c.inventory
 	if index < 1 or index > INV.MaxWands or not inv.wands[index] then
@@ -337,7 +384,7 @@ end
 ---------------------------------------------------------------------------
 
 function InventoryService.useConsumable(c: Combatant, id: string): (boolean, string?)
-	if not Combatants.isActive(c) or not GameState.combatAllowed() then
+	if not Combatants.canAct(c) or (not c.practice and not GameState.combatAllowed()) then
 		return false, "Not now"
 	end
 	local inv = c.inventory
@@ -658,6 +705,16 @@ actions.DropPart = function(c, args)
 	return true
 end
 
+-- Lobby only: throw away the practice inventory and get a fresh Spell Lab kit.
+actions.ResetPractice = function(c, _args)
+	if not c.practice then
+		return false, "Only in the Spell Lab"
+	end
+	InventoryService.reset(c)
+	InventoryService.givePractice(c)
+	return true, "Spell Lab kit restocked"
+end
+
 actions.UseConsumable = function(c, args)
 	if not isString(args.id) then
 		return false, "Bad potion"
@@ -677,8 +734,8 @@ function InventoryService.handle(player: Player, action: any, args: any): (boole
 	if not fn then
 		return false, "Unknown action"
 	end
-	if not c.inMatch or not c.alive then
-		return false, "You can only manage your inventory during a match"
+	if not Combatants.canAct(c) then
+		return false, "You can't do that right now"
 	end
 	local ok, okResult, message, extra = pcall(fn, c, args)
 	if not ok then

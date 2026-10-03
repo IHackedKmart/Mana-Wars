@@ -15,6 +15,7 @@ local Classes = shared.load("Shared/Classes")
 local Consumables = shared.load("Shared/Consumables")
 local Rarity = shared.load("Shared/Rarity")
 local Config = shared.load("Shared/Config")
+local MapDefs = shared.load("Server/Map/MapDefs")
 
 local out = {}
 local function line(s: string?)
@@ -92,7 +93,18 @@ for _, part in sortedParts("Form") do
 	else
 		damage = (if spec.explodeRadius > 0 then "explosion " else "zone ") .. spec.damage
 	end
-	line(string.format("| %s | **%s** | %s | %s | %d | %.2fs | %s |", part.icon, part.name, part.rarity, damage, spec.mana, spec.castDelay, part.description))
+	line(
+		string.format(
+			"| %s | **%s** | %s | %s | %d | %.2fs | %s |",
+			part.icon,
+			part.name,
+			part.rarity,
+			damage,
+			spec.mana,
+			spec.castDelay,
+			part.description
+		)
+	)
 end
 line()
 
@@ -115,7 +127,16 @@ line("| Spell | Rarity | Recipe | Mana | |")
 line("|---|---|---|---|---|")
 for _, premade in PremadeSpells.List do
 	local spec = SpellBuilder.compile(premade.recipe)
-	line(string.format("| **%s** | %s | %s | %d | _%s_ |", premade.name, premade.rarity, recipeText(premade.recipe), spec.mana, premade.flavor))
+	line(
+		string.format(
+			"| **%s** | %s | %s | %d | _%s_ |",
+			premade.name,
+			premade.rarity,
+			recipeText(premade.recipe),
+			spec.mana,
+			premade.flavor
+		)
+	)
 end
 line()
 
@@ -144,6 +165,34 @@ for _, class in Classes.List do
 			wand.template.rarity,
 			table.concat(spells, ", "),
 			table.concat(parts, ", ")
+		)
+	)
+end
+line()
+
+line("## Maps")
+line()
+line(
+	string.format(
+		"Players vote between %d random maps in the lobby before every match. Each match generates a fresh layout of the chosen map: terrain, ruins and chest spots are different every time. The cornucopia always holds %d chests.",
+		Config.Match.VoteOptions,
+		Config.Arena.CornucopiaChests
+	)
+)
+line()
+line("| | Map | Radius | Scattered chests | Landmarks | Weather | |")
+line("|---|---|---|---|---|---|---|")
+for _, def in MapDefs.List do
+	line(
+		string.format(
+			"| %s | **%s** | %d studs | %d | %d | %s | _%s_ |",
+			def.icon,
+			def.name,
+			def.radius,
+			def.outerChests,
+			def.poiCount,
+			(def.weather or "Clear") .. (if def.hazard then " (" .. string.lower(def.hazard) .. " burns)" else ""),
+			def.description
 		)
 	)
 end
