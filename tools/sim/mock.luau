@@ -784,6 +784,7 @@ function Mock.realm(services: { [string]: any }, isServer: boolean): Realm
 			return s
 		end,
 		BindToClose = function() end,
+		JobId = if isServer then "sim-server" else "",
 	}
 
 	env = {

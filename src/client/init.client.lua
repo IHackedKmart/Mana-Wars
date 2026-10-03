@@ -18,6 +18,8 @@ local StormController = require(Controllers.StormController)
 local GrimoireController = require(Controllers.GrimoireController)
 local TutorialController = require(Controllers.TutorialController)
 local AmbienceController = require(Controllers.AmbienceController)
+local WardrobeController = require(Controllers.WardrobeController)
+local AuctionController = require(Controllers.AuctionController)
 
 State.init()
 Widgets.initTooltip()
@@ -31,11 +33,25 @@ StormController.init()
 GrimoireController.init()
 TutorialController.init()
 AmbienceController.init()
+WardrobeController.init()
+AuctionController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
 InputController.onToggleGrimoire = GrimoireController.toggle
 LobbyController.onOpenGrimoire = function()
 	GrimoireController.open()
+end
+LobbyController.onOpenWardrobe = function(tab)
+	AuctionController.close()
+	WardrobeController.open(tab)
+end
+LobbyController.onOpenAuction = function()
+	WardrobeController.close()
+	AuctionController.open()
+end
+AuctionController.onOpenWardrobe = function()
+	AuctionController.close()
+	WardrobeController.open("Wardrobe")
 end
 GrimoireController.onReplayTutorial = TutorialController.start
 

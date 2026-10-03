@@ -75,12 +75,35 @@ local Marketplace = {
 	PromptPremiumPurchase = function() end,
 }
 
+-- an in-memory DataStore (profiles and the auction mailbox); no MemoryStore, so the auction
+-- house runs its in-server fallback
+local dataStores: { [string]: { [string]: any } } = {}
+local DataStores = {
+	GetDataStore = function(_, name)
+		dataStores[name] = dataStores[name] or {}
+		local data = dataStores[name]
+		return {
+			GetAsync = function(_, key)
+				return data[key]
+			end,
+			UpdateAsync = function(_, key, fn)
+				local result = fn(data[key])
+				if result ~= nil then
+					data[key] = result
+				end
+				return result
+			end,
+		}
+	end,
+}
+
 local server = Mock.realm({
 	RunService = Mock.runService(true),
 	Players = PlayersService,
 	TweenService = Mock.TweenService,
 	Lighting = Instance.new("Lighting"),
 	MarketplaceService = Marketplace,
+	DataStoreService = DataStores,
 }, true)
 
 local Combatants = server.load("Server/Services/Combatants")
@@ -104,6 +127,9 @@ for _, name in
 		"ClassService",
 		"VoteService",
 		"QueueService",
+		"DataService",
+		"WardrobeService",
+		"AuctionService",
 	}
 do
 	local module = server.load("Server/Services/" .. name)
@@ -682,6 +708,263 @@ do
 	check(order() == "Queuer3,Queuer1,Queuer2", "a player who just got a match goes to the back, got " .. order())
 	PlayersService.GetPlayers = getPlayers
 	checkWarnings("queue order")
+end
+
+-- 13. The Tailor's Loom: the starter outfit, opening a coffer, unpicking and re-stitching a robe,
+--     wearing it, and salvaging a part. Outfits are locked during a match.
+local DataService = server.load("Server/Services/DataService")
+local WardrobeService = server.load("Server/Services/WardrobeService")
+local AuctionService = server.load("Server/Services/AuctionService")
+local Cosmetics = server.load("Shared/Cosmetics")
+local Remotes = server.load("Shared/Remotes")
+local Rarity = server.load("Shared/Rarity")
+local OutfitBuilder = server.load("Shared/OutfitBuilder")
+do
+	player:SetAttribute("InMatch", false)
+	player:SetAttribute("Alive", false)
+	player:SetAttribute("Queued", false)
+	player:SetAttribute("Practice", false)
+	local playersFolder = Instance.new("Folder")
+	playersFolder.Name = "Players"
+	player.Parent = playersFolder -- (profiles only load for players still in the game)
+	DataService.load(player)
+	Mock.step(0.2, true)
+	local w = State.wardrobe
+	check(w.coins == 60, "new players start with 60 Enchanted Coins, got " .. tostring(w.coins))
+	check(#w.garments == 2 and w.equipped.Robe and w.equipped.Hat, "new players wear a starter robe and hat")
+	check(player:GetAttribute("Coins") == 60, "the coin count should be on the player for the hub pill")
+
+	usePrompt("Coffers")
+	local loom = gui("Wardrobe")
+	check(loom and loom.Enabled, "the Coffer stall should open the Tailor's Loom")
+	check(State.menus.wardrobe == true, "the loom should count as an open menu")
+	checkWarnings("open the loom")
+	clickNamed(loom, "Open_1")
+	check(State.wardrobe.coins == 10, "the Tattered Satchel costs 50, coins now " .. tostring(State.wardrobe.coins))
+	check(#State.wardrobe.parts == 1, "the satchel holds one part")
+	local got = State.wardrobe.parts[1]
+	check(got and loom:FindFirstChild("Got_" .. got.uid, true) ~= nil, "the new part should be revealed")
+	clickNamed(loom, "Open_1")
+	check(#State.wardrobe.parts == 1 and State.wardrobe.coins == 10, "can't open a coffer without the coins")
+	checkWarnings("coffers")
+
+	-- unpick the starter robe, then stitch it back together at the Tailor
+	WardrobeService.addCoins(player, 2000, "test")
+	Mock.step(0.1, true)
+	clickNamed(loom, "Tab_Wardrobe")
+	local robeUid = State.wardrobe.equipped.Robe
+	clickNamed(loom, "Garment_" .. robeUid)
+	clickNamed(loom, "UnbindButton")
+	check(State.wardrobe.equipped.Robe == nil, "unpicking the worn robe takes it off")
+	check(#State.wardrobe.parts == 4, "unpicking returns the robe's 3 parts")
+	checkWarnings("unpick")
+	clickNamed(loom, "Tab_Tailor")
+	clickNamed(loom, "Mode_Robe")
+	for _, part in State.wardrobe.parts do
+		if part.box == 0 then -- the starter pieces
+			clickNamed(loom, "Pick_" .. part.uid)
+		end
+	end
+	clickNamed(loom, "CraftButton")
+	check(#State.wardrobe.garments == 2, "stitching should make a robe")
+	local newRobe = nil
+	for _, g in State.wardrobe.garments do
+		if g.kind == "Robe" then
+			newRobe = g
+		end
+	end
+	check(newRobe ~= nil and newRobe.uid ~= robeUid, "the stitched robe is a new garment")
+	checkWarnings("craft")
+	if newRobe then
+		clickNamed(loom, "Tab_Wardrobe")
+		clickNamed(loom, "Garment_" .. newRobe.uid)
+		clickNamed(loom, "WearButton")
+		check(State.wardrobe.equipped.Robe == newRobe.uid, "Wear should equip the robe")
+	end
+	-- the outfit's enchantments reach combat stats
+	check((me.gear.manaRegen or 0) > 0 and (me.gear.speed or 0) > 0, "worn enchantments should set the gear stats")
+	local before = State.wardrobe.coins
+	clickNamed(loom, "Part_" .. got.uid)
+	clickNamed(loom, "SalvageButton")
+	check(#State.wardrobe.parts == 0, "salvaging removes the part")
+	check(State.wardrobe.coins == before + Cosmetics.SalvageValue[Rarity.rank(got.rarity)], "salvaging pays coins")
+	checkWarnings("wear and salvage")
+
+	-- outfits are locked once you're in a match (and the loom closes)
+	player:SetAttribute("InMatch", true)
+	Mock.step(1.5, true)
+	check(not loom.Enabled, "the loom closes when a match starts")
+	local okLocked = Remotes.func("WardrobeAction").OnServerInvoke(player, "Unequip", { kind = "Hat" })
+	check(okLocked == false, "can't change outfits mid-match")
+	player:SetAttribute("InMatch", false)
+	Mock.step(0.1, true)
+	checkWarnings("match lock")
+end
+
+-- Outfits on real-shaped bodies (R15 and R6): plain starter gear has no aura; a matched Mythic
+-- robe and hat glow, give off particles and leave a trail.
+do
+	local function body(r15: boolean)
+		local m = Instance.new("Model", Mock.workspace)
+		m.Name = if r15 then "R15Body" else "R6Body"
+		local hum = Instance.new("Humanoid", m)
+		hum.HipHeight = 2
+		local function limb(name: string, size, pos)
+			local p = Instance.new("Part", m)
+			p.Name = name
+			p.Size = size
+			p.CFrame = CFrame.new(pos.X, pos.Y, pos.Z)
+		end
+		limb("HumanoidRootPart", Vector3.new(2, 2, 1), Vector3.new(0, 3, 0))
+		limb("Head", Vector3.new(1.2, 1.2, 1.2), Vector3.new(0, 5, 0))
+		if r15 then
+			limb("UpperTorso", Vector3.new(2, 1.6, 1), Vector3.new(0, 3.6, 0))
+			limb("LowerTorso", Vector3.new(2, 0.4, 1), Vector3.new(0, 2.6, 0))
+			limb("LeftLowerArm", Vector3.new(0.9, 1, 0.9), Vector3.new(-1.5, 2.8, 0))
+			limb("RightLowerArm", Vector3.new(0.9, 1, 0.9), Vector3.new(1.5, 2.8, 0))
+		else
+			limb("Torso", Vector3.new(2, 2, 1), Vector3.new(0, 3, 0))
+			limb("Left Arm", Vector3.new(1, 2, 1), Vector3.new(-1.5, 3, 0))
+			limb("Right Arm", Vector3.new(1, 2, 1), Vector3.new(1.5, 3, 0))
+		end
+		return m
+	end
+	local function garment(kind: string, rarity: string, aura: string?)
+		local parts = {}
+		for _, slot in Cosmetics.Garments[kind].slots do
+			local part = Cosmetics.rollPart(Mock.Random.new(3), 5, slot, rarity)
+			part.aura = if slot == "Sigil" or slot == "Gem" then aura else nil
+			parts[slot] = part
+		end
+		return Cosmetics.craft(kind, parts)
+	end
+	local function count(m, class: string): number
+		local n = 0
+		for _, d in m:GetDescendants() do
+			if d:IsA(class) then
+				n += 1
+			end
+		end
+		return n
+	end
+	for _, r15 in { true, false } do
+		local m = body(r15)
+		local c: any = { name = m.Name, model = m, gear = {} }
+		local label = if r15 then "R15" else "R6"
+		WardrobeService.dressWith(c, garment("Robe", "Common", nil), garment("Hat", "Common", nil))
+		local outfit = m:FindFirstChild("Outfit")
+		check(outfit ~= nil and count(outfit, "BasePart") >= 6, label .. ": the robe and hat should be built")
+		check(count(m, "ParticleEmitter") == 0 and count(m, "Trail") == 0, label .. ": plain gear has no aura")
+		local aura = Cosmetics.Auras[#Cosmetics.Auras].id
+		WardrobeService.dressWith(c, garment("Robe", "Mythic", aura), garment("Hat", "Mythic", aura))
+		check(#m:GetChildren() > 0 and count(m, "ParticleEmitter") >= 2, label .. ": Mythic auras give off particles")
+		check(count(m, "PointLight") >= 2, label .. ": Mythic auras glow")
+		check(count(m, "Trail") == 1, label .. ": a matched aura on robe and hat leaves one trail")
+		check((c.gear.health or 0) > 0 or next(c.gear) ~= nil, label .. ": Mythic gear has enchantments")
+		WardrobeService.dressWith(c, nil, nil)
+		check(
+			m:FindFirstChild("Outfit") == nil and count(m, "ParticleEmitter") == 0 and count(m, "Trail") == 0,
+			label .. ": undressing removes the outfit and its auras"
+		)
+		m:Destroy()
+	end
+	checkWarnings("outfits")
+end
+
+-- 14. The auction house: list a part from the Sell tab, see it under My listings, have another
+--     player buy it, sell to an offline seller through the mailbox, and take back an expired one.
+do
+	local function givePart(target, rarity: string)
+		local part = Cosmetics.rollPart(Mock.Random.new(7), 2, "Gem", rarity)
+		WardrobeService.giveItem(target, "Part", part)
+		Mock.step(0.1, true)
+		return part
+	end
+	usePrompt("Auction")
+	local house = gui("AuctionHouse")
+	check(house and house.Enabled, "the pavilion should open the auction house")
+	check(not gui("Wardrobe").Enabled, "only one of the two windows at a time")
+	checkWarnings("open the auction house")
+	local part = givePart(player, "Rare")
+	clickNamed(house, "Tab_Sell")
+	clickNamed(house, "Sell_" .. part.uid)
+	local priceBox = house:FindFirstChild("PriceBox", true)
+	priceBox.Text = "120"
+	clickNamed(house, "ListButton")
+	local listingId = next(State.wardrobe.listings)
+	check(listingId ~= nil, "listing should be recorded on the seller")
+	check(#State.wardrobe.parts == 0, "a listed part is held in escrow")
+	clickNamed(house, "Tab_Mine")
+	check(listingId and house:FindFirstChild("Mine_" .. listingId, true) ~= nil, "My listings shows it")
+	clickNamed(house, "Tab_Browse")
+	Mock.step(0.2, true)
+	check(listingId and house:FindFirstChild("Listing_" .. listingId, true) ~= nil, "Browse shows it")
+	checkWarnings("list")
+
+	-- a second player buys it
+	local buyer = Instance.new("Player")
+	buyer.Name = "Buyer"
+	buyer.DisplayName = "Buyer"
+	buyer.UserId = 2
+	buyer.Parent = player.Parent
+	DataService.load(buyer)
+	WardrobeService.addCoins(buyer, 500, nil)
+	local sellerCoins = State.wardrobe.coins
+	local okBuy = AuctionService.buy(buyer, listingId)
+	Mock.step(0.1, true)
+	check(okBuy == true, "the buyer should get the part")
+	check(WardrobeService.coins(buyer) == 60 + 500 - 120, "the buyer pays the price")
+	check(State.wardrobe.coins == sellerCoins + 108, "the seller gets the price minus the 10% fee")
+	check(next(State.wardrobe.listings) == nil, "a sold listing is cleared")
+	local again = AuctionService.buy(buyer, listingId)
+	check(again == false, "a listing can only be bought once")
+
+	-- sold while the seller is away: the coins wait in the mailbox
+	local part2 = givePart(player, "Uncommon")
+	local okList = Remotes.func("AuctionAction")
+		.OnServerInvoke(player, "List", { kind = "Part", uid = part2.uid, price = 50 })
+	check(okList == true, "listing through the remote")
+	local id2 = next(State.wardrobe.listings)
+	local getPlayers = PlayersService.GetPlayers
+	PlayersService.GetPlayers = function()
+		return { buyer }
+	end
+	sellerCoins = State.wardrobe.coins
+	check(AuctionService.buy(buyer, id2) == true, "buying from an offline seller")
+	PlayersService.GetPlayers = getPlayers
+	Mock.step(0.1, true)
+	check(State.wardrobe.coins == sellerCoins, "an offline seller isn't paid directly")
+	AuctionService.reconcile(player)
+	Mock.step(0.1, true)
+	check(State.wardrobe.coins == sellerCoins + 45, "the mailbox pays the seller when they're back")
+	check(next(State.wardrobe.listings) == nil, "the mailbox clears the listing")
+
+	-- take one back, and let another expire
+	local part3 = givePart(player, "Common")
+	Remotes.func("AuctionAction").OnServerInvoke(player, "List", { kind = "Part", uid = part3.uid, price = 10 })
+	local id3 = next(State.wardrobe.listings)
+	clickNamed(house, "Tab_Mine")
+	clickNamed(house, "Cancel_" .. id3)
+	check(next(State.wardrobe.listings) == nil and #State.wardrobe.parts == 1, "Take back returns the part")
+	Remotes.func("AuctionAction").OnServerInvoke(player, "List", { kind = "Part", uid = part3.uid, price = 10 })
+	local id4 = next(State.wardrobe.listings)
+	DataService.profile(player).wardrobe.listings[id4].expires = 0
+	AuctionService.reconcile(player)
+	Mock.step(0.1, true)
+	check(next(State.wardrobe.listings) == nil and #State.wardrobe.parts == 1, "expired listings come back")
+	-- worn garments can't be sold
+	local okWorn = AuctionService.list(player, "Garment", State.wardrobe.equipped.Hat, 100)
+	check(okWorn == false, "worn garments can't be listed")
+	checkWarnings("auction")
+
+	-- the profile survives a rejoin (saved on leave, then loaded again)
+	local coins = State.wardrobe.coins
+	DataService.save(player, true)
+	DataService.load(player)
+	Mock.step(0.2, true)
+	check(State.wardrobe.coins == coins, "coins should be saved")
+	check(#State.wardrobe.garments == 2 and State.wardrobe.equipped.Robe ~= nil, "the wardrobe should be saved")
+	checkWarnings("rejoin")
 end
 
 if failures > 0 then

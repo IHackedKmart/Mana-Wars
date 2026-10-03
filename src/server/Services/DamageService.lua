@@ -95,13 +95,26 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 	local hum = target.humanoid :: Humanoid
 
 	local crit = false
+	local lifesteal = info.lifesteal or 0
 	if isSelf then
 		if not info.selfCost then
 			amount *= Config.Combat.SelfDamageMultiplier
 		end
 	else
+		-- robe / hat enchantments: elemental attunement, precision, leeching, warding
+		if attacker and not info.isStorm then
+			amount *= 1 + (attacker.gear["elem:" .. (info.element or "")] or 0)
+			if not info.isDot then
+				lifesteal += attacker.gear.lifesteal or 0
+			end
+		end
+		if not info.isStorm then
+			amount *= 1 - (target.gear.ward or 0)
+		end
 		if not info.isDot and not info.noCrit and not info.isStorm then
-			local chance = Config.Combat.BaseCritChance + (info.crit or 0)
+			local chance = Config.Combat.BaseCritChance
+				+ (info.crit or 0)
+				+ (if attacker then attacker.gear.crit or 0 else 0)
 			if rng:NextNumber() < chance then
 				amount *= Config.Combat.CritMultiplier
 				crit = true
@@ -130,8 +143,8 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 		target.lastAttacker = attacker
 		target.lastAttackTime = workspace:GetServerTimeNow()
 		target.lastSpellName = info.spellName or target.lastSpellName
-		if dealt > 0 and info.lifesteal and info.lifesteal > 0 then
-			DamageService.heal(attacker, dealt * info.lifesteal)
+		if dealt > 0 and lifesteal > 0 then
+			DamageService.heal(attacker, dealt * lifesteal)
 		end
 		if info.siphon and info.siphon > 0 and info.wandUid and DamageService.onSiphon and not info.isDot then
 			DamageService.onSiphon(attacker, info.wandUid, info.siphon)

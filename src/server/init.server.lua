@@ -22,6 +22,8 @@ local order = {
 	"PracticeService",
 	"VoteService",
 	"QueueService",
+	"WardrobeService",
+	"AuctionService",
 	"BotService",
 	"MatchService",
 }

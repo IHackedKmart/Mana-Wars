@@ -17,6 +17,7 @@ local EVENTS = {
 	"Knockback", -- server -> client: (velocity: Vector3)
 	"VoteState", -- server -> client: (vote payload)
 	"TutorialDone", -- client -> server: the player finished (or skipped) the tutorial
+	"WardrobeUpdated", -- server -> client: (wardrobe snapshot: coins, parts, garments, equipped, listings)
 }
 
 local UNRELIABLE = {
@@ -30,6 +31,8 @@ local FUNCTIONS = {
 	"ClassAction", -- (action: string, classId: string?) -> (ok, message)
 	"VoteAction", -- (action: "Vote", mapId: string) -> (ok, message)
 	"QueueAction", -- (action: "Join" | "Leave") -> (ok, message)
+	"WardrobeAction", -- (action: string, args: table) -> (ok, message, extra)
+	"AuctionAction", -- (action: string, args: table) -> (ok, message, extra)
 }
 
 local folder: Folder

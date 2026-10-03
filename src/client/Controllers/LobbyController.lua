@@ -25,6 +25,8 @@ local Sounds = require(script.Parent.Sounds)
 local LobbyController = {}
 
 LobbyController.onOpenGrimoire = nil :: (() -> ())?
+LobbyController.onOpenWardrobe = nil :: ((tab: string?) -> ())?
+LobbyController.onOpenAuction = nil :: (() -> ())?
 
 local C = Theme.Colors
 local player = Players.LocalPlayer
@@ -35,6 +37,9 @@ local root: Frame
 local classPanel: Frame
 local classGrid: ScrollingFrame
 local classButton: TextButton
+local wardrobeButton: TextButton
+local auctionButton: TextButton
+local coinsPill: TextLabel
 local spectateBar: Frame
 local spectateName: TextLabel
 local spectateButton: TextButton
@@ -650,6 +655,12 @@ function LobbyController.init()
 		elseif action == "ClassPicker" then
 			classPanel.Visible = true
 			renderClasses()
+		elseif action == "Wardrobe" and LobbyController.onOpenWardrobe then
+			LobbyController.onOpenWardrobe("Tailor")
+		elseif action == "Coffers" and LobbyController.onOpenWardrobe then
+			LobbyController.onOpenWardrobe("Coffers")
+		elseif action == "Auction" and LobbyController.onOpenAuction then
+			LobbyController.onOpenAuction()
 		end
 	end)
 
@@ -675,6 +686,50 @@ function LobbyController.init()
 			renderClasses()
 		end
 	end
+	-- the Tailor's Loom and the Auction House are only open in the Plaza
+	wardrobeButton = Widgets.button("👘  Wardrobe & Coffers", {
+		size = UDim2.fromOffset(230, 38),
+		position = UDim2.fromOffset(16, 232),
+		color = C.Panel3,
+		onClick = function()
+			if LobbyController.onOpenWardrobe then
+				LobbyController.onOpenWardrobe(nil)
+			end
+		end,
+		parent = root,
+	})
+	wardrobeButton.Name = "WardrobeButton"
+	auctionButton = Widgets.button("⚖  Auction House", {
+		size = UDim2.fromOffset(230, 38),
+		position = UDim2.fromOffset(16, 274),
+		color = C.Panel3,
+		onClick = function()
+			if LobbyController.onOpenAuction then
+				LobbyController.onOpenAuction()
+			end
+		end,
+		parent = root,
+	})
+	auctionButton.Name = "AuctionButton"
+	coinsPill = Widgets.label({
+		Name = "CoinsPill",
+		Text = "🪙 0 Enchanted Coins",
+		Font = Theme.Black,
+		TextSize = 16,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+		BackgroundColor3 = C.Panel,
+		BackgroundTransparency = 0.15,
+		Size = UDim2.fromOffset(230, 30),
+		Position = UDim2.fromOffset(16, 316),
+		Parent = root,
+	})
+	Create.corner(15).Parent = coinsPill
+	local function updateCoins()
+		coinsPill.Text = "🪙 " .. tostring(player:GetAttribute("Coins") or 0) .. " Enchanted Coins"
+	end
+	player:GetAttributeChangedSignal("Coins"):Connect(updateCoins)
+	updateCoins()
+
 	player:GetAttributeChangedSignal("Class"):Connect(updateClassButton)
 	player:GetAttributeChangedSignal("OwnedKits"):Connect(updateClassButton)
 	updateClassButton()
@@ -685,6 +740,9 @@ function LobbyController.init()
 		local phase = State.phase()
 		local matchRunning = phase == "Countdown" or phase == "Grace" or phase == "Battle"
 		classButton.Visible = inLobby
+		wardrobeButton.Visible = inLobby and State.inHub()
+		auctionButton.Visible = wardrobeButton.Visible
+		coinsPill.Visible = inLobby
 		if not inLobby then
 			classPanel.Visible = false
 		end

@@ -5,6 +5,8 @@
 --   * north: the portal to the Athenaeum ("join the game")
 --   * east: a big Practice Range with standing and moving training dummies
 --   * west: a gazebo with the Class Altar and Grimoire lecterns
+--   * south: the Tailor's Loom and Coffer stalls (Enchanted Coin loot boxes, crafting robes and
+--     hats) and the Gilded Gavel, the auction house pavilion
 --   * by the spawn: a welcome board and a live "next match" board
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -247,10 +249,30 @@ local function tower(parent: Instance, base: Vector3, faceToward: Vector3, rng: 
 	end
 end
 
-local function stall(parent: Instance, pos: Vector3, lookAt: Vector3, awning: Color3, rng: Random)
+-- A promptable station (opens a window on the client through the prompt's LobbyAction).
+local function stationPrompt(on: BasePart, actionText: string, objectText: string, lobbyAction: string)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = actionText
+	prompt.ObjectText = objectText
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 11
+	prompt.RequiresLineOfSight = false
+	prompt:SetAttribute("LobbyAction", lobbyAction)
+	prompt.Parent = on
+end
+
+-- A market stall. `goods` is what's on the counter: "potions", "cloth" (the tailor) or "coffers".
+local function stall(
+	parent: Instance,
+	pos: Vector3,
+	lookAt: Vector3,
+	awning: Color3,
+	rng: Random,
+	goods: string?
+): (Model, BasePart, CFrame)
 	local model = Build.model("MarketStall", parent)
 	local cf = CFrame.lookAt(pos, Vector3.new(lookAt.X, pos.Y, lookAt.Z))
-	part(model, "Counter", Vector3.new(10, 3, 3), cf * CFrame.new(0, 1.5, 0), M.WoodPlanks, Props.WOOD)
+	local counter = part(model, "Counter", Vector3.new(10, 3, 3), cf * CFrame.new(0, 1.5, 0), M.WoodPlanks, Props.WOOD)
 	for _, o in { Vector3.new(-5, 0, -1.5), Vector3.new(5, 0, -1.5), Vector3.new(-5, 0, 3.5), Vector3.new(5, 0, 3.5) } do
 		part(
 			model,
@@ -272,18 +294,188 @@ local function stall(parent: Instance, pos: Vector3, lookAt: Vector3, awning: Co
 			{ CanCollide = false }
 		)
 	end
-	for i = 1, 7 do
-		local potion = part(
+	if goods == "cloth" then
+		-- bolts of cloth and a dressmaker's mannequin wearing a half-finished robe
+		for i = 1, 5 do
+			part(
+				model,
+				"ClothBolt",
+				Vector3.new(4.2, 1.1, 1.1),
+				cf * CFrame.new(-3.8 + i * 1.25, 3.55, rng:NextNumber(-0.5, 0.5)) * CFrame.Angles(0, math.rad(90), 0),
+				M.Fabric,
+				Color3.fromHSV((i * 0.17 + 0.6) % 1, 0.65, 0.85),
+				{ Shape = Enum.PartType.Cylinder, CanCollide = false }
+			)
+		end
+		part(model, "MannequinStand", Vector3.new(0.4, 3.5, 0.4), cf * CFrame.new(6.8, 1.75, -1), M.Metal, IRON)
+		part(
 			model,
-			"Potion",
-			Vector3.new(0.9, 0.9, 0.9),
-			cf * CFrame.new(-4 + i * 1.05, 3.45, rng:NextNumber(-0.6, 0.6)),
+			"MannequinBody",
+			Vector3.new(2, 2.4, 1),
+			cf * CFrame.new(6.8, 4.6, -1),
+			M.Fabric,
+			Color3.fromRGB(110, 40, 150)
+		)
+		part(
+			model,
+			"MannequinSkirt",
+			Vector3.new(2.6, 2, 1.6),
+			cf * CFrame.new(6.8, 2.6, -1),
+			M.Fabric,
+			Color3.fromRGB(90, 30, 125),
+			{ CanCollide = false }
+		)
+		part(
+			model,
+			"MannequinHat",
+			Vector3.new(1.6, 2, 1.6),
+			cf * CFrame.new(6.8, 6.6, -1),
+			M.Fabric,
+			Color3.fromRGB(60, 30, 100),
+			{ CanCollide = false }
+		)
+	elseif goods == "coffers" then
+		-- the five coffers, cheapest to grandest, each in its tier's colour
+		local tints = {
+			Color3.fromRGB(140, 110, 80),
+			Color3.fromRGB(90, 170, 90),
+			Color3.fromRGB(80, 130, 230),
+			Color3.fromRGB(170, 90, 230),
+			Color3.fromRGB(255, 190, 60),
+		}
+		for i, tint in tints do
+			local size = 0.9 + i * 0.12
+			local box = part(
+				model,
+				"Coffer",
+				Vector3.new(size * 1.3, size, size),
+				cf * CFrame.new(-4.6 + i * 1.55, 3 + size / 2, 0),
+				M.WoodPlanks,
+				tint,
+				{ CanCollide = false }
+			)
+			part(
+				model,
+				"CofferBand",
+				Vector3.new(size * 1.32, size * 0.2, size * 1.02),
+				box.CFrame * CFrame.new(0, size * 0.15, 0),
+				M.Metal,
+				Props.GOLD,
+				{ CanCollide = false }
+			)
+			if i == 5 then
+				Build.make("PointLight", { Color = tint, Range = 9, Brightness = 1.6 }, box)
+				Build.make("Sparkles", { SparkleColor = tint }, box)
+			end
+		end
+	else
+		for i = 1, 7 do
+			local potion = part(
+				model,
+				"Potion",
+				Vector3.new(0.9, 0.9, 0.9),
+				cf * CFrame.new(-4 + i * 1.05, 3.45, rng:NextNumber(-0.6, 0.6)),
+				M.Neon,
+				Color3.fromHSV(rng:NextNumber(), 0.7, 1),
+				{ Shape = Enum.PartType.Ball, CanCollide = false }
+			)
+			potion.Transparency = 0.15
+		end
+	end
+	return model, counter, cf
+end
+
+-- The Gilded Gavel: an open marble pavilion with the auctioneer's podium and a spinning gold coin.
+local function auctionHouse(parent: Instance, animated: Instance, c: Vector3, lookAt: Vector3)
+	local model = Build.model("AuctionHouse", parent)
+	local cf = CFrame.lookAt(c, Vector3.new(lookAt.X, c.Y, lookAt.Z))
+	part(model, "PavilionFloor", Vector3.new(24, 0.8, 24), cf * CFrame.new(0, 0.4, 0), M.Marble, Props.MARBLE)
+	part(model, "PavilionStep", Vector3.new(14, 0.4, 3), cf * CFrame.new(0, 0.2, -13.4), M.Marble, Props.MARBLE)
+	part(
+		model,
+		"PavilionRug",
+		Vector3.new(16, 0.1, 16),
+		cf * CFrame.new(0, 0.85, 0),
+		M.Fabric,
+		Color3.fromRGB(130, 25, 40)
+	)
+	for _, o in { { -10, -10 }, { 10, -10 }, { -10, 10 }, { 10, 10 } } do
+		part(
+			model,
+			"PavilionColumn",
+			Vector3.new(1.8, 13, 1.8),
+			cf * CFrame.new(o[1], 7.3, o[2]),
+			M.Marble,
+			Props.MARBLE
+		)
+		part(model, "ColumnCap", Vector3.new(2.4, 0.6, 2.4), cf * CFrame.new(o[1], 13.9, o[2]), M.Metal, Props.GOLD)
+	end
+	for i = 0, 3 do
+		local w = 26 - i * 6
+		part(
+			model,
+			"PavilionRoof",
+			Vector3.new(w, 1.2, w),
+			cf * CFrame.new(0, 14.8 + i * 1.2, 0),
+			M.Slate,
+			if i % 2 == 0 then Color3.fromRGB(120, 30, 45) else Props.GOLD
+		)
+	end
+	-- the podium with its gavel
+	local podium =
+		part(model, "Podium", Vector3.new(5, 3.6, 2.6), cf * CFrame.new(0, 2.6, 3), M.WoodPlanks, Props.DARK_WOOD)
+	part(model, "PodiumTop", Vector3.new(5.6, 0.3, 3.2), cf * CFrame.new(0, 4.55, 3), M.Metal, Props.GOLD)
+	part(
+		model,
+		"GavelHandle",
+		Vector3.new(0.25, 0.25, 2),
+		cf * CFrame.new(0.8, 4.9, 3) * CFrame.Angles(0, math.rad(30), 0),
+		M.WoodPlanks,
+		Props.WOOD,
+		{ CanCollide = false }
+	)
+	part(
+		model,
+		"GavelHead",
+		Vector3.new(1.1, 0.55, 0.55),
+		cf * CFrame.new(0.8, 4.95, 2.1) * CFrame.Angles(0, math.rad(30), 0),
+		M.WoodPlanks,
+		Props.DARK_WOOD,
+		{ CanCollide = false }
+	)
+	-- display pedestals with sample wares
+	for side = -1, 1, 2 do
+		part(model, "Pedestal", Vector3.new(2, 3, 2), cf * CFrame.new(side * 7, 2.3, 4), M.Marble, Props.MARBLE)
+		local ware = part(
+			model,
+			"Ware",
+			Vector3.new(1.2, 1.2, 1.2),
+			cf * CFrame.new(side * 7, 4.6, 4),
 			M.Neon,
-			Color3.fromHSV(rng:NextNumber(), 0.7, 1),
+			if side < 0 then Color3.fromRGB(255, 140, 60) else Color3.fromRGB(120, 200, 255),
 			{ Shape = Enum.PartType.Ball, CanCollide = false }
 		)
-		potion.Transparency = 0.15
+		Build.make("PointLight", { Color = ware.Color, Range = 8, Brightness = 1.2 }, ware)
 	end
+	local coin = part(
+		animated,
+		"AuctionCoin",
+		Vector3.new(0.6, 4.5, 4.5),
+		cf * CFrame.new(0, 10, 0),
+		M.Neon,
+		Color3.fromRGB(255, 205, 70),
+		{ Shape = Enum.PartType.Cylinder, CanCollide = false }
+	)
+	coin:SetAttribute("Spin", 1.5)
+	Build.make("PointLight", { Color = coin.Color, Range = 20, Brightness = 2 }, coin)
+	Props.sign(
+		model,
+		cf * CFrame.new(0, 11.8, -10.4),
+		Vector2.new(18, 3.6),
+		"⚖ THE GILDED GAVEL ⚖",
+		"Auction House: buy and sell robe & hat parts"
+	)
+	stationPrompt(podium, "Trade", "Auction House", "Auction")
 end
 
 local function gazebo(parent: Instance, animated: Instance, c: Vector3)
@@ -514,12 +706,33 @@ function Hub.build(): HubInfo
 	tower(model, at(-87, -50), at(0, 0), rng)
 	tower(model, at(57, -82), at(0, 0), rng)
 	tower(model, at(52, 86), at(0, 0), rng)
-	stall(model, at(-40, 58, 0.1), at(0, 20), Color3.fromRGB(150, 40, 60), rng)
-	stall(model, at(40, 58, 0.1), at(0, 20), Color3.fromRGB(40, 90, 150), rng)
+	-- the Tailor's Loom (craft robes and hats) and the Coffer stall (loot boxes)
+	local _, tailorCounter, tailorCf =
+		stall(model, at(-40, 58, 0.1), at(0, 20), Color3.fromRGB(150, 40, 60), rng, "cloth")
+	stationPrompt(tailorCounter, "Craft & dress", "The Tailor's Loom", "Wardrobe")
+	Props.sign(
+		model,
+		tailorCf * CFrame.new(0, 9.6, -1.6),
+		Vector2.new(12, 2.6),
+		"🧵 TAILOR'S LOOM",
+		"Stitch robes & hats"
+	)
+	local _, cofferCounter, cofferCf =
+		stall(model, at(40, 58, 0.1), at(0, 20), Color3.fromRGB(40, 90, 150), rng, "coffers")
+	stationPrompt(cofferCounter, "Open coffers", "Coffer Merchant", "Coffers")
+	Props.sign(
+		model,
+		cofferCf * CFrame.new(0, 9.6, -1.6),
+		Vector2.new(12, 2.6),
+		"🎁 COFFERS",
+		"Spend Enchanted Coins"
+	)
+	-- the auction house, south-west
+	auctionHouse(model, animated, at(-52, -52, 0.1), at(0, 0))
 
 	local decor = Build.make("Folder", { Name = "Decor" }, model)
 	-- round stone planters with a tree each, in the open parts of the plaza
-	for _, deg in { 30, 150, 225, 315 } do
+	for _, deg in { 30, 150, 315 } do -- (225 is the auction house)
 		local a = math.rad(deg)
 		local p = at(math.cos(a) * 66, math.sin(a) * 66)
 		Build.cylinder(

@@ -117,6 +117,18 @@ else
 	if not hub:FindFirstChild("ClassAltar", true) or not hub:FindFirstChild("Lectern", true) then
 		fail("the hub needs a class altar and Grimoire lecterns")
 	end
+	-- the Tailor's Loom, the Coffer stall and the auction house are reached from the Plaza
+	local actions = {}
+	for _, inst in hub:GetDescendants() do
+		if inst.ClassName == "ProximityPrompt" and inst:GetAttribute("LobbyAction") then
+			actions[inst:GetAttribute("LobbyAction")] = true
+		end
+	end
+	for _, action in { "Wardrobe", "Coffers", "Auction", "Grimoire", "ClassPicker" } do
+		if not actions[action] then
+			fail("the hub has no prompt for " .. action)
+		end
+	end
 end
 for _, inst in Mock.workspace:GetDescendants() do
 	if inst.ClassName == "SpawnLocation" and not inst:IsDescendantOf(hub) then

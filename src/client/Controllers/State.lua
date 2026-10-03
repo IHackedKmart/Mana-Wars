@@ -28,11 +28,14 @@ local player = Players.LocalPlayer
 State.inventory = nil :: Items.Inventory?
 State.wand = nil :: WandState?
 State.menus = {} :: { [string]: boolean }
+-- coins, cosmetic parts, garments, what's worn and auction listings (see WardrobeService.sync)
+State.wardrobe = { coins = 0, parts = {}, garments = {}, equipped = {}, listings = {} } :: { [string]: any }
 
 State.InventoryChanged = Signal.new()
 State.WandChanged = Signal.new()
 State.Toast = Signal.new()
 State.MenusChanged = Signal.new()
+State.WardrobeChanged = Signal.new()
 
 function State.now(): number
 	return workspace:GetServerTimeNow()
@@ -122,6 +125,12 @@ function State.init()
 	Remotes.event("WandState").OnClientEvent:Connect(function(state)
 		State.wand = state
 		State.WandChanged:Fire()
+	end)
+	Remotes.event("WardrobeUpdated").OnClientEvent:Connect(function(snapshot)
+		if type(snapshot) == "table" then
+			State.wardrobe = snapshot
+			State.WardrobeChanged:Fire()
+		end
 	end)
 	Remotes.event("Announce").OnClientEvent:Connect(function(kind, data)
 		if kind == "Toast" and type(data) == "table" and type(data.text) == "string" then

@@ -102,7 +102,12 @@ local server = Mock.realm({
 					return savedStats[key]
 				end,
 				UpdateAsync = function(_, key, fn)
-					savedStats[key] = fn(savedStats[key])
+					-- like Roblox: returning nil from the transform cancels the write
+					local result = fn(savedStats[key])
+					if result ~= nil then
+						savedStats[key] = result
+					end
+					return result
 				end,
 			}
 		end,

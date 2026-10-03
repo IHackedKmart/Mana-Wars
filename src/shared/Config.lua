@@ -8,7 +8,7 @@ Config.GameName = "Mana Wars"
 -- Match flow ---------------------------------------------------------------
 Config.Match = {
 	MinPlayers = 2, -- real players needed to start when bots are disabled
-	MaxParticipants = 24, -- one per spawn pedestal
+	MaxParticipants = 12, -- one per spawn pedestal
 	VoteTime = 30, -- map vote in the library once someone has joined the queue (others can still join)
 	VoteOptions = 3, -- how many maps are offered in each vote
 	PedestalCountdown = 10, -- frozen on pedestals before the gong
@@ -139,6 +139,18 @@ Config.Kits = {
 	} :: { [string]: number },
 	PremiumFreeTier = 1, -- Roblox Premium members get every Copper kit for free
 	StudioUnlocksAll = true,
+}
+
+-- Enchanted Coins, Coffers and the auction house ---------------------------------
+Config.Economy = {
+	CoinsForFirst = 12, -- 1st place earns 12 coins, 2nd 11 ... 12th earns 1 (never less than 1)
+	StarterCoins = 60, -- enough for a first Tattered Satchel
+	MaxParts = 250, -- wardrobe space
+	MaxGarments = 60,
+	AuctionFee = 0.1, -- the auction house keeps 10% of every sale
+	AuctionHours = 48, -- unsold listings come back after this long
+	MaxListings = 10, -- per player
+	MaxPrice = 1000000,
 }
 
 Config.DataStoreName = "ManaWars_Stats_v1"

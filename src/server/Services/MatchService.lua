@@ -27,6 +27,7 @@ local DataService = require(script.Parent.DataService)
 local BotService = require(script.Parent.BotService)
 local VoteService = require(script.Parent.VoteService)
 local QueueService = require(script.Parent.QueueService)
+local WardrobeService = require(script.Parent.WardrobeService)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -86,8 +87,11 @@ local function watchCharacter(c: Combatant, model: Model)
 		return
 	end
 	Combatants.setModel(c, model)
-	hum.MaxHealth = Config.Combat.MaxHealth
-	hum.Health = Config.Combat.MaxHealth
+	if c.player then
+		WardrobeService.dress(c) -- robe + hat (and the stats their enchantments give)
+	end
+	hum.MaxHealth = Config.Combat.MaxHealth + (c.gear.health or 0)
+	hum.Health = hum.MaxHealth
 	hum.BreakJointsOnDeath = true
 	hum.Died:Connect(function()
 		if c.model == model then
@@ -152,6 +156,18 @@ onDied = function(c: Combatant)
 		return
 	end
 	c.alive = false
+	-- finishing place: everyone still standing finishes ahead of you
+	local stillAlive = 0
+	for _, other in participants do
+		if other.alive and other ~= c then
+			stillAlive += 1
+		end
+	end
+	local place = stillAlive + 1
+	c.place = place
+	if c.player then
+		WardrobeService.awardPlacement(c, place, initialCount)
+	end
 	local pos = if c.root then (c.root :: BasePart).Position else nil
 	local killer: Combatant? = nil
 	if c.lastAttacker and c.lastAttacker ~= c and now() - c.lastAttackTime < 20 then
@@ -351,7 +367,7 @@ local function runMatch()
 		return
 	end
 
-	-- Pick participants: the queue in order (anyone beyond 24 waits for the next round), then bots
+	-- Pick participants: the queue in order (anyone beyond 12 waits for the next round), then bots
 	local pedestals = shuffle(table.clone(arena.pedestals))
 	participants = {}
 	for i, player in QueueService.waiting() do
@@ -376,6 +392,7 @@ local function runMatch()
 			local bot = BotService.spawn(botName(used), pedestals[idx])
 			if bot then
 				table.insert(participants, bot)
+				WardrobeService.dressBot(bot, rng)
 				watchCharacter(bot, bot.model :: Model)
 			end
 		end
@@ -388,6 +405,7 @@ local function runMatch()
 		c.practice = false
 		c.inMatch = true
 		c.alive = true
+		c.place = nil
 		c.kills = 0
 		c.lastAttacker = nil
 		c.status = {}
@@ -539,6 +557,25 @@ local function runMatch()
 	})
 	if winner and winner.player then
 		DataService.addWin(winner.player)
+	end
+	-- coins for everyone still standing: the winner first, then by kills
+	local standing = {}
+	for _, c in participants do
+		if c.alive and c.inMatch and c.place == nil then
+			table.insert(standing, c)
+		end
+	end
+	table.sort(standing, function(a, b)
+		if a == winner or b == winner then
+			return a == winner
+		end
+		return a.kills > b.kills
+	end)
+	for i, c in standing do
+		c.place = i
+		if c.player and c.player.Parent then
+			WardrobeService.awardPlacement(c, i, initialCount)
+		end
 	end
 	for _, c in participants do
 		if c.player and c.player.Parent then

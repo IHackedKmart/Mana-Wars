@@ -41,6 +41,8 @@ export type Combatant = {
 	history: { { t: number, cf: CFrame } }, -- recent positions, for Chrono's rewind
 	lastRewind: number,
 	lastSwap: number,
+	gear: { [string]: number }, -- stat bonuses from the robe and hat being worn (see Cosmetics)
+	place: number?, -- finishing place in the current match (1 = winner)
 	bot: { [string]: any }?,
 }
 
@@ -87,6 +89,8 @@ function Combatants.create(name: string, player: Player?): Combatant
 		history = {},
 		lastRewind = 0,
 		lastSwap = 0,
+		gear = {},
+		place = nil,
 		bot = nil,
 	}
 	byId[c.id] = c

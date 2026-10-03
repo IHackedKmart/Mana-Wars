@@ -53,7 +53,7 @@ function QueueService.waiting(): { Player }
 	return list
 end
 
--- Someone who just got a match goes to the back of the line (matters when more than 24 are queued).
+-- Someone who just got a match goes to the back of the line (matters when more than 12 are queued).
 function QueueService.backOfLine(c: Combatant)
 	c.queuedAt = workspace:GetServerTimeNow()
 end

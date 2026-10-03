@@ -36,7 +36,7 @@ function StatusService.updateMovement(c: Combatant)
 	end
 	local s = c.status
 	local t = now()
-	local speed = Config.Combat.BaseWalkSpeed
+	local speed = Config.Combat.BaseWalkSpeed * (1 + (c.gear.speed or 0))
 	local frozen = (s.frozenUntil or 0) > t
 	if s.haste and s.haste.untilT > t then
 		speed *= s.haste.mult
@@ -49,7 +49,7 @@ function StatusService.updateMovement(c: Combatant)
 	end
 	hum.WalkSpeed = speed
 	hum.UseJumpPower = false
-	hum.JumpHeight = if frozen or c.locked then 0 else Config.Combat.BaseJumpHeight
+	hum.JumpHeight = if frozen or c.locked then 0 else Config.Combat.BaseJumpHeight * (1 + (c.gear.jump or 0))
 end
 
 local function setInstance(
@@ -175,6 +175,12 @@ end
 function StatusService.apply(target: Combatant, def: StatusDef, source: Combatant?)
 	local s = target.status
 	local t = now()
+	-- Resilience enchantment: shorter burns, chills and venom
+	local resilience = target.gear.resilience
+	if resilience and resilience > 0 then
+		def = table.clone(def)
+		def.duration *= 1 - resilience
+	end
 	if def.kind == "Burn" then
 		local dps = def.dps or 4
 		if s.burn and s.burn.untilT > t then
@@ -330,6 +336,11 @@ local function tick()
 				else
 					s.regen = nil
 				end
+			end
+			-- Mending enchantment: a slow, steady heal while fighting
+			local mending = c.gear.regen
+			if mending and c.inMatch and hum.Health < hum.MaxHealth then
+				hum.Health = math.min(hum.MaxHealth, hum.Health + mending * TICK)
 			end
 			if s.chill and s.chill.untilT <= t then
 				s.chill = nil

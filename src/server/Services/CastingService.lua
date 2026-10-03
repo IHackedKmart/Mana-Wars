@@ -48,12 +48,21 @@ local function buildOrder(wand: Items.WandItem): { number }
 	return order
 end
 
+-- A wand's mana pool and regeneration, including the wearer's robe / hat enchantments.
+local function manaMax(c: Combatant, wand: Items.WandItem): number
+	return wand.stats.manaMax * (1 + (c.gear.manaMax or 0))
+end
+
+local function manaRegen(c: Combatant, wand: Items.WandItem): number
+	return wand.stats.manaRegen * (1 + (c.gear.manaRegen or 0))
+end
+
 function CastingService.state(c: Combatant, wand: Items.WandItem): WandState
 	local st = c.wandStates[wand.uid]
 	local t = now()
 	if not st then
 		st = {
-			mana = wand.stats.manaMax,
+			mana = manaMax(c, wand),
 			manaTime = t,
 			order = nil,
 			deckPos = 1,
@@ -63,7 +72,7 @@ function CastingService.state(c: Combatant, wand: Items.WandItem): WandState
 		c.wandStates[wand.uid] = st
 	end
 	local s = st :: WandState
-	s.mana = math.min(wand.stats.manaMax, s.mana + wand.stats.manaRegen * (t - s.manaTime))
+	s.mana = math.min(manaMax(c, wand), s.mana + manaRegen(c, wand) * (t - s.manaTime))
 	s.manaTime = t
 	return s
 end
@@ -92,8 +101,8 @@ function CastingService.sendState(c: Combatant)
 	wandStateEvent:FireClient(player, {
 		uid = wand.uid,
 		mana = st.mana,
-		manaMax = wand.stats.manaMax,
-		regen = wand.stats.manaRegen,
+		manaMax = manaMax(c, wand),
+		regen = manaRegen(c, wand),
 		t = st.manaTime,
 		nextCastAt = st.nextCastAt,
 		rechargeUntil = st.rechargeUntil,
@@ -117,14 +126,14 @@ function CastingService.addMana(c: Combatant, wandUid: string, amount: number)
 		return
 	end
 	local st = CastingService.state(c, wand)
-	st.mana = math.min(wand.stats.manaMax, st.mana + amount)
+	st.mana = math.min(manaMax(c, wand), st.mana + amount)
 end
 
 function CastingService.refillAll(c: Combatant)
 	for _, wand in c.inventory.wands do
 		if wand then
 			local st = CastingService.state(c, wand)
-			st.mana = wand.stats.manaMax
+			st.mana = manaMax(c, wand)
 		end
 	end
 	CastingService.sendState(c)
@@ -236,9 +245,9 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 	st.mana -= mana
 	st.deckPos = pos
 
-	local wait = math.max(0.04, wand.stats.castDelay + delay)
+	local wait = math.max(0.04, (wand.stats.castDelay + delay) * (1 - (c.gear.castDelay or 0)))
 	if pos > #order then
-		local rechargeTime = math.max(0.05, wand.stats.rechargeTime + recharge)
+		local rechargeTime = math.max(0.05, (wand.stats.rechargeTime + recharge) * (1 - (c.gear.recharge or 0)))
 		wait = math.max(wait, rechargeTime)
 		st.rechargeUntil = t + rechargeTime
 		st.deckPos = 1
