@@ -312,17 +312,17 @@ local function wandCard(index: number, wand: Items.WandItem | false, equipped: b
 		Parent = card,
 	}, { Create.list(Enum.FillDirection.Horizontal, 5) })
 	Widgets.chip(chips, string.format("💧 %d  +%d/s", s.manaMax, s.manaRegen), C.Mana, 1)
-	Widgets.chip(chips, string.format("⏱ %.2fs", s.castDelay), nil, 2)
+	Widgets.chip(chips, string.format("⏱️ %.2fs", s.castDelay), nil, 2)
 	Widgets.chip(chips, string.format("🔄 %.2fs", s.rechargeTime), nil, 3)
 	if s.spellsPerCast > 1 then
-		Widgets.chip(chips, "✦ casts " .. s.spellsPerCast, C.Accent, 4)
+		Widgets.chip(chips, "✨ casts " .. s.spellsPerCast, C.Accent, 4)
 	end
 	if s.shuffle then
 		Widgets.chip(chips, "🔀 shuffled", C.Dim, 5)
 	end
 	local perks = {}
 	for _, perk in wand.perks do
-		table.insert(perks, "★ " .. WandGenerator.describePerk(perk))
+		table.insert(perks, "⭐ " .. WandGenerator.describePerk(perk))
 	end
 	if #perks > 0 then
 		Widgets.label({
@@ -449,7 +449,7 @@ local function buildBag()
 				rarity = spell.rarity,
 				caption = spell.name,
 				captionColor = Theme.lighten(Theme.rarity(spell.rarity), 0.35),
-				badge = if spell.recipe.trigger then "⚙" else nil,
+				badge = if spell.recipe.trigger then "⚙️" else nil,
 				selected = isSelected("Spell", spell.uid) or draft.payloadUid == spell.uid,
 				layoutOrder = i,
 				onClick = function()
@@ -632,7 +632,7 @@ end
 
 local function buildForge()
 	Widgets.clear(forgeFrame, true)
-	local head = Widgets.sectionHeader(forgeFrame, "✦ Spellforge", "click parts to add them", 0)
+	local head = Widgets.sectionHeader(forgeFrame, "✨ Spellforge", "click parts to add them", 0)
 	head.Position = UDim2.fromOffset(12, 8)
 	head.Size = UDim2.new(1, -24, 0, 22)
 
@@ -987,7 +987,7 @@ local function build()
 		end,
 	})
 	local body = window.body
-	restockButton = Widgets.button("♻ Restock Spell Lab", {
+	restockButton = Widgets.button("♻️ Restock Spell Lab", {
 		size = UDim2.fromOffset(170, 32),
 		color = Color3.fromRGB(56, 116, 88),
 		textSize = 13,

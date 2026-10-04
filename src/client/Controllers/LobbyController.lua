@@ -140,7 +140,7 @@ local function kitCard(class: Classes.ClassDef, owned: boolean, isCurrent: boole
 	Widgets.label({
 		Name = "Status",
 		Text = if isCurrent
-			then "✔ SELECTED"
+			then "✅ SELECTED"
 			elseif owned then (if class.tier == 0 then "FREE" else "OWNED · click to pick")
 			else "🛒 R$" .. tier.robux .. "  (" .. tier.usd .. ")",
 		Font = Theme.Bold,
@@ -328,12 +328,12 @@ local function updateSpectate()
 	local hum = target:FindFirstChildOfClass("Humanoid")
 	if hum then
 		workspace.CurrentCamera.CameraSubject = hum
-		spectateName.Text = "👁 " .. (hum.DisplayName ~= "" and hum.DisplayName or target.Name)
+		spectateName.Text = "👁️ " .. (hum.DisplayName ~= "" and hum.DisplayName or target.Name)
 	end
 end
 
 local function buildSpectate()
-	spectateButton = Widgets.button("👁  Spectate the match", {
+	spectateButton = Widgets.button("👁️  Spectate the match", {
 		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = C.Panel3,
 		layoutOrder = 4,
@@ -351,7 +351,7 @@ local function buildSpectate()
 		Visible = false,
 		Parent = root,
 	})
-	Widgets.button("◀", {
+	Widgets.button("◀️", {
 		size = UDim2.fromOffset(40, 34),
 		position = UDim2.fromOffset(8, 8),
 		color = C.Panel3,
@@ -369,7 +369,7 @@ local function buildSpectate()
 		Position = UDim2.fromOffset(52, 0),
 		Parent = spectateBar,
 	})
-	Widgets.button("▶", {
+	Widgets.button("▶️", {
 		size = UDim2.fromOffset(40, 34),
 		position = UDim2.new(1, -140, 0, 8),
 		color = C.Panel3,
@@ -407,7 +407,7 @@ local function queue(action: string)
 end
 
 local function buildQueue()
-	joinButton = Widgets.button("⚔  JOIN GAME", {
+	joinButton = Widgets.button("⚔️  JOIN GAME", {
 		size = UDim2.fromOffset(280, 46),
 		position = UDim2.new(0.5, 0, 0, 74),
 		anchor = Vector2.new(0.5, 0),
@@ -420,7 +420,7 @@ local function buildQueue()
 	})
 	joinButton.Name = "JoinButton"
 	Create.stroke(C.Gold, 2).Parent = joinButton
-	leaveButton = Widgets.button("↩  Leave queue (back to the Plaza)", {
+	leaveButton = Widgets.button("↩️  Leave queue (back to the Plaza)", {
 		size = UDim2.fromOffset(280, 34),
 		position = UDim2.new(0.5, 0, 0, 74),
 		anchor = Vector2.new(0.5, 0),
@@ -527,7 +527,7 @@ local function buildVote()
 	Create.padding(12, 10).Parent = votePanel
 	Create.list(Enum.FillDirection.Vertical, 8).Parent = votePanel
 	Widgets.label({
-		Text = "🗳  VOTE FOR THE NEXT MAP",
+		Text = "🗳️  VOTE FOR THE NEXT MAP",
 		Font = Theme.Black,
 		TextSize = 16,
 		TextColor3 = C.Gold,
@@ -680,7 +680,7 @@ function LobbyController.init()
 		parent = Dock.get(),
 	})
 	wardrobeButton.Name = "WardrobeButton"
-	auctionButton = Widgets.button("⚖  Auction House", {
+	auctionButton = Widgets.button("⚖️  Auction House", {
 		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = Color3.fromRGB(46, 92, 110),
 		layoutOrder = 6,
@@ -694,7 +694,7 @@ function LobbyController.init()
 	auctionButton.Name = "AuctionButton"
 	coinsPill = Widgets.label({
 		Name = "CoinsPill",
-		Text = "🪙 0 Enchanted Coins",
+		Text = "💰 0 Enchanted Coins",
 		Font = Theme.Black,
 		TextSize = 16,
 		TextColor3 = C.Gold,
@@ -708,7 +708,7 @@ function LobbyController.init()
 	Create.corner(16).Parent = coinsPill
 	Create.stroke(C.GoldDeep, 1.5, 0.3).Parent = coinsPill
 	local function updateCoins()
-		coinsPill.Text = "🪙 " .. tostring(player:GetAttribute("Coins") or 0) .. " Enchanted Coins"
+		coinsPill.Text = "💰 " .. tostring(player:GetAttribute("Coins") or 0) .. " Enchanted Coins"
 	end
 	player:GetAttributeChangedSignal("Coins"):Connect(updateCoins)
 	updateCoins()
@@ -738,8 +738,8 @@ function LobbyController.init()
 		joinButton.Visible = inHub
 		joinButton.Position = UDim2.new(0.5, 0, 0, buttonY)
 		joinButton.Text = if phase == "Voting"
-			then "⚔  JOIN GAME  ·  " .. math.max(0, math.ceil(State.phaseEndsAt() - State.now())) .. "s"
-			else "⚔  JOIN GAME"
+			then "⚔️  JOIN GAME  ·  " .. math.max(0, math.ceil(State.phaseEndsAt() - State.now())) .. "s"
+			else "⚔️  JOIN GAME"
 		leaveButton.Visible = State.queued() and not State.inMatch()
 		leaveButton.Position = UDim2.new(0.5, 0, 0, buttonY)
 		if votePanel.Visible then

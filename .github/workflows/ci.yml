@@ -36,6 +36,9 @@ jobs:
           rojo sourcemap default.project.json -o sourcemap.json
           luau-lsp analyze --sourcemap=sourcemap.json --definitions="$HOME/bin/globalTypes.d.luau" --no-strict-dm-types src/
 
+      - name: Glyph check (no characters Roblox draws as squares)
+        run: lune run tools/sim/glyphs
+
       - name: Unit tests
         run: python3 tools/run_tests.py luau
 

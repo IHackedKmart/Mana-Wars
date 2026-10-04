@@ -84,7 +84,7 @@ function WardrobeService.addCoins(player: Player, amount: number, reason: string
 		FX.announceTo(
 			player,
 			"Toast",
-			{ text = "🪙 +" .. math.floor(amount) .. " Enchanted Coins  (" .. reason .. ")" }
+			{ text = "💰 +" .. math.floor(amount) .. " Enchanted Coins  (" .. reason .. ")" }
 		)
 	end
 end

@@ -637,7 +637,7 @@ function Widgets.window(gui: ScreenGui, o: WindowOptions): Window
 		}),
 		Parent = divider,
 	})
-	local close = Widgets.button("✕", {
+	local close = Widgets.button("X", {
 		size = UDim2.fromOffset(36, 36),
 		position = UDim2.new(1, -52, 0, 13),
 		color = C.Panel3,
@@ -650,6 +650,8 @@ function Widgets.window(gui: ScreenGui, o: WindowOptions): Window
 		parent = header,
 	})
 	close.Name = "Close"
+	close.Font = Theme.Black
+	close.TextSize = 18
 	local right = Create("Frame", {
 		Name = "HeaderRight",
 		BackgroundTransparency = 1,
@@ -792,7 +794,7 @@ export type CardOptions = {
 	caption: string?,
 	captionColor: Color3?,
 	count: number?,
-	badge: string?, -- top-left marker (⚙ trigger, 🐾 summoned, a hotkey...)
+	badge: string?, -- top-left marker (⚙️ trigger, 🐾 summoned, a hotkey...)
 	empty: boolean?,
 	selected: boolean?,
 	highlight: boolean?,

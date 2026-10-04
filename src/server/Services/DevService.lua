@@ -1,4 +1,4 @@
--- Developer tools behind the 🛠 Dev panel: free coins and coffers, every cosmetic and familiar,
+-- Developer tools behind the 🛠️ Dev panel: free coins and coffers, every cosmetic and familiar,
 -- every kit, a full spell loadout, god mode, infinite mana and match controls, so everything can
 -- be tested without spending anything.
 -- Who gets it: everyone in Studio; in live servers the experience's owner and the user ids in

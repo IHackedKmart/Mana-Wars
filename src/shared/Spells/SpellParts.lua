@@ -329,7 +329,7 @@ form("Meteor", {
 
 form("Sawblade", {
 	rarity = "Rare",
-	icon = "🪚",
+	icon = "⚙️",
 	kind = "Projectile",
 	noun = "Saw",
 	description = "A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path.",
@@ -532,7 +532,7 @@ element("Wind", {
 
 element("Poison", {
 	rarity = "Uncommon",
-	icon = "☠️",
+	icon = "💀",
 	adjective = "Venom",
 	color = { 120, 230, 60 },
 	color2 = { 40, 120, 30 },
@@ -583,7 +583,7 @@ element("Radiant", {
 
 element("Blood", {
 	rarity = "Epic",
-	icon = "🩸",
+	icon = "🥀",
 	color = { 210, 20, 45 },
 	color2 = { 90, 0, 15 },
 	description = "+50% damage, but every cast costs you 4 health.",
@@ -823,7 +823,7 @@ modifier("Explosive", {
 
 modifier("Lingering", {
 	rarity = "Rare",
-	icon = "♨️",
+	icon = "🔥",
 	adjective = "Lingering",
 	description = "Leaves a pool of its element behind that damages anyone standing in it.",
 	apply = function(s: Spec)
@@ -944,7 +944,7 @@ modifier("Stasis", {
 
 modifier("Returning", {
 	rarity = "Uncommon",
-	icon = "🪃",
+	icon = "↪️",
 	adjective = "Returning",
 	description = "Flies out, then curves back to you, hitting things both ways. +1 pierce.",
 	apply = function(s: Spec)

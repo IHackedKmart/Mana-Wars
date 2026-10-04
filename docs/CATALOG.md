@@ -21,7 +21,7 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 | 🧨 | **Mine** | Rare | explosion 20.4 | 20 | 0.25s | A lobbed trap that sticks to the ground, arms itself, and explodes when an enemy walks near. |
 | 🌟 | **Nova** | Rare | 10.8 | 26 | 0.30s | An instant ring of energy that blasts everything around you. |
 | 🧱 | **Rampart** | Rare | — | 24 | 0.40s | Raises a solid wall where you aim that blocks movement and spells for 6 seconds. Impact effects go off at its base; expiry triggers fire when it crumbles. |
-| 🪚 | **Sawblade** | Rare | 7.8 | 20 | 0.25s | A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path. |
+| ⚙️ | **Sawblade** | Rare | 7.8 | 20 | 0.25s | A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path. |
 | 🐝 | **Swarm** | Rare | 2.1 | 24 | 0.30s | Releases six angry little sprites that wobble off and hunt down enemies. |
 | 🛡️ | **Aegis** | Epic | — | 40 | 0.50s | Wraps you in a shield that absorbs damage for a few seconds. Triggers fire when it ends. |
 | ⚫ | **Black Hole** | Epic | explosion 7.2 | 45 | 0.50s | A tiny black hole drifts forward, dragging everyone nearby into its crushing core, then collapses with a bang. |
@@ -38,11 +38,11 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 | 🔥 | **Fire** | Common | Sets targets ablaze: 4 damage per second for 3 seconds. |
 | ❄️ | **Frost** | Common | Chills targets (35% slower). Three chills in a row freeze them solid. 10% slower spell. |
 | ⛰️ | **Earth** | Uncommon | Heavy and brutal. +35% damage and big knockback, but slower and affected by gravity. |
-| ☠️ | **Poison** | Uncommon | Stacking venom: 1.5 damage per second per stack (up to 5) for 6 seconds. -20% direct damage. |
+| 💀 | **Poison** | Uncommon | Stacking venom: 1.5 damage per second per stack (up to 5) for 6 seconds. -20% direct damage. |
 | 🌪️ | **Wind** | Uncommon | Blows targets away and up into the air. +35% speed, -25% damage. |
 | ⚡ | **Lightning** | Rare | Every hit arcs to one more nearby enemy for half damage. +35% speed, -10% damage. |
 | 🌌 | **Void** | Rare | Drains life: heals you for 15% of damage dealt. |
-| 🩸 | **Blood** | Epic | +50% damage, but every cast costs you 4 health. |
+| 🥀 | **Blood** | Epic | +50% damage, but every cast costs you 4 health. |
 | 🃏 | **Chaos** | Epic | Every hit rolls the dice: anywhere from 25% to 250% damage, plus a random burn, chill or venom. +10% speed. |
 | ☀️ | **Radiant** | Epic | Marks targets for 5s: they glow through walls for everyone and take 15% more damage. +15% crit. |
 | 🕰️ | **Chrono** | Legendary | Hits rewind the target to where they stood 2 seconds ago and slow them by 50%. -15% damage. |
@@ -65,12 +65,12 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 | ♻️ | **Efficient** | Uncommon | The whole spell costs 40% less mana. |
 | 🎯 | **Homing** | Uncommon | Projectiles steer toward the nearest enemy. |
 | 📌 | **Pierce** | Uncommon | Passes through 2 more enemies. Chains jump 2 more times. |
-| 🪃 | **Returning** | Uncommon | Flies out, then curves back to you, hitting things both ways. +1 pierce. |
+| ↪️ | **Returning** | Uncommon | Flies out, then curves back to you, hitting things both ways. +1 pierce. |
 | ⏸️ | **Stasis** | Uncommon | Hangs frozen in the air for 1 second, then flies on. Instant spells go off 1 second late. Stack for traps. |
 | 2️⃣ | **Twin** | Uncommon | Casts the spell twice at once. |
 | 💥 | **Explosive** | Rare | Explodes on impact, damaging everything nearby. |
 | 🦇 | **Leech** | Rare | Heals you for 20% of the damage this spell deals. |
-| ♨️ | **Lingering** | Rare | Leaves a pool of its element behind that damages anyone standing in it. |
+| 🔥 | **Lingering** | Rare | Leaves a pool of its element behind that damages anyone standing in it. |
 | 🧲 | **Magnetic** | Rare | While it flies, it drags nearby enemies toward itself. |
 | 🔄 | **Orbit** | Rare | Projectiles circle around you as a protective ring instead of flying away. |
 | 💎 | **Shatter** | Rare | Bursts into 3 sharp shards of the same element when it hits something. |
@@ -195,10 +195,10 @@ Kits (classes) decide what you start each match with. The Apprentice is free; ev
 | ⛰️ | **Geomancer** | Copper | Pebble Rod (Common) | Pebble Toss, Magic Bolt | Earth, +1 random |
 | 🌪️ | **Windwalker** | Copper | Breeze Wand (Common) | Gust, Spark Bolt | Wind, +1 random |
 | 🔥 | **Pyromancer** | Silver | Emberheart Rod (Uncommon) | Firebolt, Firebomb | Fire x2, Heavy, +1 random |
-| ☠️ | **Plaguebringer** | Silver | Rotwood Staff (Uncommon) | Venom Wisp, Magic Bolt | Extend, Poison x2, +1 random |
+| 💀 | **Plaguebringer** | Silver | Rotwood Staff (Uncommon) | Venom Wisp, Magic Bolt | Extend, Poison x2, +1 random |
 | ⚡ | **Stormcaller** | Silver | Tempest Scepter (Uncommon) | Quick Spark, Twin Sparks | Haste, Lightning, +1 random |
 | 🌌 | **Voidwalker** | Gold | Abyssal Focus (Rare) | Void Seeker, Spark Bolt, Magic Bolt | Blink, Leech, Void, +1 random |
-| 🩸 | **Bloodmage** | Gold | Sanguine Rod (Rare) | Blood Glaive, Scattershot, Magic Bolt | Blood, Critical, Empower, +1 random |
+| 🧛 | **Bloodmage** | Gold | Sanguine Rod (Rare) | Blood Glaive, Scattershot, Magic Bolt | Blood, Critical, Empower, +1 random |
 | ☀️ | **Lightbringer** | Gold | Sunlit Scepter (Rare) | Sunlance, Spark Bolt, Magic Bolt | Critical, Radiant, +1 random |
 | 🔧 | **Artificer** | Arcane | Tinkerer's Rod (Rare) | Ripper, Earthen Rampart, Fireball, Pebble Toss | Bounce, Explosive, Rampart, Sawblade, +1 random |
 | ⏳ | **Chronomancer** | Arcane | Hourglass Wand (Rare) | Time Bomb, Ice Shard, Switcheroo, Frostbolt | Frost, Quicken, Stasis x2, +1 random |
@@ -296,21 +296,21 @@ Every item a coffer hands out can turn out to be a **familiar** instead (Tattere
 | ✨ | **Wisp** | Common | any | Mana Sip | Azure, Violet, Verdant, Ember |
 | 🐈 | **Lucky Tabby** | Uncommon | any | Lucky Charm | Ginger, Tuxedo, Calico, Silver |
 | 🕊️ | **Paper Crane** | Uncommon | any | Attuned (Wind) | Parchment, Crimson, Indigo |
-| 🟢 | **Gel Slime** | Uncommon | any | Guardian | Lime, Berry, Ocean, Honey |
+| 💚 | **Gel Slime** | Uncommon | any | Guardian | Lime, Berry, Ocean, Honey |
 | 🦋 | **Luna Moth** | Uncommon | any | Mend | Pale Jade, Dusk, Rosy |
 | 🦊 | **Ember Fox** | Rare | any | Nip | Flame, Ashen, Blue-flame |
 | 🦉 | **Frost Owl** | Rare | any | Night Eyes | Snowy, Glacier, Midnight |
 | 📖 | **Tome Mimic** | Rare | Apprentice's Coffer and up | Attuned (Arcane) | Oxblood, Forest, Royal |
 | 🐍 | **Sky Eel** | Rare | Apprentice's Coffer and up | Attuned (Lightning) | Storm, Copper, Neon |
 | 💎 | **Crystal Golemling** | Epic | Enchanter's Chest and up | Guardian | Amethyst, Quartz, Emerald, Ruby |
-| 🪼 | **Void Jelly** | Epic | Enchanter's Chest and up | Nip | Abyss, Ink, Nebula |
+| 🦑 | **Void Jelly** | Epic | Enchanter's Chest and up | Nip | Abyss, Ink, Nebula |
 | 🐦 | **Storm Raven** | Epic | Enchanter's Chest and up | Keen Nose | Coal, Thunderhead |
 | 💀 | **Hex Skull** | Epic | Enchanter's Chest and up | Attuned (Blood) | Bone, Obsidian, Gilded |
 | 🐉 | **Dragonling** | Legendary | Archmage's Vault and up | Nip | Crimson, Emerald, Obsidian, Frost |
 | 🔥 | **Phoenix Chick** | Legendary | Archmage's Vault and up | Last Ember | Sunfire, Azure-flame |
 | 🦄 | **Thunder Kirin** | Legendary | Archmage's Vault and up | Quickpaw | Pearl, Gold, Storm |
 | 🐋 | **Star Whale** | Mythic | Celestial Reliquary only | Lucky Charm | Nebula, Aurora |
-| 🐈‍⬛ | **Eclipse Cat** | Mythic | Celestial Reliquary only | Nip | Eclipse, Blood Moon |
+| 🐈 | **Eclipse Cat** | Mythic | Celestial Reliquary only | Nip | Eclipse, Blood Moon |
 
 | Power | Effect (Rare to Mythic) | Rare / Epic / Legendary / Mythic |
 |---|---|---|

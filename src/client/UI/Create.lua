@@ -23,8 +23,14 @@ local function apply(inst: Instance, props: { [string]: any }?)
 	end
 end
 
+-- Roblox fills new text objects with "Label" / "Button" / "TextBox"; start them empty instead
+local TEXT_CLASSES = { TextLabel = true, TextButton = true, TextBox = true }
+
 local function new(className: string, props: { [string]: any }?, children: { Instance }?): any
 	local inst = Instance.new(className)
+	if TEXT_CLASSES[className] then
+		(inst :: any).Text = ""
+	end
 	if children then
 		for _, child in children do
 			child.Parent = inst

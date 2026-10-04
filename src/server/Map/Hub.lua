@@ -475,7 +475,7 @@ local function auctionHouse(parent: Instance, animated: Instance, c: Vector3, lo
 		model,
 		cf * CFrame.new(0, 11.8, -10.4),
 		Vector2.new(18, 3.6),
-		"⚖ THE GILDED GAVEL ⚖",
+		"⚖️ THE GILDED GAVEL ⚖️",
 		"Auction House: buy and sell robe & hat parts"
 	)
 	stationPrompt(podium, "Trade", "Auction House", "Auction")
@@ -692,7 +692,7 @@ function Hub.build(): HubInfo
 		model,
 		CFrame.lookAt(at(0, -88, 35), at(0, 0, 35)),
 		Vector2.new(36, 7),
-		"⚔  JOIN THE GAME  ⚔",
+		"⚔️  JOIN THE GAME  ⚔️",
 		"Walk through the portal to queue for the next match"
 	)
 

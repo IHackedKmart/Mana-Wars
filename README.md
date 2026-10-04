@@ -342,6 +342,7 @@ lune run tools/sim/match            # boots the real server: spawn in the hub, w
                                     #   (distinct finishing places, exact coin payouts, saved profile), leave the queue, then
                                     #   start / skip / end a match from the dev panel
 lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps, checking chests, spacing and decoration
+lune run tools/sim/glyphs           # fails on any symbol or emoji Roblox would draw as a square (✦, ✕, ⚔ without U+FE0F, 💰...)
 ```
 
 **Screenshots of every screen, without opening Studio.** The client sim can save each screen it opens (HUD, Spellbook, chest, kit shop, wardrobe, coffers, Tailor's Loom, auction house, dev panel...) and a small Chromium script draws them as PNGs:

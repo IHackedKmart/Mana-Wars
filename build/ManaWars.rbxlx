@@ -285,7 +285,7 @@ Classes.List = {
 	{
 		id = "Plaguebringer",
 		name = "Plaguebringer",
-		icon = "☠️",
+		icon = "💀",
 		tier = 2,
 		color = { 120, 230, 60 },
 		tagline = "Stacks venom with homing wisps. Patience kills.",
@@ -363,7 +363,7 @@ Classes.List = {
 	{
 		id = "Bloodmage",
 		name = "Bloodmage",
-		icon = "🩸",
+		icon = "🧛",
 		tier = 3,
 		color = { 210, 30, 50 },
 		tagline = "Trades health for raw power. High risk, high reward.",
@@ -868,7 +868,7 @@ Config.Chat = {
 }
 
 -- Developer tools ----------------------------------------------------------
--- The 🛠 Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
+-- The 🛠️ Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
 -- everyone in Studio, the experience's owner in live servers, and the user ids listed here
 -- (add yours if the game belongs to a group). The server checks every request, so nobody else can use it.
 Config.Dev = {
@@ -1062,20 +1062,20 @@ Cosmetics.Designs = {
 		{ id = "Starlit", name = "Starlit Trim", minRarity = "Mythic", boxes = { 5 } },
 	},
 	Sigil = {
-		{ id = "Star", name = "Star", glyph = "✦", minRarity = "Common" },
-		{ id = "Moon", name = "Moon", glyph = "☾", minRarity = "Common" },
-		{ id = "Leaf", name = "Leaf", glyph = "❦", minRarity = "Common", boxes = { 1, 2 } },
-		{ id = "Sun", name = "Sun", glyph = "☀", minRarity = "Uncommon" },
-		{ id = "Flame", name = "Flame", glyph = "♨", minRarity = "Uncommon" },
-		{ id = "Snow", name = "Snowflake", glyph = "❄", minRarity = "Uncommon" },
+		{ id = "Star", name = "Star", glyph = "⭐", minRarity = "Common" },
+		{ id = "Moon", name = "Moon", glyph = "🌙", minRarity = "Common" },
+		{ id = "Leaf", name = "Leaf", glyph = "🍃", minRarity = "Common", boxes = { 1, 2 } },
+		{ id = "Sun", name = "Sun", glyph = "☀️", minRarity = "Uncommon" },
+		{ id = "Flame", name = "Flame", glyph = "🔥", minRarity = "Uncommon" },
+		{ id = "Snow", name = "Snowflake", glyph = "❄️", minRarity = "Uncommon" },
 		{ id = "Bolt", name = "Thunder", glyph = "⚡", minRarity = "Rare" },
-		{ id = "Skull", name = "Skull", glyph = "☠", minRarity = "Rare", minBox = 2 },
-		{ id = "Eye", name = "Eye", glyph = "◉", minRarity = "Rare", minBox = 3 },
-		{ id = "Balance", name = "Balance", glyph = "☯", minRarity = "Epic", minBox = 3 },
-		{ id = "Trident", name = "Trident", glyph = "♆", minRarity = "Legendary", minBox = 4 },
-		{ id = "Infinity", name = "Infinity", glyph = "∞", minRarity = "Legendary", minBox = 4 },
-		{ id = "Crown", name = "Crown", glyph = "♛", minRarity = "Mythic", boxes = { 5 } },
-		{ id = "Nova", name = "Nova", glyph = "✺", minRarity = "Mythic", boxes = { 5 } },
+		{ id = "Skull", name = "Skull", glyph = "💀", minRarity = "Rare", minBox = 2 },
+		{ id = "Eye", name = "Eye", glyph = "👁️", minRarity = "Rare", minBox = 3 },
+		{ id = "Balance", name = "Balance", glyph = "☯️", minRarity = "Epic", minBox = 3 },
+		{ id = "Trident", name = "Trident", glyph = "🔱", minRarity = "Legendary", minBox = 4 },
+		{ id = "Infinity", name = "Infinity", glyph = "♾️", minRarity = "Legendary", minBox = 4 },
+		{ id = "Crown", name = "Crown", glyph = "👑", minRarity = "Mythic", boxes = { 5 } },
+		{ id = "Nova", name = "Nova", glyph = "💫", minRarity = "Mythic", boxes = { 5 } },
 	},
 	Shape = {
 		{ id = "Pointed", name = "Pointed Hat", minRarity = "Common" },
@@ -2333,7 +2333,7 @@ Familiars.Species = {
 	{
 		id = "GelSlime",
 		name = "Gel Slime",
-		icon = "🟢",
+		icon = "💚",
 		body = "slime",
 		minRarity = "Uncommon",
 		power = "ward",
@@ -2459,7 +2459,7 @@ Familiars.Species = {
 	{
 		id = "VoidJelly",
 		name = "Void Jelly",
-		icon = "🪼",
+		icon = "🦑",
 		body = "jelly",
 		minRarity = "Epic",
 		minBox = 3,
@@ -2585,7 +2585,7 @@ Familiars.Species = {
 	{
 		id = "EclipseCat",
 		name = "Eclipse Cat",
-		icon = "🐈‍⬛",
+		icon = "🐈",
 		body = "cat",
 		minRarity = "Mythic",
 		boxes = { 5 },
@@ -3794,7 +3794,7 @@ local function buildRobe(rig: Rig, robe: Garment)
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
 		label.Size = UDim2.fromScale(1, 1)
-		label.Text = if glyph and glyph.glyph then glyph.glyph else "✦"
+		label.Text = if glyph and glyph.glyph then glyph.glyph else "⭐"
 		label.TextScaled = true
 		label.Font = Enum.Font.GothamBold
 		label.TextColor3 = Color3.fromRGB(255, 235, 170)
@@ -6181,7 +6181,7 @@ form("Meteor", {
 
 form("Sawblade", {
 	rarity = "Rare",
-	icon = "🪚",
+	icon = "⚙️",
 	kind = "Projectile",
 	noun = "Saw",
 	description = "A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path.",
@@ -6384,7 +6384,7 @@ element("Wind", {
 
 element("Poison", {
 	rarity = "Uncommon",
-	icon = "☠️",
+	icon = "💀",
 	adjective = "Venom",
 	color = { 120, 230, 60 },
 	color2 = { 40, 120, 30 },
@@ -6435,7 +6435,7 @@ element("Radiant", {
 
 element("Blood", {
 	rarity = "Epic",
-	icon = "🩸",
+	icon = "🥀",
 	color = { 210, 20, 45 },
 	color2 = { 90, 0, 15 },
 	description = "+50% damage, but every cast costs you 4 health.",
@@ -6675,7 +6675,7 @@ modifier("Explosive", {
 
 modifier("Lingering", {
 	rarity = "Rare",
-	icon = "♨️",
+	icon = "🔥",
 	adjective = "Lingering",
 	description = "Leaves a pool of its element behind that damages anyone standing in it.",
 	apply = function(s: Spec)
@@ -6796,7 +6796,7 @@ modifier("Stasis", {
 
 modifier("Returning", {
 	rarity = "Uncommon",
-	icon = "🪃",
+	icon = "↪️",
 	adjective = "Returning",
 	description = "Flies out, then curves back to you, hitting things both ways. +1 pierce.",
 	apply = function(s: Spec)
@@ -9399,7 +9399,7 @@ local function auctionHouse(parent: Instance, animated: Instance, c: Vector3, lo
 		model,
 		cf * CFrame.new(0, 11.8, -10.4),
 		Vector2.new(18, 3.6),
-		"⚖ THE GILDED GAVEL ⚖",
+		"⚖️ THE GILDED GAVEL ⚖️",
 		"Auction House: buy and sell robe & hat parts"
 	)
 	stationPrompt(podium, "Trade", "Auction House", "Auction")
@@ -9616,7 +9616,7 @@ function Hub.build(): HubInfo
 		model,
 		CFrame.lookAt(at(0, -88, 35), at(0, 0, 35)),
 		Vector2.new(36, 7),
-		"⚔  JOIN THE GAME  ⚔",
+		"⚔️  JOIN THE GAME  ⚔️",
 		"Walk through the portal to queue for the next match"
 	)
 
@@ -16637,7 +16637,7 @@ return DataService
         <Item class="ModuleScript" referent="48">
           <Properties>
             <string name="Name">DevService</string>
-            <string name="Source"><![CDATA[-- Developer tools behind the 🛠 Dev panel: free coins and coffers, every cosmetic and familiar,
+            <string name="Source"><![CDATA[-- Developer tools behind the 🛠️ Dev panel: free coins and coffers, every cosmetic and familiar,
 -- every kit, a full spell loadout, god mode, infinite mana and match controls, so everything can
 -- be tested without spending anything.
 -- Who gets it: everyone in Studio; in live servers the experience's owner and the user ids in
@@ -18950,7 +18950,7 @@ local function runMatch()
 	VoteService.begin(rng, closesAt, lastMapId)
 	GameState.setPhase("Voting", closesAt)
 	announceMatch({ title = "Vote for the next map!", subtitle = "Pick your class and practise while you wait" })
-	announceHub("⚔ A match is starting in " .. M.VoteTime .. "s! Walk through the portal to join")
+	announceHub("⚔️ A match is starting in " .. M.VoteTime .. "s! Walk through the portal to join")
 	local completed, shortened = true, false
 	while now() < closesAt do
 		if not canStart() then
@@ -19083,7 +19083,7 @@ local function runMatch()
 
 	GameState.setPhase("Countdown", now() + M.PedestalCountdown)
 	announceMatch({ title = "Get ready...", subtitle = "Loot the cornucopia or run for the woods!" })
-	announceHub("⚔ A match just started on " .. def.name .. ". Join the queue to play the next one")
+	announceHub("⚔️ A match just started on " .. def.name .. ". Join the queue to play the next one")
 	waitPhase(M.PedestalCountdown, consumeSkip)
 
 	for _, c in participants do
@@ -21723,7 +21723,7 @@ function WardrobeService.addCoins(player: Player, amount: number, reason: string
 		FX.announceTo(
 			player,
 			"Toast",
-			{ text = "🪙 +" .. math.floor(amount) .. " Enchanted Coins  (" .. reason .. ")" }
+			{ text = "💰 +" .. math.floor(amount) .. " Enchanted Coins  (" .. reason .. ")" }
 		)
 	end
 end
@@ -22794,7 +22794,7 @@ local function row(
 		Parent = frame,
 	})
 	Widgets.label({
-		Text = "🪙 " .. price,
+		Text = "💰 " .. price,
 		Font = Theme.Black,
 		TextSize = 18,
 		TextColor3 = GOLD,
@@ -23021,7 +23021,7 @@ local function buildBrowse(page: Frame)
 		parent = bar,
 	})
 	sortButton.Name = "Sort"
-	local refreshButton = Widgets.button("⟳  Refresh", {
+	local refreshButton = Widgets.button("🔄  Refresh", {
 		size = UDim2.fromOffset(120, 32),
 		color = C.Accent,
 		layoutOrder = 12,
@@ -23073,7 +23073,7 @@ local function updateFee()
 	if price then
 		table.insert(
 			lines,
-			"You receive <b>🪙 "
+			"You receive <b>💰 "
 				.. proceeds(price)
 				.. "</b> when it sells (the house keeps "
 				.. math.floor(E.AuctionFee * 100 + 0.5)
@@ -23083,7 +23083,7 @@ local function updateFee()
 		table.insert(lines, "Enter a price from 1 to " .. E.MaxPrice .. " coins")
 	end
 	if kind and item then
-		table.insert(lines, "Salvaging it instead would give 🪙 " .. salvageValue(kind, item))
+		table.insert(lines, "Salvaging it instead would give 💰 " .. salvageValue(kind, item))
 	end
 	table.insert(
 		lines,
@@ -23250,7 +23250,7 @@ local function buildSell(page: Frame)
 		Position = UDim2.fromOffset(x, 76),
 		Parent = page,
 	})
-	listButton = Widgets.button("⚖  List for sale", {
+	listButton = Widgets.button("⚖️  List for sale", {
 		size = UDim2.fromOffset(240, 44),
 		position = UDim2.fromOffset(x, 236),
 		color = C.Panel3,
@@ -23321,7 +23321,7 @@ local function refreshMine()
 				.. (
 					if expired
 						then "unsold, coming back to you shortly"
-						else timeLeft(record.expires) .. "  ·  you get 🪙 " .. proceeds(record.price)
+						else timeLeft(record.expires) .. "  ·  you get 💰 " .. proceeds(record.price)
 				),
 			if expired
 				then nil
@@ -23374,7 +23374,7 @@ refresh = function()
 	if not gui then
 		return
 	end
-	coinsLabel.Text = "🪙 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
+	coinsLabel.Text = "💰 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
 	scopeLabel.Text = if ReplicatedStorage:GetAttribute("AuctionGlobal") == true
 		then "One market shared by every server"
 		else "Market for this server only (no MemoryStore access)"
@@ -23426,7 +23426,7 @@ local function build()
 	gui.Enabled = false
 	local window = Widgets.window(gui, {
 		title = "The Gilded Gavel",
-		icon = "⚖",
+		icon = "⚖️",
 		subtitle = "",
 		size = Vector2.new(1040, 644),
 		onClose = function()
@@ -23812,10 +23812,10 @@ return ChestController
           <Item class="ModuleScript" referent="72">
             <Properties>
               <string name="Name">DevController</string>
-              <string name="Source"><![CDATA[-- The 🛠 Dev panel: test everything without spending anything. It shows for players the server
+              <string name="Source"><![CDATA[-- The 🛠️ Dev panel: test everything without spending anything. It shows for players the server
 -- marks as developers (everyone in Studio, the game's owner in live servers; see Config.Dev),
 -- and the server checks every request again (DevService).
--- Open it with the 🛠 Dev button or the ` key (backquote, left of 1).
+-- Open it with the 🛠️ Dev button or the ` key (backquote, left of 1).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -23964,7 +23964,7 @@ local function build()
 	gui = Widgets.screen("DevPanel", 30)
 	local root = Widgets.scaledRoot(gui)
 	root.Name = "ButtonRoot"
-	openButton = Widgets.button("🛠 Dev", {
+	openButton = Widgets.button("🛠️ Dev", {
 		size = UDim2.fromOffset(84, 32),
 		position = UDim2.new(1, -16, 0, 52),
 		anchor = Vector2.new(1, 0),
@@ -23981,7 +23981,7 @@ local function build()
 
 	local window = Widgets.window(gui, {
 		title = "Developer Tools",
-		icon = "🛠",
+		icon = "🛠️",
 		subtitle = "Only you see this  ·  Studio play tests save to separate test data  ·  ` opens and closes it",
 		size = Vector2.new(680, 650),
 		onClose = function()
@@ -24078,7 +24078,7 @@ local function build()
 	button(s, "Coins_100000", "+100,000 coins", function()
 		invoke("Coins", { amount = 100000 })
 	end)
-	button(s, "Coins_0", "Coins → 0", function()
+	button(s, "Coins_0", "Coins = 0", function()
 		invoke("Coins", { amount = 0 })
 	end)
 	toggle(s, "FreeCoffers", "Free coffers", "FreeCoffers")
@@ -26761,7 +26761,7 @@ local function recipeRow(recipe: SpellTypes.Recipe, label: string?)
 	if recipe.trigger and recipe.payload then
 		add(recipe.trigger)
 		n += 1
-		plusSign(row, "→", n)
+		plusSign(row, "=", n)
 		local payload = recipe.payload :: SpellTypes.Recipe
 		local ids = { payload.form }
 		if payload.element then
@@ -26812,7 +26812,7 @@ chapter("Welcome", "📖  Welcome", function()
 	)
 	subheading("How a match plays out")
 	para(
-		"<b>1. Join.</b> Everyone starts in <b>Arcanum Plaza</b>, the hub. Practise as long as you like, then walk through the <b>portal</b> (or press <b>⚔ Join Game</b>) to join the queue.\n"
+		"<b>1. Join.</b> Everyone starts in <b>Arcanum Plaza</b>, the hub. Practise as long as you like, then walk through the <b>portal</b> (or press <b>⚔️ Join Game</b>) to join the queue.\n"
 			.. "<b>2. Vote.</b> The portal takes you to the library, the <b>Arcane Athenaeum</b>. Vote for the next map on the right of your screen.\n"
 			.. "<b>3. Pedestals.</b> Everyone is placed around the <b>cornucopia</b>, the ring of chests in the middle. Wait for the gong!\n"
 			.. "<b>4. Grace period.</b> For the first "
@@ -26911,7 +26911,7 @@ chapter("Wands", "🔮  Wands", function()
 	para(
 		"• Put a cheap, fast spell (like Spark Bolt) between big expensive ones.\n"
 			.. "• Keep a utility wand with Blink or Aegis on key 2-4 for emergencies.\n"
-			.. "• Rarer wands (green → blue → purple → orange → red) have better stats."
+			.. "• Rarer wands (green, then blue, purple, orange and red) have better stats."
 	)
 end)
 
@@ -27093,7 +27093,7 @@ chapter("Wardrobe", "👘  Robes & Familiars", function()
 			box.icon
 				.. " <b>"
 				.. box.name
-				.. "</b> (🪙 "
+				.. "</b> (💰 "
 				.. box.price
 				.. ", "
 				.. box.parts
@@ -27184,7 +27184,7 @@ chapter("Controls", "🎮  Controls", function()
 			.. "<b>Switch wand:</b> 1-4, or Q to cycle (gamepad: L1/R1)\n"
 			.. "<b>Spellbook & Spellforge:</b> B (gamepad: Y)\n"
 			.. "<b>Grimoire:</b> H\n"
-			.. "<b>Join the game:</b> walk through the Plaza's portal, or press ⚔ Join Game\n"
+			.. "<b>Join the game:</b> walk through the Plaza's portal, or press ⚔️ Join Game\n"
 			.. "<b>Open chests:</b> E (hold).  <b>Take everything:</b> F\n"
 			.. "<b>Potions:</b> "
 			.. table.concat(potions, ",  ")
@@ -27192,7 +27192,7 @@ chapter("Controls", "🎮  Controls", function()
 			.. "<b>Camera:</b> hold right mouse and drag"
 	)
 	spacer(10)
-	Widgets.button("▶  Replay the tutorial", {
+	Widgets.button("▶️  Replay the tutorial", {
 		size = UDim2.fromOffset(240, 40),
 		layoutOrder = nextOrder(),
 		color = RUBRIC,
@@ -27301,15 +27301,17 @@ local function build()
 		Parent = right,
 	}, { Create.list(Enum.FillDirection.Vertical, 8) })
 
-	Widgets.button("✕", {
+	local close = Widgets.button("X", {
 		size = UDim2.fromOffset(36, 36),
 		position = UDim2.new(1, -30, 0, -12),
 		color = COVER:Lerp(Color3.new(1, 1, 1), 0.15),
+		textSize = 18,
 		onClick = function()
 			GrimoireController.close()
 		end,
 		parent = book,
 	})
+	close.Font = Theme.Black
 end
 
 function GrimoireController.open(chapterId: string?)
@@ -27608,7 +27610,7 @@ local function buildTop()
 	stormWarning = Widgets.label({
 		Size = UDim2.new(1, 0, 0, 30),
 		Position = UDim2.fromOffset(0, 74),
-		Text = "⚠ You are in the Mana Storm! Get back inside the circle!",
+		Text = "⚠️ You are in the Mana Storm! Get back inside the circle!",
 		Font = Theme.Black,
 		TextSize = 22,
 		TextColor3 = Color3.fromRGB(255, 120, 200),
@@ -27656,7 +27658,7 @@ local function buildCombat()
 		Parent = combat,
 	})
 	Widgets.label({
-		Text = "❤  HEALTH",
+		Text = "❤️  HEALTH",
 		Font = Theme.Black,
 		TextSize = 12,
 		TextColor3 = C.Dim,
@@ -28711,17 +28713,17 @@ local function wandCard(index: number, wand: Items.WandItem | false, equipped: b
 		Parent = card,
 	}, { Create.list(Enum.FillDirection.Horizontal, 5) })
 	Widgets.chip(chips, string.format("💧 %d  +%d/s", s.manaMax, s.manaRegen), C.Mana, 1)
-	Widgets.chip(chips, string.format("⏱ %.2fs", s.castDelay), nil, 2)
+	Widgets.chip(chips, string.format("⏱️ %.2fs", s.castDelay), nil, 2)
 	Widgets.chip(chips, string.format("🔄 %.2fs", s.rechargeTime), nil, 3)
 	if s.spellsPerCast > 1 then
-		Widgets.chip(chips, "✦ casts " .. s.spellsPerCast, C.Accent, 4)
+		Widgets.chip(chips, "✨ casts " .. s.spellsPerCast, C.Accent, 4)
 	end
 	if s.shuffle then
 		Widgets.chip(chips, "🔀 shuffled", C.Dim, 5)
 	end
 	local perks = {}
 	for _, perk in wand.perks do
-		table.insert(perks, "★ " .. WandGenerator.describePerk(perk))
+		table.insert(perks, "⭐ " .. WandGenerator.describePerk(perk))
 	end
 	if #perks > 0 then
 		Widgets.label({
@@ -28848,7 +28850,7 @@ local function buildBag()
 				rarity = spell.rarity,
 				caption = spell.name,
 				captionColor = Theme.lighten(Theme.rarity(spell.rarity), 0.35),
-				badge = if spell.recipe.trigger then "⚙" else nil,
+				badge = if spell.recipe.trigger then "⚙️" else nil,
 				selected = isSelected("Spell", spell.uid) or draft.payloadUid == spell.uid,
 				layoutOrder = i,
 				onClick = function()
@@ -29031,7 +29033,7 @@ end
 
 local function buildForge()
 	Widgets.clear(forgeFrame, true)
-	local head = Widgets.sectionHeader(forgeFrame, "✦ Spellforge", "click parts to add them", 0)
+	local head = Widgets.sectionHeader(forgeFrame, "✨ Spellforge", "click parts to add them", 0)
 	head.Position = UDim2.fromOffset(12, 8)
 	head.Size = UDim2.new(1, -24, 0, 22)
 
@@ -29386,7 +29388,7 @@ local function build()
 		end,
 	})
 	local body = window.body
-	restockButton = Widgets.button("♻ Restock Spell Lab", {
+	restockButton = Widgets.button("♻️ Restock Spell Lab", {
 		size = UDim2.fromOffset(170, 32),
 		color = Color3.fromRGB(56, 116, 88),
 		textSize = 13,
@@ -29715,7 +29717,7 @@ local function kitCard(class: Classes.ClassDef, owned: boolean, isCurrent: boole
 	Widgets.label({
 		Name = "Status",
 		Text = if isCurrent
-			then "✔ SELECTED"
+			then "✅ SELECTED"
 			elseif owned then (if class.tier == 0 then "FREE" else "OWNED · click to pick")
 			else "🛒 R$" .. tier.robux .. "  (" .. tier.usd .. ")",
 		Font = Theme.Bold,
@@ -29903,12 +29905,12 @@ local function updateSpectate()
 	local hum = target:FindFirstChildOfClass("Humanoid")
 	if hum then
 		workspace.CurrentCamera.CameraSubject = hum
-		spectateName.Text = "👁 " .. (hum.DisplayName ~= "" and hum.DisplayName or target.Name)
+		spectateName.Text = "👁️ " .. (hum.DisplayName ~= "" and hum.DisplayName or target.Name)
 	end
 end
 
 local function buildSpectate()
-	spectateButton = Widgets.button("👁  Spectate the match", {
+	spectateButton = Widgets.button("👁️  Spectate the match", {
 		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = C.Panel3,
 		layoutOrder = 4,
@@ -29926,7 +29928,7 @@ local function buildSpectate()
 		Visible = false,
 		Parent = root,
 	})
-	Widgets.button("◀", {
+	Widgets.button("◀️", {
 		size = UDim2.fromOffset(40, 34),
 		position = UDim2.fromOffset(8, 8),
 		color = C.Panel3,
@@ -29944,7 +29946,7 @@ local function buildSpectate()
 		Position = UDim2.fromOffset(52, 0),
 		Parent = spectateBar,
 	})
-	Widgets.button("▶", {
+	Widgets.button("▶️", {
 		size = UDim2.fromOffset(40, 34),
 		position = UDim2.new(1, -140, 0, 8),
 		color = C.Panel3,
@@ -29982,7 +29984,7 @@ local function queue(action: string)
 end
 
 local function buildQueue()
-	joinButton = Widgets.button("⚔  JOIN GAME", {
+	joinButton = Widgets.button("⚔️  JOIN GAME", {
 		size = UDim2.fromOffset(280, 46),
 		position = UDim2.new(0.5, 0, 0, 74),
 		anchor = Vector2.new(0.5, 0),
@@ -29995,7 +29997,7 @@ local function buildQueue()
 	})
 	joinButton.Name = "JoinButton"
 	Create.stroke(C.Gold, 2).Parent = joinButton
-	leaveButton = Widgets.button("↩  Leave queue (back to the Plaza)", {
+	leaveButton = Widgets.button("↩️  Leave queue (back to the Plaza)", {
 		size = UDim2.fromOffset(280, 34),
 		position = UDim2.new(0.5, 0, 0, 74),
 		anchor = Vector2.new(0.5, 0),
@@ -30102,7 +30104,7 @@ local function buildVote()
 	Create.padding(12, 10).Parent = votePanel
 	Create.list(Enum.FillDirection.Vertical, 8).Parent = votePanel
 	Widgets.label({
-		Text = "🗳  VOTE FOR THE NEXT MAP",
+		Text = "🗳️  VOTE FOR THE NEXT MAP",
 		Font = Theme.Black,
 		TextSize = 16,
 		TextColor3 = C.Gold,
@@ -30255,7 +30257,7 @@ function LobbyController.init()
 		parent = Dock.get(),
 	})
 	wardrobeButton.Name = "WardrobeButton"
-	auctionButton = Widgets.button("⚖  Auction House", {
+	auctionButton = Widgets.button("⚖️  Auction House", {
 		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = Color3.fromRGB(46, 92, 110),
 		layoutOrder = 6,
@@ -30269,7 +30271,7 @@ function LobbyController.init()
 	auctionButton.Name = "AuctionButton"
 	coinsPill = Widgets.label({
 		Name = "CoinsPill",
-		Text = "🪙 0 Enchanted Coins",
+		Text = "💰 0 Enchanted Coins",
 		Font = Theme.Black,
 		TextSize = 16,
 		TextColor3 = C.Gold,
@@ -30283,7 +30285,7 @@ function LobbyController.init()
 	Create.corner(16).Parent = coinsPill
 	Create.stroke(C.GoldDeep, 1.5, 0.3).Parent = coinsPill
 	local function updateCoins()
-		coinsPill.Text = "🪙 " .. tostring(player:GetAttribute("Coins") or 0) .. " Enchanted Coins"
+		coinsPill.Text = "💰 " .. tostring(player:GetAttribute("Coins") or 0) .. " Enchanted Coins"
 	end
 	player:GetAttributeChangedSignal("Coins"):Connect(updateCoins)
 	updateCoins()
@@ -30313,8 +30315,8 @@ function LobbyController.init()
 		joinButton.Visible = inHub
 		joinButton.Position = UDim2.new(0.5, 0, 0, buttonY)
 		joinButton.Text = if phase == "Voting"
-			then "⚔  JOIN GAME  ·  " .. math.max(0, math.ceil(State.phaseEndsAt() - State.now())) .. "s"
-			else "⚔  JOIN GAME"
+			then "⚔️  JOIN GAME  ·  " .. math.max(0, math.ceil(State.phaseEndsAt() - State.now())) .. "s"
+			else "⚔️  JOIN GAME"
 		leaveButton.Visible = State.queued() and not State.inMatch()
 		leaveButton.Position = UDim2.new(0.5, 0, 0, buttonY)
 		if votePanel.Visible then
@@ -30856,7 +30858,7 @@ local steps: { Step } = {
 	},
 	{
 		title = "You're ready, mage!",
-		text = "Open the <b>📜 Grimoire (H)</b> any time to read about every part and spell. Pick your class at the <b>Class Altar</b> in the gazebo. When you're ready, walk through the <b>portal</b> (or press <b>⚔ Join Game</b>) to queue for the next match. Good luck!",
+		text = "Open the <b>📜 Grimoire (H)</b> any time to read about every part and spell. Pick your class at the <b>Class Altar</b> in the gazebo. When you're ready, walk through the <b>portal</b> (or press <b>⚔️ Join Game</b>) to queue for the next match. Good luck!",
 		manual = true,
 	},
 }
@@ -32081,7 +32083,7 @@ local function buildCoffers(page: Frame)
 			LayoutOrder = 20,
 			Parent = odds,
 		})
-		local open = Widgets.button("Open  ·  🪙 " .. box.price, {
+		local open = Widgets.button("Open  ·  💰 " .. box.price, {
 			size = UDim2.new(1, -16, 0, 38),
 			position = UDim2.new(0, 8, 1, -46),
 			color = Theme.darken(Theme.rgb(box.color), 0.35),
@@ -32205,7 +32207,7 @@ local function refreshTailor()
 		}
 		for _, slot in Cosmetics.Garments[mode].slots do
 			for _, e in parts[slot].enchants do
-				table.insert(lines, "✦ " .. Cosmetics.enchantText(e))
+				table.insert(lines, "✨ " .. Cosmetics.enchantText(e))
 			end
 		end
 		tailorSummary.Text = table.concat(lines, "\n")
@@ -32326,7 +32328,7 @@ local function refreshWardrobe()
 			iconColor = CosmeticInfo.color(g.parts[Cosmetics.Garments[g.kind].slots[1]]),
 			rarity = g.rarity,
 			caption = CosmeticInfo.shortName("Garment", g),
-			badge = if isWorn then "✔" else nil,
+			badge = if isWorn then "✅" else nil,
 			selected = selected ~= nil and selected.uid == g.uid,
 			layoutOrder = i,
 			info = function()
@@ -32407,7 +32409,7 @@ local function refreshWardrobe()
 			invoke("Unbind", { uid = g.uid })
 			selected = nil
 		end, "UnbindButton")
-		detailButton("Salvage (+" .. salvageValue("Garment", g) .. " 🪙)", C.Bad, function()
+		detailButton("Salvage (+" .. salvageValue("Garment", g) .. " 💰)", C.Bad, function()
 			invoke("Salvage", { kind = "Garment", uid = g.uid })
 			selected = nil
 		end, "SalvageButton")
@@ -32424,7 +32426,7 @@ local function refreshWardrobe()
 			draft = { [p.slot] = p.uid }
 			WardrobeController.open("Tailor")
 		end, "TailorButton")
-		detailButton("Salvage (+" .. salvageValue("Part", p) .. " 🪙)", C.Bad, function()
+		detailButton("Salvage (+" .. salvageValue("Part", p) .. " 💰)", C.Bad, function()
 			invoke("Salvage", { kind = "Part", uid = p.uid })
 			selected = nil
 		end, "SalvageButton")
@@ -32590,7 +32592,7 @@ local function refreshFamiliars()
 			invoke("Equip", { uid = f.uid })
 		end, "SummonButton")
 		familiarButton(
-			"Salvage (+" .. (Familiars.SalvageValue[Rarity.rank(f.rarity)] or 1) .. " 🪙)",
+			"Salvage (+" .. (Familiars.SalvageValue[Rarity.rank(f.rarity)] or 1) .. " 💰)",
 			C.Bad,
 			function()
 				invoke("Salvage", { kind = "Familiar", uid = f.uid })
@@ -32670,7 +32672,7 @@ local function refresh()
 	if not gui then
 		return
 	end
-	coinsLabel.Text = "🪙 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
+	coinsLabel.Text = "💰 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
 	if not isOpen then
 		return
 	end
@@ -32811,7 +32813,7 @@ function CosmeticInfo.icon(part: any): string
 	local slot = part and Cosmetics.Slots[part.slot]
 	if part and part.slot == "Sigil" then
 		local design = Cosmetics.DesignById.Sigil[part.design]
-		return if design and design.glyph then design.glyph else "✦"
+		return if design and design.glyph then design.glyph else "⭐"
 	end
 	return if slot then slot.icon else "?"
 end
@@ -32840,7 +32842,7 @@ function CosmeticInfo.part(part: any): ItemInfo.Info
 	local box = Cosmetics.Boxes[part.box]
 	local body = {}
 	for _, e in part.enchants do
-		table.insert(body, "✦ " .. Cosmetics.enchantText(e))
+		table.insert(body, "✨ " .. Cosmetics.enchantText(e))
 	end
 	if part.aura and Rarity.rank(part.rarity) >= 3 then
 		table.insert(body, "\nIts aura shows when stitched with parts of a similar rarity.")
@@ -32878,7 +32880,7 @@ function CosmeticInfo.garment(g: any): ItemInfo.Info
 		local part = g.parts[slot]
 		if part then
 			for _, e in part.enchants do
-				table.insert(enchants, "✦ " .. Cosmetics.enchantText(e))
+				table.insert(enchants, "✨ " .. Cosmetics.enchantText(e))
 			end
 		end
 	end
@@ -32918,7 +32920,7 @@ function CosmeticInfo.familiar(f: any): ItemInfo.Info
 	local body = {}
 	local text = Familiars.powerText(f)
 	if text then
-		table.insert(body, "✦ " .. text)
+		table.insert(body, "✨ " .. text)
 	elseif s then
 		table.insert(
 			body,
@@ -32994,7 +32996,7 @@ function CosmeticInfo.gearText(gear: { [string]: number }): string
 		local amount = gear[def.id]
 		if amount and amount > 0 then
 			local capped = if amount >= def.cap - 1e-9 then "  (max)" else ""
-			table.insert(lines, "✦ " .. Cosmetics.enchantText({ stat = def.id, amount = amount }) .. capped)
+			table.insert(lines, "✨ " .. Cosmetics.enchantText({ stat = def.id, amount = amount }) .. capped)
 		end
 	end
 	if #lines == 0 then
@@ -33035,8 +33037,14 @@ local function apply(inst: Instance, props: { [string]: any }?)
 	end
 end
 
+-- Roblox fills new text objects with "Label" / "Button" / "TextBox"; start them empty instead
+local TEXT_CLASSES = { TextLabel = true, TextButton = true, TextBox = true }
+
 local function new(className: string, props: { [string]: any }?, children: { Instance }?): any
 	local inst = Instance.new(className)
+	if TEXT_CLASSES[className] then
+		(inst :: any).Text = ""
+	end
 	if children then
 		for _, child in children do
 			child.Parent = inst
@@ -33188,7 +33196,7 @@ function ItemInfo.recipeText(recipe: SpellTypes.Recipe): string
 	end
 	local text = table.concat(parts, " + ")
 	if recipe.trigger and recipe.payload then
-		text ..= "  [" .. (name(recipe.trigger) or "?") .. " → " .. ItemInfo.recipeText(recipe.payload) .. "]"
+		text ..= "  [" .. (name(recipe.trigger) or "?") .. " » " .. ItemInfo.recipeText(recipe.payload) .. "]"
 	end
 	return text
 end
@@ -33264,7 +33272,7 @@ function ItemInfo.wand(wand: Items.WandItem): Info
 	}
 	local perks = {}
 	for _, perk in wand.perks do
-		table.insert(perks, "★ " .. WandGenerator.describePerk(perk))
+		table.insert(perks, "⭐ " .. WandGenerator.describePerk(perk))
 	end
 	return {
 		title = wand.name,
@@ -34017,7 +34025,7 @@ function Widgets.window(gui: ScreenGui, o: WindowOptions): Window
 		}),
 		Parent = divider,
 	})
-	local close = Widgets.button("✕", {
+	local close = Widgets.button("X", {
 		size = UDim2.fromOffset(36, 36),
 		position = UDim2.new(1, -52, 0, 13),
 		color = C.Panel3,
@@ -34030,6 +34038,8 @@ function Widgets.window(gui: ScreenGui, o: WindowOptions): Window
 		parent = header,
 	})
 	close.Name = "Close"
+	close.Font = Theme.Black
+	close.TextSize = 18
 	local right = Create("Frame", {
 		Name = "HeaderRight",
 		BackgroundTransparency = 1,
@@ -34172,7 +34182,7 @@ export type CardOptions = {
 	caption: string?,
 	captionColor: Color3?,
 	count: number?,
-	badge: string?, -- top-left marker (⚙ trigger, 🐾 summoned, a hotkey...)
+	badge: string?, -- top-left marker (⚙️ trigger, 🐾 summoned, a hotkey...)
 	empty: boolean?,
 	selected: boolean?,
 	highlight: boolean?,

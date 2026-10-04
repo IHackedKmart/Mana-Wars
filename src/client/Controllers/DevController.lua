@@ -1,7 +1,7 @@
--- The 🛠 Dev panel: test everything without spending anything. It shows for players the server
+-- The 🛠️ Dev panel: test everything without spending anything. It shows for players the server
 -- marks as developers (everyone in Studio, the game's owner in live servers; see Config.Dev),
 -- and the server checks every request again (DevService).
--- Open it with the 🛠 Dev button or the ` key (backquote, left of 1).
+-- Open it with the 🛠️ Dev button or the ` key (backquote, left of 1).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -150,7 +150,7 @@ local function build()
 	gui = Widgets.screen("DevPanel", 30)
 	local root = Widgets.scaledRoot(gui)
 	root.Name = "ButtonRoot"
-	openButton = Widgets.button("🛠 Dev", {
+	openButton = Widgets.button("🛠️ Dev", {
 		size = UDim2.fromOffset(84, 32),
 		position = UDim2.new(1, -16, 0, 52),
 		anchor = Vector2.new(1, 0),
@@ -167,7 +167,7 @@ local function build()
 
 	local window = Widgets.window(gui, {
 		title = "Developer Tools",
-		icon = "🛠",
+		icon = "🛠️",
 		subtitle = "Only you see this  ·  Studio play tests save to separate test data  ·  ` opens and closes it",
 		size = Vector2.new(680, 650),
 		onClose = function()
@@ -264,7 +264,7 @@ local function build()
 	button(s, "Coins_100000", "+100,000 coins", function()
 		invoke("Coins", { amount = 100000 })
 	end)
-	button(s, "Coins_0", "Coins → 0", function()
+	button(s, "Coins_0", "Coins = 0", function()
 		invoke("Coins", { amount = 0 })
 	end)
 	toggle(s, "FreeCoffers", "Free coffers", "FreeCoffers")

@@ -42,7 +42,7 @@ function ItemInfo.recipeText(recipe: SpellTypes.Recipe): string
 	end
 	local text = table.concat(parts, " + ")
 	if recipe.trigger and recipe.payload then
-		text ..= "  [" .. (name(recipe.trigger) or "?") .. " → " .. ItemInfo.recipeText(recipe.payload) .. "]"
+		text ..= "  [" .. (name(recipe.trigger) or "?") .. " » " .. ItemInfo.recipeText(recipe.payload) .. "]"
 	end
 	return text
 end
@@ -118,7 +118,7 @@ function ItemInfo.wand(wand: Items.WandItem): Info
 	}
 	local perks = {}
 	for _, perk in wand.perks do
-		table.insert(perks, "★ " .. WandGenerator.describePerk(perk))
+		table.insert(perks, "⭐ " .. WandGenerator.describePerk(perk))
 	end
 	return {
 		title = wand.name,

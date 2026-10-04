@@ -402,7 +402,7 @@ checkWarnings("dismantle")
 check(firstSpell and (me.inventory.parts.Bolt or 0) >= 1, "dismantling Firebolt should give back a Bolt part")
 
 -- the other detail actions
-click(book, "✕")
+click(book, "X")
 check(not book.Enabled, "spellbook should close")
 
 -- 5. Loot a chest through the chest window.
@@ -426,7 +426,7 @@ if chestModel then
 	click(chestGui, "Take All  [F]")
 	checkWarnings("loot chest")
 	check(#chest.entries < before, "taking all should empty (most of) the chest")
-	local closeButton = findButton(chestGui, "✕")
+	local closeButton = findButton(chestGui, "X")
 	if closeButton then
 		closeButton.Activated:Fire()
 	end
@@ -585,7 +585,7 @@ click(gui("Dock"), "⚡  Class: Stormcaller")
 -- 9. Spectating during a match.
 GameState.setPhase("Battle", 0)
 Mock.step(0.2, true)
-click(gui("Dock"), "👁  Spectate the match")
+click(gui("Dock"), "👁️  Spectate the match")
 Mock.step(1.5, true)
 checkWarnings("spectate")
 
@@ -620,8 +620,8 @@ key(Enum.KeyCode.H)
 check(not grimoire.Enabled, "H should close the Grimoire")
 usePrompt("Grimoire")
 check(grimoire.Enabled, "a lectern should open the Grimoire")
-click(grimoire, "✕")
-check(not grimoire.Enabled, "the ✕ should close the Grimoire")
+click(grimoire, "X")
+check(not grimoire.Enabled, "the X should close the Grimoire")
 
 -- 11. The Spell Lab tutorial, start to finish, on a training dummy.
 me.practice = true
@@ -638,7 +638,7 @@ check((State.inventory.parts.OnHit or 0) >= 1, "the Spell Lab should hand out ev
 -- start it from the Grimoire's Controls chapter, like a player would
 key(Enum.KeyCode.H)
 clickNamed(grimoire, "Controls")
-click(grimoire, "▶  Replay the tutorial")
+click(grimoire, "▶️  Replay the tutorial")
 local tutorial = gui("Tutorial")
 check(TutorialController.isRunning() and tutorial.Enabled, "the tutorial should start")
 check(not grimoire.Enabled, "replaying the tutorial should close the Grimoire")
@@ -719,7 +719,7 @@ check(not TutorialController.isRunning() and not tutorial.Enabled, "the tutorial
 check((Mock.remoteCounts["TutorialDone"] or 0) >= 1, "finishing the tutorial should tell the server")
 
 -- the restock button refills the Spell Lab
-click(book, "♻ Restock Spell Lab")
+click(book, "♻️ Restock Spell Lab")
 check((me.inventory.parts.Explosive or 0) == 3, "restocking should refill the parts")
 key(Enum.KeyCode.B)
 checkWarnings("tutorial")
@@ -1315,7 +1315,7 @@ do
 	Mock.step(0.2, true)
 	check(player:GetAttribute("Dev") == true, "Studio players are developers")
 	local devGui = gui("DevPanel")
-	check(devGui and devGui:FindFirstChild("DevButton", true).Visible, "the 🛠 Dev button shows for developers")
+	check(devGui and devGui:FindFirstChild("DevButton", true).Visible, "the 🛠️ Dev button shows for developers")
 	key(Enum.KeyCode.Backquote)
 	local panel = devGui:FindFirstChild("Panel", true)
 	check(panel and panel.Visible, "` opens the dev panel")

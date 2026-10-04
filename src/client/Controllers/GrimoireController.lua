@@ -163,7 +163,7 @@ local function recipeRow(recipe: SpellTypes.Recipe, label: string?)
 	if recipe.trigger and recipe.payload then
 		add(recipe.trigger)
 		n += 1
-		plusSign(row, "→", n)
+		plusSign(row, "=", n)
 		local payload = recipe.payload :: SpellTypes.Recipe
 		local ids = { payload.form }
 		if payload.element then
@@ -214,7 +214,7 @@ chapter("Welcome", "📖  Welcome", function()
 	)
 	subheading("How a match plays out")
 	para(
-		"<b>1. Join.</b> Everyone starts in <b>Arcanum Plaza</b>, the hub. Practise as long as you like, then walk through the <b>portal</b> (or press <b>⚔ Join Game</b>) to join the queue.\n"
+		"<b>1. Join.</b> Everyone starts in <b>Arcanum Plaza</b>, the hub. Practise as long as you like, then walk through the <b>portal</b> (or press <b>⚔️ Join Game</b>) to join the queue.\n"
 			.. "<b>2. Vote.</b> The portal takes you to the library, the <b>Arcane Athenaeum</b>. Vote for the next map on the right of your screen.\n"
 			.. "<b>3. Pedestals.</b> Everyone is placed around the <b>cornucopia</b>, the ring of chests in the middle. Wait for the gong!\n"
 			.. "<b>4. Grace period.</b> For the first "
@@ -313,7 +313,7 @@ chapter("Wands", "🔮  Wands", function()
 	para(
 		"• Put a cheap, fast spell (like Spark Bolt) between big expensive ones.\n"
 			.. "• Keep a utility wand with Blink or Aegis on key 2-4 for emergencies.\n"
-			.. "• Rarer wands (green → blue → purple → orange → red) have better stats."
+			.. "• Rarer wands (green, then blue, purple, orange and red) have better stats."
 	)
 end)
 
@@ -495,7 +495,7 @@ chapter("Wardrobe", "👘  Robes & Familiars", function()
 			box.icon
 				.. " <b>"
 				.. box.name
-				.. "</b> (🪙 "
+				.. "</b> (💰 "
 				.. box.price
 				.. ", "
 				.. box.parts
@@ -586,7 +586,7 @@ chapter("Controls", "🎮  Controls", function()
 			.. "<b>Switch wand:</b> 1-4, or Q to cycle (gamepad: L1/R1)\n"
 			.. "<b>Spellbook & Spellforge:</b> B (gamepad: Y)\n"
 			.. "<b>Grimoire:</b> H\n"
-			.. "<b>Join the game:</b> walk through the Plaza's portal, or press ⚔ Join Game\n"
+			.. "<b>Join the game:</b> walk through the Plaza's portal, or press ⚔️ Join Game\n"
 			.. "<b>Open chests:</b> E (hold).  <b>Take everything:</b> F\n"
 			.. "<b>Potions:</b> "
 			.. table.concat(potions, ",  ")
@@ -594,7 +594,7 @@ chapter("Controls", "🎮  Controls", function()
 			.. "<b>Camera:</b> hold right mouse and drag"
 	)
 	spacer(10)
-	Widgets.button("▶  Replay the tutorial", {
+	Widgets.button("▶️  Replay the tutorial", {
 		size = UDim2.fromOffset(240, 40),
 		layoutOrder = nextOrder(),
 		color = RUBRIC,
@@ -703,15 +703,17 @@ local function build()
 		Parent = right,
 	}, { Create.list(Enum.FillDirection.Vertical, 8) })
 
-	Widgets.button("✕", {
+	local close = Widgets.button("X", {
 		size = UDim2.fromOffset(36, 36),
 		position = UDim2.new(1, -30, 0, -12),
 		color = COVER:Lerp(Color3.new(1, 1, 1), 0.15),
+		textSize = 18,
 		onClick = function()
 			GrimoireController.close()
 		end,
 		parent = book,
 	})
+	close.Font = Theme.Black
 end
 
 function GrimoireController.open(chapterId: string?)

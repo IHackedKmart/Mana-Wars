@@ -157,8 +157,9 @@ local SUPER = {
 }
 local DEFAULTS = {
 	Humanoid = { Health = 100, MaxHealth = 100, WalkSpeed = 16, AutoRotate = true, DisplayName = "" },
-	TextButton = { Visible = true, Text = "", Size = roblox.UDim2.new(), Position = roblox.UDim2.new() },
-	TextLabel = { Visible = true, Text = "", Size = roblox.UDim2.new(), Position = roblox.UDim2.new() },
+	-- (Roblox's real defaults, so a label nobody sets shows up as "Label" here too)
+	TextButton = { Visible = true, Text = "Button", Size = roblox.UDim2.new(), Position = roblox.UDim2.new() },
+	TextLabel = { Visible = true, Text = "Label", Size = roblox.UDim2.new(), Position = roblox.UDim2.new() },
 	Frame = { Visible = true, Size = roblox.UDim2.new(), Position = roblox.UDim2.new() },
 	ScrollingFrame = { Visible = true, Size = roblox.UDim2.new(), Position = roblox.UDim2.new() },
 	ScreenGui = { Enabled = true },

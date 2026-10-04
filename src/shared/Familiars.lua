@@ -279,7 +279,7 @@ Familiars.Species = {
 	{
 		id = "GelSlime",
 		name = "Gel Slime",
-		icon = "🟢",
+		icon = "💚",
 		body = "slime",
 		minRarity = "Uncommon",
 		power = "ward",
@@ -405,7 +405,7 @@ Familiars.Species = {
 	{
 		id = "VoidJelly",
 		name = "Void Jelly",
-		icon = "🪼",
+		icon = "🦑",
 		body = "jelly",
 		minRarity = "Epic",
 		minBox = 3,
@@ -531,7 +531,7 @@ Familiars.Species = {
 	{
 		id = "EclipseCat",
 		name = "Eclipse Cat",
-		icon = "🐈‍⬛",
+		icon = "🐈",
 		body = "cat",
 		minRarity = "Mythic",
 		boxes = { 5 },

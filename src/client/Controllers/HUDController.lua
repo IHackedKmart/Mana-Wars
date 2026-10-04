@@ -244,7 +244,7 @@ local function buildTop()
 	stormWarning = Widgets.label({
 		Size = UDim2.new(1, 0, 0, 30),
 		Position = UDim2.fromOffset(0, 74),
-		Text = "⚠ You are in the Mana Storm! Get back inside the circle!",
+		Text = "⚠️ You are in the Mana Storm! Get back inside the circle!",
 		Font = Theme.Black,
 		TextSize = 22,
 		TextColor3 = Color3.fromRGB(255, 120, 200),
@@ -292,7 +292,7 @@ local function buildCombat()
 		Parent = combat,
 	})
 	Widgets.label({
-		Text = "❤  HEALTH",
+		Text = "❤️  HEALTH",
 		Font = Theme.Black,
 		TextSize = 12,
 		TextColor3 = C.Dim,

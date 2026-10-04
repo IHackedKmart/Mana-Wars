@@ -19,7 +19,7 @@ function CosmeticInfo.icon(part: any): string
 	local slot = part and Cosmetics.Slots[part.slot]
 	if part and part.slot == "Sigil" then
 		local design = Cosmetics.DesignById.Sigil[part.design]
-		return if design and design.glyph then design.glyph else "✦"
+		return if design and design.glyph then design.glyph else "⭐"
 	end
 	return if slot then slot.icon else "?"
 end
@@ -48,7 +48,7 @@ function CosmeticInfo.part(part: any): ItemInfo.Info
 	local box = Cosmetics.Boxes[part.box]
 	local body = {}
 	for _, e in part.enchants do
-		table.insert(body, "✦ " .. Cosmetics.enchantText(e))
+		table.insert(body, "✨ " .. Cosmetics.enchantText(e))
 	end
 	if part.aura and Rarity.rank(part.rarity) >= 3 then
 		table.insert(body, "\nIts aura shows when stitched with parts of a similar rarity.")
@@ -86,7 +86,7 @@ function CosmeticInfo.garment(g: any): ItemInfo.Info
 		local part = g.parts[slot]
 		if part then
 			for _, e in part.enchants do
-				table.insert(enchants, "✦ " .. Cosmetics.enchantText(e))
+				table.insert(enchants, "✨ " .. Cosmetics.enchantText(e))
 			end
 		end
 	end
@@ -126,7 +126,7 @@ function CosmeticInfo.familiar(f: any): ItemInfo.Info
 	local body = {}
 	local text = Familiars.powerText(f)
 	if text then
-		table.insert(body, "✦ " .. text)
+		table.insert(body, "✨ " .. text)
 	elseif s then
 		table.insert(
 			body,
@@ -202,7 +202,7 @@ function CosmeticInfo.gearText(gear: { [string]: number }): string
 		local amount = gear[def.id]
 		if amount and amount > 0 then
 			local capped = if amount >= def.cap - 1e-9 then "  (max)" else ""
-			table.insert(lines, "✦ " .. Cosmetics.enchantText({ stat = def.id, amount = amount }) .. capped)
+			table.insert(lines, "✨ " .. Cosmetics.enchantText({ stat = def.id, amount = amount }) .. capped)
 		end
 	end
 	if #lines == 0 then

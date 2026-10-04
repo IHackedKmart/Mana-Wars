@@ -378,7 +378,7 @@ local function buildCoffers(page: Frame)
 			LayoutOrder = 20,
 			Parent = odds,
 		})
-		local open = Widgets.button("Open  ·  🪙 " .. box.price, {
+		local open = Widgets.button("Open  ·  💰 " .. box.price, {
 			size = UDim2.new(1, -16, 0, 38),
 			position = UDim2.new(0, 8, 1, -46),
 			color = Theme.darken(Theme.rgb(box.color), 0.35),
@@ -502,7 +502,7 @@ local function refreshTailor()
 		}
 		for _, slot in Cosmetics.Garments[mode].slots do
 			for _, e in parts[slot].enchants do
-				table.insert(lines, "✦ " .. Cosmetics.enchantText(e))
+				table.insert(lines, "✨ " .. Cosmetics.enchantText(e))
 			end
 		end
 		tailorSummary.Text = table.concat(lines, "\n")
@@ -623,7 +623,7 @@ local function refreshWardrobe()
 			iconColor = CosmeticInfo.color(g.parts[Cosmetics.Garments[g.kind].slots[1]]),
 			rarity = g.rarity,
 			caption = CosmeticInfo.shortName("Garment", g),
-			badge = if isWorn then "✔" else nil,
+			badge = if isWorn then "✅" else nil,
 			selected = selected ~= nil and selected.uid == g.uid,
 			layoutOrder = i,
 			info = function()
@@ -704,7 +704,7 @@ local function refreshWardrobe()
 			invoke("Unbind", { uid = g.uid })
 			selected = nil
 		end, "UnbindButton")
-		detailButton("Salvage (+" .. salvageValue("Garment", g) .. " 🪙)", C.Bad, function()
+		detailButton("Salvage (+" .. salvageValue("Garment", g) .. " 💰)", C.Bad, function()
 			invoke("Salvage", { kind = "Garment", uid = g.uid })
 			selected = nil
 		end, "SalvageButton")
@@ -721,7 +721,7 @@ local function refreshWardrobe()
 			draft = { [p.slot] = p.uid }
 			WardrobeController.open("Tailor")
 		end, "TailorButton")
-		detailButton("Salvage (+" .. salvageValue("Part", p) .. " 🪙)", C.Bad, function()
+		detailButton("Salvage (+" .. salvageValue("Part", p) .. " 💰)", C.Bad, function()
 			invoke("Salvage", { kind = "Part", uid = p.uid })
 			selected = nil
 		end, "SalvageButton")
@@ -887,7 +887,7 @@ local function refreshFamiliars()
 			invoke("Equip", { uid = f.uid })
 		end, "SummonButton")
 		familiarButton(
-			"Salvage (+" .. (Familiars.SalvageValue[Rarity.rank(f.rarity)] or 1) .. " 🪙)",
+			"Salvage (+" .. (Familiars.SalvageValue[Rarity.rank(f.rarity)] or 1) .. " 💰)",
 			C.Bad,
 			function()
 				invoke("Salvage", { kind = "Familiar", uid = f.uid })
@@ -967,7 +967,7 @@ local function refresh()
 	if not gui then
 		return
 	end
-	coinsLabel.Text = "🪙 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
+	coinsLabel.Text = "💰 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
 	if not isOpen then
 		return
 	end

@@ -178,7 +178,7 @@ local function row(
 		Parent = frame,
 	})
 	Widgets.label({
-		Text = "🪙 " .. price,
+		Text = "💰 " .. price,
 		Font = Theme.Black,
 		TextSize = 18,
 		TextColor3 = GOLD,
@@ -405,7 +405,7 @@ local function buildBrowse(page: Frame)
 		parent = bar,
 	})
 	sortButton.Name = "Sort"
-	local refreshButton = Widgets.button("⟳  Refresh", {
+	local refreshButton = Widgets.button("🔄  Refresh", {
 		size = UDim2.fromOffset(120, 32),
 		color = C.Accent,
 		layoutOrder = 12,
@@ -457,7 +457,7 @@ local function updateFee()
 	if price then
 		table.insert(
 			lines,
-			"You receive <b>🪙 "
+			"You receive <b>💰 "
 				.. proceeds(price)
 				.. "</b> when it sells (the house keeps "
 				.. math.floor(E.AuctionFee * 100 + 0.5)
@@ -467,7 +467,7 @@ local function updateFee()
 		table.insert(lines, "Enter a price from 1 to " .. E.MaxPrice .. " coins")
 	end
 	if kind and item then
-		table.insert(lines, "Salvaging it instead would give 🪙 " .. salvageValue(kind, item))
+		table.insert(lines, "Salvaging it instead would give 💰 " .. salvageValue(kind, item))
 	end
 	table.insert(
 		lines,
@@ -634,7 +634,7 @@ local function buildSell(page: Frame)
 		Position = UDim2.fromOffset(x, 76),
 		Parent = page,
 	})
-	listButton = Widgets.button("⚖  List for sale", {
+	listButton = Widgets.button("⚖️  List for sale", {
 		size = UDim2.fromOffset(240, 44),
 		position = UDim2.fromOffset(x, 236),
 		color = C.Panel3,
@@ -705,7 +705,7 @@ local function refreshMine()
 				.. (
 					if expired
 						then "unsold, coming back to you shortly"
-						else timeLeft(record.expires) .. "  ·  you get 🪙 " .. proceeds(record.price)
+						else timeLeft(record.expires) .. "  ·  you get 💰 " .. proceeds(record.price)
 				),
 			if expired
 				then nil
@@ -758,7 +758,7 @@ refresh = function()
 	if not gui then
 		return
 	end
-	coinsLabel.Text = "🪙 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
+	coinsLabel.Text = "💰 " .. tostring(State.wardrobe.coins or 0) .. "  Enchanted Coins"
 	scopeLabel.Text = if ReplicatedStorage:GetAttribute("AuctionGlobal") == true
 		then "One market shared by every server"
 		else "Market for this server only (no MemoryStore access)"
@@ -810,7 +810,7 @@ local function build()
 	gui.Enabled = false
 	local window = Widgets.window(gui, {
 		title = "The Gilded Gavel",
-		icon = "⚖",
+		icon = "⚖️",
 		subtitle = "",
 		size = Vector2.new(1040, 644),
 		onClose = function()

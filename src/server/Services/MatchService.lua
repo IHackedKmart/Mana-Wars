@@ -359,7 +359,7 @@ local function runMatch()
 	VoteService.begin(rng, closesAt, lastMapId)
 	GameState.setPhase("Voting", closesAt)
 	announceMatch({ title = "Vote for the next map!", subtitle = "Pick your class and practise while you wait" })
-	announceHub("⚔ A match is starting in " .. M.VoteTime .. "s! Walk through the portal to join")
+	announceHub("⚔️ A match is starting in " .. M.VoteTime .. "s! Walk through the portal to join")
 	local completed, shortened = true, false
 	while now() < closesAt do
 		if not canStart() then
@@ -492,7 +492,7 @@ local function runMatch()
 
 	GameState.setPhase("Countdown", now() + M.PedestalCountdown)
 	announceMatch({ title = "Get ready...", subtitle = "Loot the cornucopia or run for the woods!" })
-	announceHub("⚔ A match just started on " .. def.name .. ". Join the queue to play the next one")
+	announceHub("⚔️ A match just started on " .. def.name .. ". Join the queue to play the next one")
 	waitPhase(M.PedestalCountdown, consumeSkip)
 
 	for _, c in participants do

@@ -245,7 +245,7 @@ Classes.List = {
 	{
 		id = "Plaguebringer",
 		name = "Plaguebringer",
-		icon = "☠️",
+		icon = "💀",
 		tier = 2,
 		color = { 120, 230, 60 },
 		tagline = "Stacks venom with homing wisps. Patience kills.",
@@ -323,7 +323,7 @@ Classes.List = {
 	{
 		id = "Bloodmage",
 		name = "Bloodmage",
-		icon = "🩸",
+		icon = "🧛",
 		tier = 3,
 		color = { 210, 30, 50 },
 		tagline = "Trades health for raw power. High risk, high reward.",

@@ -593,7 +593,7 @@ local function buildRobe(rig: Rig, robe: Garment)
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
 		label.Size = UDim2.fromScale(1, 1)
-		label.Text = if glyph and glyph.glyph then glyph.glyph else "✦"
+		label.Text = if glyph and glyph.glyph then glyph.glyph else "⭐"
 		label.TextScaled = true
 		label.Font = Enum.Font.GothamBold
 		label.TextColor3 = Color3.fromRGB(255, 235, 170)
