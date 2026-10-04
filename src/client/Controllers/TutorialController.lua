@@ -165,7 +165,7 @@ local steps: { Step } = {
 	},
 	{
 		title = "You're ready, mage!",
-		text = "Open the <b>📜 Grimoire (H)</b> any time to read about every part and spell. Pick your class at the <b>Class Altar</b> in the gazebo. When you're ready, walk through the <b>portal</b> (or press <b>⚔️ Join Game</b>) to queue for the next match. Good luck!",
+		text = "Open the <b>📜 Grimoire (H)</b> any time to read about every part and spell. Pick your class at the <b>Class Altar</b> in the gazebo. When you're ready, walk through the <b>portal</b> (or press <b>▶️ Play</b>) and pick a game mode: Survival Games, a 1v1 Duel or the Battle Royale. Good luck!",
 		manual = true,
 	},
 }

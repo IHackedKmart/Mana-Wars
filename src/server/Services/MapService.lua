@@ -1,5 +1,6 @@
 -- Builds the hub (Arcanum Plaza) and the library lobby once, and a brand new arena for every
--- match: the map players voted for, with a fresh random layout each time.
+-- match: the map players voted for (or the battle royale island), with a fresh random layout each
+-- time.
 
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,6 +14,7 @@ local Structures = require(Map.Structures)
 local Decor = require(Map.Decor)
 local Landmarks = require(Map.Landmarks)
 local Scenery = require(Map.Scenery)
+local RealmGen = require(Map.RealmGen)
 local Lobby = require(Map.Lobby)
 local Hub = require(Map.Hub)
 
@@ -32,6 +34,8 @@ export type Arena = {
 	chestSpots: { Structures.ChestSpot },
 	heightAt: (number, number) -> number,
 	folder: Folder,
+	locations: { RealmGen.Location }?, -- the battle royale island's named places
+	realmAt: ((number, number) -> MapDefs.Biome)?, -- and which realm a point is in
 }
 
 MapService.lobbySpawn = CFrame.new(0, A.LobbyHeight + 5, 0)
@@ -109,8 +113,31 @@ function MapService.init()
 	MapService.hubSpawn = hub.spawn
 end
 
+-- The battle royale island's definition (it isn't one of the maps Survival Games votes on).
+function MapService.royaleDef(): MapDef
+	return MapDefs.Royale
+end
+
 function MapService.randomDef(rng: Random): MapDef
 	return MapDefs.List[rng:NextInteger(1, #MapDefs.List)]
+end
+
+-- An invisible wall well outside the playable area (`top` studs high).
+local function worldEdge(folder: Instance, radius: number, top: number)
+	local wallRadius = radius + 45
+	local segments = 64
+	local bottom = -50
+	for i = 1, segments do
+		local angle = (i / segments) * math.pi * 2
+		local pos = Vector3.new(math.cos(angle) * wallRadius, (top + bottom) / 2, math.sin(angle) * wallRadius)
+		Build.part({
+			Name = "WorldEdge",
+			Size = Vector3.new(2 * math.pi * wallRadius / segments + 2, top - bottom, 4),
+			CFrame = CFrame.lookAt(pos, Vector3.new(0, pos.Y, 0)),
+			Transparency = 1,
+			CanQuery = false,
+		}, folder)
+	end
 end
 
 -- Generates terrain + structures for a map. Yields for a few seconds.
@@ -131,6 +158,30 @@ function MapService.generate(seed: number, def: MapDef): Arena
 		Build.make("Folder", { Name = "Chests" }, folder)
 
 		applyLighting(def)
+		if def.biomes then
+			-- the battle royale island: no cornucopia or pedestals, everyone drops from the carpet
+			local realm = RealmGen.build(seed, def, folder, decor)
+			worldEdge(folder, def.radius, Config.Royale.CarpetAltitude + 150)
+			local biomes = def.biomes :: { MapDefs.Biome }
+			local biomeAt = realm.land.biomeAt :: (number, number) -> number
+			local plaza = MapDefs.plazaHeight(def)
+			local royale: Arena = {
+				seed = seed,
+				def = def,
+				radius = def.radius,
+				plazaY = plaza,
+				center = Vector3.new(0, plaza, 0),
+				pedestals = {},
+				chestSpots = realm.chestSpots,
+				heightAt = realm.land.heightAt,
+				folder = folder,
+				locations = realm.locations,
+				realmAt = function(x: number, z: number): MapDefs.Biome
+					return biomes[biomeAt(x, z)]
+				end,
+			}
+			return royale
+		end
 		local land = TerrainGen.makeLand(seed, def)
 		local heightAt = land.heightAt
 
@@ -354,20 +405,7 @@ function MapService.generate(seed: number, def: MapDef): Arena
 			end
 		end
 
-		-- invisible wall well outside the playable area
-		local wallRadius = radius + 45
-		local segments = 64
-		for i = 1, segments do
-			local angle = (i / segments) * math.pi * 2
-			local pos = Vector3.new(math.cos(angle) * wallRadius, 150, math.sin(angle) * wallRadius)
-			Build.part({
-				Name = "WorldEdge",
-				Size = Vector3.new(2 * math.pi * wallRadius / segments + 2, 400, 4),
-				CFrame = CFrame.lookAt(pos, Vector3.new(0, 150, 0)),
-				Transparency = 1,
-				CanQuery = false,
-			}, folder)
-		end
+		worldEdge(folder, radius, 350)
 
 		local arena: Arena = {
 			seed = seed,

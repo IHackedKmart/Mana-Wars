@@ -1,4 +1,4 @@
--- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
+-- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Play (the game mode menu) /
 -- Leave queue, the kit shop / class picker, the map vote, spectating, the lectern/altar
 -- prompts, and the animated props (orrery, floating books, the fountain crystal, floating isles).
 
@@ -11,6 +11,7 @@ local Shared = ReplicatedStorage.Shared
 local Remotes = require(Shared.Remotes)
 local Config = require(Shared.Config)
 local Classes = require(Shared.Classes)
+local Modes = require(Shared.Modes)
 local Consumables = require(Shared.Consumables)
 local SpellParts = require(Shared.Spells.SpellParts)
 local PremadeSpells = require(Shared.Spells.PremadeSpells)
@@ -29,6 +30,7 @@ LobbyController.onOpenGrimoire = nil :: (() -> ())?
 LobbyController.onOpenWardrobe = nil :: ((tab: string?) -> ())?
 LobbyController.onOpenAuction = nil :: (() -> ())?
 LobbyController.onOpenAchievements = nil :: (() -> ())?
+LobbyController.onOpenModes = nil :: (() -> ())?
 
 local C = Theme.Colors
 local player = Players.LocalPlayer
@@ -50,6 +52,7 @@ local spectating = false
 local spectateIndex = 1
 local joinButton: TextButton
 local leaveButton: TextButton
+local modeButton: TextButton
 local votePanel: Frame
 local voteList: Frame
 local voteTimer: TextLabel
@@ -393,7 +396,7 @@ local function buildSpectate()
 end
 
 ---------------------------------------------------------------------------
--- Queue: Join Game (in the hub) / Leave queue (in the library)
+-- Queue: Play (in the hub) / Leave queue and change mode (in the library)
 ---------------------------------------------------------------------------
 
 local queueAction = Remotes.func("QueueAction")
@@ -409,14 +412,16 @@ local function queue(action: string)
 end
 
 local function buildQueue()
-	joinButton = Widgets.button("⚔️  JOIN GAME", {
+	joinButton = Widgets.button("▶️  PLAY", {
 		size = UDim2.fromOffset(280, 46),
 		position = UDim2.new(0.5, 0, 0, 74),
 		anchor = Vector2.new(0.5, 0),
 		color = Color3.fromRGB(196, 132, 36),
 		textSize = 20,
 		onClick = function()
-			queue("Join")
+			if LobbyController.onOpenModes then
+				LobbyController.onOpenModes()
+			end
 		end,
 		parent = root,
 	})
@@ -434,6 +439,20 @@ local function buildQueue()
 		parent = root,
 	})
 	leaveButton.Name = "LeaveButton"
+	modeButton = Widgets.button("🔄  Change mode", {
+		size = UDim2.fromOffset(280, 30),
+		position = UDim2.new(0.5, 0, 0, 112),
+		anchor = Vector2.new(0.5, 0),
+		color = C.Panel2,
+		textSize = 13,
+		onClick = function()
+			if LobbyController.onOpenModes then
+				LobbyController.onOpenModes()
+			end
+		end,
+		parent = root,
+	})
+	modeButton.Name = "ModeButton"
 end
 
 ---------------------------------------------------------------------------
@@ -746,17 +765,21 @@ function LobbyController.init()
 		end
 		spectateButton.Visible = inLobby and matchRunning and not spectating
 		spectateBar.Visible = spectating
-		votePanel.Visible = inLobby and voteState.open == true and State.queued()
-		-- Join Game in the hub, Leave queue in the library (both move down while spectating)
+		votePanel.Visible = inLobby and voteState.open == true and State.queuedMode() == "Survival"
+		-- Play in the hub, Leave queue in the library (both move down while spectating)
 		local inHub = State.inHub()
 		local buttonY = if spectating then 132 else 74
 		joinButton.Visible = inHub
 		joinButton.Position = UDim2.new(0.5, 0, 0, buttonY)
-		joinButton.Text = if phase == "Voting"
-			then "⚔️  JOIN GAME  ·  " .. math.max(0, math.ceil(State.phaseEndsAt() - State.now())) .. "s"
-			else "⚔️  JOIN GAME"
+		joinButton.Text = "▶️  PLAY"
 		leaveButton.Visible = State.queued() and not State.inMatch()
 		leaveButton.Position = UDim2.new(0.5, 0, 0, buttonY)
+		modeButton.Visible = leaveButton.Visible
+		modeButton.Position = UDim2.new(0.5, 0, 0, buttonY + 38)
+		local mode = Modes.ById[State.queuedMode() or ""]
+		if mode then
+			modeButton.Text = "🔄  Queued for " .. mode.icon .. " " .. mode.name .. "  ·  change"
+		end
 		if votePanel.Visible then
 			local left = math.max(0, math.ceil(State.phaseEndsAt() - State.now()))
 			voteTimer.Text = "Voting closes in " .. left .. "s · the most votes wins"

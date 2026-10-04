@@ -39,6 +39,7 @@ State.Toast = Signal.new()
 State.MenusChanged = Signal.new()
 State.WardrobeChanged = Signal.new()
 State.AchievementsChanged = Signal.new()
+State.PlayMenuRequested = Signal.new() -- the server (the Plaza portal) asks to show the game mode menu
 -- achievement progress and the daily reward streak (see AchievementService.snapshot)
 State.achievements = nil :: { stats: { [string]: number }, unlocked: { [string]: number }, daily: { [string]: any } }?
 
@@ -65,6 +66,15 @@ end
 -- Joined the game: waiting in the library for the next match (or fighting in one).
 function State.queued(): boolean
 	return player:GetAttribute("Queued") == true
+end
+
+-- The game mode this player is queued for ("Survival", "Duel" or "Royale"), if queued.
+function State.queuedMode(): string?
+	if not State.queued() then
+		return nil
+	end
+	local mode = player:GetAttribute("QueuedMode")
+	return if type(mode) == "string" then mode else nil
 end
 
 -- Hanging out in the hub (Arcanum Plaza): not queued and not in a match.
@@ -147,6 +157,8 @@ function State.init()
 	Remotes.event("Announce").OnClientEvent:Connect(function(kind, data)
 		if kind == "Toast" and type(data) == "table" and type(data.text) == "string" then
 			State.toast(data.text)
+		elseif kind == "PlayMenu" then
+			State.PlayMenuRequested:Fire()
 		end
 	end)
 end

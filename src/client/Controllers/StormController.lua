@@ -1,5 +1,6 @@
--- Draws the shrinking Mana Storm wall locally from replicated attributes,
--- and tints the screen while you are caught outside it.
+-- Draws the shrinking Mana Storm wall locally from replicated attributes, and tints the screen
+-- while you are caught outside it. In a battle royale the storm's centre moves from circle to
+-- circle, and a faint white wall marks the next circle.
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -15,22 +16,53 @@ local player = Players.LocalPlayer
 
 local folder: Folder
 local segments: { Part } = {}
+local nextSegments: { Part } = {}
 local shownRadius = 0
 local lastRadius = -1
+local shownCenter = Vector3.zero
+local lastCenter = Vector3.zero
+local nextShown: Vector3? = nil -- (centre X/Z + radius in Y, of the next circle last drawn)
 local tint: ColorCorrectionEffect
 local outside = false
 
-local function layout(center: Vector3, radius: number)
-	local width = (2 * math.pi * radius) / SEGMENTS + 1
-	for i, seg in segments do
-		local angle = (i / SEGMENTS) * math.pi * 2
+local function layout(center: Vector3, radius: number, list: { Part }?)
+	local parts = list or segments
+	local count = #parts
+	local width = (2 * math.pi * radius) / count + 1
+	for i, seg in parts do
+		local angle = (i / count) * math.pi * 2
 		local pos = Vector3.new(
 			center.X + math.cos(angle) * radius,
 			center.Y + HEIGHT / 2 - 100,
 			center.Z + math.sin(angle) * radius
 		)
-		seg.Size = Vector3.new(width, HEIGHT, 1)
+		seg.Size = Vector3.new(width, HEIGHT, if parts == segments then 1 else 0.4)
 		seg.CFrame = CFrame.lookAt(pos, Vector3.new(center.X, pos.Y, center.Z))
+	end
+end
+
+-- The battle royale's next circle: a faint white wall where the storm will stop.
+local function updateNext(active: boolean)
+	local center = ReplicatedStorage:GetAttribute("StormNextCenter")
+	local radius = tonumber(ReplicatedStorage:GetAttribute("StormNextRadius"))
+	local show = active and typeof(center) == "Vector3" and radius ~= nil and radius > 1
+	if not show then
+		if nextShown then
+			nextShown = nil
+			for _, seg in nextSegments do
+				seg.Transparency = 1
+			end
+		end
+		return
+	end
+	local key = Vector3.new(center.X, radius :: number, center.Z)
+	if nextShown and (nextShown - key).Magnitude < 0.05 then
+		return
+	end
+	nextShown = key
+	layout(center, radius :: number, nextSegments)
+	for _, seg in nextSegments do
+		seg.Transparency = 0.75
 	end
 end
 
@@ -51,6 +83,20 @@ function StormController.init()
 		seg.Transparency = 1
 		seg.Parent = folder
 		segments[i] = seg
+	end
+	for i = 1, 48 do
+		local seg = Instance.new("Part")
+		seg.Name = "NextCircle" .. i
+		seg.Anchored = true
+		seg.CanCollide = false
+		seg.CanQuery = false
+		seg.CanTouch = false
+		seg.CastShadow = false
+		seg.Material = Enum.Material.Neon
+		seg.Color = Color3.fromRGB(235, 240, 255)
+		seg.Transparency = 1
+		seg.Parent = folder
+		nextSegments[i] = seg
 	end
 
 	tint = Instance.new("ColorCorrectionEffect")
@@ -74,21 +120,26 @@ function StormController.init()
 		else
 			if lastRadius == -1 then
 				shownRadius = radius
+				shownCenter = center
 				for _, seg in segments do
 					seg.Transparency = 0
 				end
 			end
-			shownRadius += (radius - shownRadius) * math.min(1, dt * 4)
-			if math.abs(shownRadius - lastRadius) > 0.05 then
+			local ease = math.min(1, dt * 4)
+			shownRadius += (radius - shownRadius) * ease
+			shownCenter = shownCenter:Lerp(center, ease)
+			if math.abs(shownRadius - lastRadius) > 0.05 or (shownCenter - lastCenter).Magnitude > 0.05 then
 				lastRadius = shownRadius
-				layout(center, shownRadius)
+				lastCenter = shownCenter
+				layout(shownCenter, shownRadius)
 			end
 		end
+		updateNext(active)
 
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local isOutside = false
-		if active and root and player:GetAttribute("Alive") then
+		if active and root and player:GetAttribute("Alive") and player:GetAttribute("Mode") ~= "Duel" then
 			local d = Vector3.new(root.Position.X - center.X, 0, root.Position.Z - center.Z).Magnitude
 			isOutside = d > radius
 		end

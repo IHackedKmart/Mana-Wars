@@ -74,6 +74,18 @@ function DamageService.canHurt(target: Combatant, attacker: Combatant?, isStorm:
 	if attacker and attacker.practice then
 		return false
 	end
+	-- duels are their own little worlds: only the two duelists, and only once the fight is on
+	local duel = target.duel
+	if duel ~= nil or (attacker ~= nil and attacker.duel ~= nil) then
+		if attacker ~= nil and attacker.duel ~= duel then
+			return false
+		end
+		return duel ~= nil and duel.state == "Fight"
+	end
+	-- battle royale: nobody on the carpet or still gliding down can hurt or be hurt
+	if target.dropping or (attacker and attacker ~= target and attacker.dropping) then
+		return false
+	end
 	if not GameState.combatAllowed() then
 		return false
 	end

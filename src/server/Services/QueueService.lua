@@ -1,8 +1,9 @@
 -- The queue between the hub and a match.
 --   * Everyone spawns in the hub (Arcanum Plaza) and can practise and hang out there for as long
 --     as they like.
---   * Walking through the hub portal (or pressing "Join Game") joins the queue and moves you to the
---     library, where the map vote happens. Only queued players are put into matches.
+--   * Walking through the hub portal (or pressing "Play") opens the game mode menu. Picking a mode
+--     joins that mode's queue and moves you to the library, where Survival Games' map vote happens.
+--     Only queued players are put into matches (or duels).
 --   * The library's portal (or "Leave queue") takes you back to the hub, any time you're not
 --     fighting.
 -- Also keeps the hub's "Next Match" board up to date.
@@ -12,11 +13,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Remotes = require(Shared.Remotes)
+local Modes = require(Shared.Modes)
 local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
 local MapService = require(script.Parent.MapService)
 local VoteService = require(script.Parent.VoteService)
 local Events = require(script.Parent.Events)
+local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
 
@@ -37,13 +40,14 @@ local function moveToRest(c: Combatant)
 	end
 end
 
--- Queued players ready for the next match (not already fighting in one), first in line first.
-function QueueService.waiting(): { Player }
+-- Queued players ready for a match (not already fighting in one), first in line first. With a
+-- mode, only those queued for it.
+function QueueService.waiting(mode: string?): { Player }
 	local list = {}
 	local order: { [Player]: number } = {}
 	for _, player in Players:GetPlayers() do
 		local c = Combatants.forPlayer(player)
-		if c and c.queued and not c.inMatch and player.Character then
+		if c and c.queued and not c.inMatch and player.Character and (mode == nil or c.queuedMode == mode) then
 			table.insert(list, player)
 			order[player] = c.queuedAt
 		end
@@ -59,32 +63,61 @@ function QueueService.backOfLine(c: Combatant)
 	c.queuedAt = workspace:GetServerTimeNow()
 end
 
-local function setQueued(c: Combatant, queued: boolean)
+local function publishCounts()
+	GameState.setPublic("QueueCount", #QueueService.waiting())
+	for _, mode in Modes.List do
+		GameState.setPublic("Queue" .. mode.id, #QueueService.waiting(mode.id))
+	end
+end
+
+local function setQueued(c: Combatant, queued: boolean, mode: string?)
 	c.queued = queued
 	if queued then
 		c.queuedAt = workspace:GetServerTimeNow()
+		c.queuedMode = mode or c.queuedMode
 	end
 	if c.player then
 		c.player:SetAttribute("Queued", queued)
-		if not queued then
+		c.player:SetAttribute("QueuedMode", if queued then c.queuedMode else nil)
+		if not queued or c.queuedMode ~= "Survival" then
 			VoteService.withdraw(c.player)
 		end
 	end
-	GameState.setPublic("QueueCount", #QueueService.waiting())
+	publishCounts()
 end
 
-function QueueService.join(player: Player): (boolean, string)
+local JOINED = {
+	Survival = "You joined Survival Games! Vote for the next map.",
+	Duel = "Looking for a duel opponent...",
+	Royale = "You joined the Battle Royale! The carpet leaves soon.",
+}
+
+-- Joins (or switches to) a game mode's queue.
+function QueueService.join(player: Player, mode: any): (boolean, string)
 	local c = Combatants.forPlayer(player)
 	if not c then
 		return false, "Still loading, try again in a moment"
 	end
-	if c.queued then
-		return true, "You're already in the queue"
+	local modeId = if Modes.isValid(mode) then mode :: string else Modes.Default
+	if c.inMatch then
+		return false, "Finish your match first"
 	end
-	setQueued(c, true)
+	if c.queued and c.queuedMode == modeId then
+		return true, "You're already queued for " .. Modes.ById[modeId].name
+	end
+	local wasQueued = c.queued
+	setQueued(c, true, modeId)
 	moveToRest(c)
-	Events.fire("QueueJoined", player)
-	return true, "You joined the queue! Vote for the next map."
+	if not wasQueued then
+		Events.fire("QueueJoined", player)
+	end
+	Events.fire("ModeQueued", player, modeId)
+	return true, JOINED[modeId] or "Queued"
+end
+
+-- Asks this player's screen to show the game mode menu (the portal does this).
+function QueueService.offerModes(player: Player)
+	FX.announceTo(player, "PlayMenu", {})
 end
 
 function QueueService.leave(player: Player): (boolean, string)
@@ -122,39 +155,43 @@ end
 -- What the hub's "Next Match" board says right now.
 function QueueService.boardText(): string
 	local phase = GameState.phase
-	local waiting = #QueueService.waiting()
 	local left = (ReplicatedStorage:GetAttribute("PhaseEndsAt") or 0) - workspace:GetServerTimeNow()
 	local map = tostring(ReplicatedStorage:GetAttribute("MapName") or "the island")
 	local alive = tonumber(ReplicatedStorage:GetAttribute("AliveCount")) or 0
+	local mode = Modes.ById[GameState.mode] or Modes.ById[Modes.Default]
+	local queues = string.format(
+		"Queued: ⚔️ %d  ·  🧞 %d  ·  🤺 %d",
+		#QueueService.waiting("Survival"),
+		#QueueService.waiting("Royale"),
+		#QueueService.waiting("Duel")
+	)
+	local headline
 	if phase == "Voting" then
-		return string.format(
-			"<b>Map vote: %s left</b>\n%s in the queue\nJoin now to play this round!",
-			fmtTime(left),
-			plural(waiting, "mage")
-		)
+		headline = string.format("<b>Survival Games map vote: %s left</b>", fmtTime(left))
+	elseif phase == "Gathering" then
+		headline = string.format("<b>Battle Royale: the carpet leaves in %s</b>", fmtTime(left))
 	elseif phase == "Loading" then
-		return string.format(
-			"<b>Building %s...</b>\nThe match is about to start\n%s waiting for the next round",
-			tostring(ReplicatedStorage:GetAttribute("NextMapName") or map),
-			plural(waiting, "mage")
-		)
-	elseif phase == "Countdown" or phase == "Grace" or phase == "Battle" then
-		return string.format(
-			"<b>Match in progress</b> on %s\n%s still standing\n%s queued for the next one",
-			map,
-			plural(alive, "mage"),
-			plural(waiting, "mage")
+		headline =
+			string.format("<b>Building %s...</b>", tostring(ReplicatedStorage:GetAttribute("NextMapName") or map))
+	elseif phase == "Countdown" or phase == "Grace" or phase == "Carpet" or phase == "Battle" then
+		headline = string.format(
+			"<b>%s %s in progress</b>  ·  %s still standing",
+			mode.icon,
+			mode.name,
+			plural(alive, "mage")
 		)
 	elseif phase == "Ended" then
-		return "<b>Match over!</b>\nThe next vote starts in a moment\nJoin the queue to play"
+		headline = "<b>Match over!</b> The next one starts in a moment"
+	else
+		headline = "<b>No match yet</b>: walk through the portal to play"
 	end
-	return "<b>No match yet</b>\nWalk through the portal\nto start one!"
+	return headline .. "\n" .. queues .. "\nDuels start as soon as two mages are queued"
 end
 
 function QueueService.init()
-	Remotes.func("QueueAction").OnServerInvoke = function(player: Player, action: any)
+	Remotes.func("QueueAction").OnServerInvoke = function(player: Player, action: any, mode: any)
 		if action == "Join" then
-			return QueueService.join(player)
+			return QueueService.join(player, mode)
 		elseif action == "Leave" then
 			return QueueService.leave(player)
 		end
@@ -168,7 +205,7 @@ function QueueService.init()
 		local prompt = portal:FindFirstChildOfClass("ProximityPrompt")
 		if prompt then
 			prompt.Triggered:Connect(function(player)
-				QueueService.join(player)
+				QueueService.offerModes(player)
 			end)
 		end
 		local lastTouch: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: any
@@ -179,11 +216,14 @@ function QueueService.init()
 				return
 			end
 			local t = os.clock()
-			if t - (lastTouch[player] or 0) < 2 then
+			if t - (lastTouch[player] or 0) < 4 then
 				return
 			end
 			lastTouch[player] = t
-			QueueService.join(player)
+			local c = Combatants.forPlayer(player)
+			if c and not c.queued then
+				QueueService.offerModes(player)
+			end
 		end)
 	end
 	local lobby = MapService.lobby
@@ -199,7 +239,7 @@ function QueueService.init()
 	-- keep the queue count and the hub board fresh
 	task.spawn(function()
 		while true do
-			GameState.setPublic("QueueCount", #QueueService.waiting())
+			publishCounts()
 			if hub then
 				hub.boardText.Text = QueueService.boardText()
 			end

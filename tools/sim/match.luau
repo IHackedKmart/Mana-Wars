@@ -199,15 +199,18 @@ Mock.onAttribute = function(name, value)
 		lastPhase = value
 		table.insert(phasesSeen, value)
 		print(string.format("  t=%5.1fs  phase -> %s", seconds, tostring(value)))
-		if value == "Battle" then
+		-- (a battle royale's roster is set when the carpet takes off)
+		local royale = Mock.repAttributes.MatchMode == "Royale"
+		if (value == "Battle" and not royale) or (value == "Carpet" and royale and previous ~= "Carpet") then
 			roster = {}
 			for _, c in Combatants.all() do
 				if c.inMatch and not c.isDummy then
 					table.insert(roster, c)
 				end
 			end
-			if #roster > 12 then
-				fail("matches hold at most 12 mages, got " .. #roster)
+			local cap = if royale then 50 else 12
+			if #roster > cap then
+				fail("matches hold at most " .. cap .. " mages, got " .. #roster)
 			end
 		elseif previous == "Ended" then
 			checkPlacements()
@@ -260,14 +263,29 @@ if not board or not string.find(board.Text, "No match yet", 1, true) then
 	fail("the hub board should say no match is running")
 end
 
--- 2. Walk into the hub portal: joined, and moved to the library.
+-- 2. Walk into the hub portal: the game mode menu opens. Pick Survival Games: joined, and moved
+--    to the library.
 local portal = MapService.hub and MapService.hub.joinPortal
 if portal and player.Character then
 	portal.Touched:Fire(player.Character:FindFirstChild("HumanoidRootPart"))
 end
 step(1)
-if not me or not me.queued or player:GetAttribute("Queued") ~= true then
-	fail("walking into the portal should join the queue")
+if (announceCounts.PlayMenu or 0) < 1 then
+	fail("walking into the portal should open the game mode menu")
+end
+if me and me.queued then
+	fail("the portal should only offer the modes, not pick one")
+end
+local queueAction = Mock.Remotes.func("QueueAction")
+queueAction:InvokeServer("Join", "Survival")
+step(1)
+if
+	not me
+	or not me.queued
+	or player:GetAttribute("Queued") ~= true
+	or player:GetAttribute("QueuedMode") ~= "Survival"
+then
+	fail("picking Survival Games should join its queue")
 end
 if math.abs(rootZ()) > 100 then
 	fail("joining should move the player to the library, got z=" .. rootZ())
@@ -336,7 +354,7 @@ end
 if (announceCounts.Kill or 0) < 3 then
 	fail("expected eliminations in the kill feed")
 end
-if not string.find(boardDuringMatch, "Match in progress", 1, true) then
+if not string.find(boardDuringMatch, "Survival Games in progress", 1, true) then
 	fail("the hub board should show the running match, got: " .. boardDuringMatch)
 end
 if not me or me.inMatch then
@@ -383,8 +401,7 @@ if Mock.repAttributes.Phase ~= "Waiting" then
 	fail("with nobody queued the game should wait, phase is " .. tostring(Mock.repAttributes.Phase))
 end
 
--- 4. The Join / Leave buttons go through the QueueAction remote.
-local queueAction = Mock.Remotes.func("QueueAction")
+-- 4. The Join / Leave buttons go through the QueueAction remote (no mode: Survival Games).
 local okJoin = queueAction:InvokeServer("Join")
 if not okJoin or not me or not me.queued then
 	fail("the Join Game button should join the queue")
@@ -524,6 +541,320 @@ if Mock.repAttributes.Phase ~= "Ended" then
 	fail("End the match should end it, phase is " .. tostring(Mock.repAttributes.Phase))
 end
 print("dev panel: started, skipped and ended a match on demand")
+
+local function waitUntil(check: () -> boolean, limit: number): boolean
+	local waited = 0
+	while not check() and waited < limit do
+		step(0.5)
+		waited += 0.5
+	end
+	return check()
+end
+local Config = server.load("Shared/Config")
+local DamageService = server.load("Server/Services/DamageService")
+local Events = server.load("Server/Services/Events")
+local finishedModes: { string } = {}
+Events.on("MatchFinished", function(who, _place, _outOf, _kills, _mapId, _classId, mode)
+	if who == player then
+		table.insert(finishedModes, tostring(mode))
+	end
+end)
+local duelResults: { boolean } = {}
+Events.on("DuelFinished", function(who, won)
+	if who == player then
+		table.insert(duelResults, won)
+	end
+end)
+
+-- 6. Battle Royale: picked from the menu, the queue gathers while the enormous island is built,
+--    then everyone (topped up with bots) rides the magic carpet across it. The player jumps,
+--    glides down and lands; the bots hop off along the way; the storm circles close in until the
+--    match is decided.
+dev("Loadout", { on = false })
+dev("God", { on = true }) -- (the passive player would only get in the way of the test by dying early)
+if not waitUntil(function()
+	return me ~= nil and not me.inMatch
+end, 60) then
+	fail("the dev match never wound up")
+end
+local okRoyale = queueAction:InvokeServer("Join", "Royale")
+if not okRoyale or player:GetAttribute("QueuedMode") ~= "Royale" then
+	fail("picking Battle Royale should switch the player to its queue")
+end
+if not waitUntil(function()
+	return Mock.repAttributes.Phase == "Gathering"
+end, 30) then
+	fail("joining the Battle Royale should start gathering, phase is " .. tostring(Mock.repAttributes.Phase))
+end
+if Mock.repAttributes.MatchMode ~= "Royale" then
+	fail("the arena should say it's playing the Battle Royale")
+end
+if board and not string.find(board.Text, "Battle Royale", 1, true) then
+	fail("the hub board should announce the Battle Royale: " .. board.Text)
+end
+if not waitUntil(function()
+	return Mock.repAttributes.Phase == "Carpet"
+end, 1200) then
+	fail("the carpet never took off, phase is " .. tostring(Mock.repAttributes.Phase))
+end
+print("battle royale: island built and the carpet is boarding")
+step(1)
+local CarpetService = server.load("Server/Services/CarpetService")
+local arena = MapService.arena
+if not arena or arena.def.id ~= "Royale" or #arena.pedestals ~= 0 then
+	fail("the Battle Royale should be played on its own island, without pedestals")
+end
+local locations = arena and arena.folder:FindFirstChild("Locations")
+if not locations or #locations:GetChildren() ~= 9 then
+	fail("the island's 9 named places should have floating names")
+end
+local riders, botRiders = {}, {}
+for _, c in Combatants.all() do
+	if c.inMatch and not c.isDummy then
+		table.insert(riders, c)
+		if c.isBot then
+			table.insert(botRiders, c)
+		end
+		if c.dropping ~= "riding" then
+			fail(c.name .. " should be riding the carpet, is " .. tostring(c.dropping))
+		end
+	end
+end
+if #riders ~= Config.Royale.FillTo then
+	fail(string.format("bots should top the carpet up to %d mages, got %d", Config.Royale.FillTo, #riders))
+end
+local royaleChests = 0
+for _, inst in Mock.workspace:GetDescendants() do
+	if inst.ClassName == "Model" and inst:GetAttribute("ChestId") then
+		royaleChests += 1
+	end
+end
+if royaleChests < 150 then
+	fail("the island should be dotted with chests, saw " .. royaleChests)
+end
+local function myRoot()
+	return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+end
+local seat = CarpetService.seatCFrame(me)
+if player:GetAttribute("Riding") ~= true or typeof(player:GetAttribute("CarpetSeat")) ~= "Vector3" then
+	fail("the player should be told they're riding, and where their seat is")
+end
+if not seat or not myRoot() or (myRoot().Position - seat.Position).Magnitude > 5 then
+	fail("players should spawn in their seat on the carpet")
+elseif seat.Position.Y < Config.Royale.CarpetAltitude - 5 then
+	fail("the carpet should fly high above the island")
+end
+if Mock.repAttributes.StormActive ~= true or not Mock.repAttributes.StormNextRadius then
+	fail("the storm and the first circle should be shown from the start")
+end
+if DamageService.canHurt(me, botRiders[1], false) then
+	fail("nobody on the carpet can be hurt")
+end
+-- what the player's own client does: keep them in their seat as the carpet flies
+local function ride(seconds: number)
+	for _ = 1, seconds * 4 do
+		local cf = CarpetService.seatCFrame(me)
+		if cf and myRoot() then
+			myRoot().CFrame = cf
+		end
+		Mock.step(0.25)
+		emulateDeaths()
+	end
+end
+ride(9)
+local takeOffPos = myRoot() and myRoot().Position
+ride(3)
+if player:GetAttribute("Riding") ~= true then
+	fail("riding along in your seat shouldn't drop you")
+end
+if takeOffPos and myRoot() and (myRoot().Position - takeOffPos).Magnitude < 50 then
+	fail("the carpet should be flying across the island")
+end
+Mock.Remotes.event("RoyaleAction"):FireServer("Jump")
+Mock.step(0.25)
+if player:GetAttribute("Gliding") ~= true or player:GetAttribute("Riding") == true or me.dropping ~= "gliding" then
+	fail("jumping should start the glide down")
+end
+if not player.Character:FindFirstChild("GlideRug") then
+	fail("gliders ride a little rug of their own")
+end
+if DamageService.canHurt(me, botRiders[1], false) or DamageService.canHurt(botRiders[1], me, false) then
+	fail("gliders can't fight yet")
+end
+-- touch down on dry ground
+local landX, landZ = 0, 0
+for _, loc in arena.locations do
+	landX, landZ = loc.pos.X, loc.pos.Z
+	break
+end
+myRoot().CFrame = CFrame.new(landX, arena.heightAt(landX, landZ) + 3, landZ)
+step(1)
+if me.dropping ~= nil or player:GetAttribute("Gliding") == true or player.Character:FindFirstChild("GlideRug") then
+	fail("reaching the ground should end the glide")
+end
+-- the bots hop off along the way and glide down onto dry land
+if
+	not waitUntil(function()
+		for _, c in botRiders do
+			if c.dropping ~= nil and Combatants.isActive(c) then
+				return false
+			end
+		end
+		return true
+	end, Config.Royale.CarpetTime + 30)
+then
+	fail("every bot should have landed once the carpet has crossed")
+end
+local liquid = arena.def.terrain.liquidLevel
+for _, c in botRiders do
+	if Combatants.isActive(c) then
+		local p = c.root.Position
+		if p.Y < liquid or math.abs(p.Y - (arena.heightAt(p.X, p.Z) + 3)) > 4 then
+			fail(string.format("%s landed badly at (%.0f, %.0f, %.0f)", c.name, p.X, p.Y, p.Z))
+		end
+		if c.root.Anchored then
+			fail(c.name .. " is still anchored after landing")
+		end
+	end
+end
+if Mock.repAttributes.CarpetActive == true then
+	fail("the carpet should be gone once everyone has landed")
+end
+if Mock.repAttributes.Phase ~= "Battle" then
+	fail("once the carpet has crossed the battle is on, phase is " .. tostring(Mock.repAttributes.Phase))
+end
+if not DamageService.canHurt(me, botRiders[1], false) then
+	fail("once landed, mages can fight")
+end
+if type(player:GetAttribute("RealmName")) ~= "string" then
+	fail("the player should know which realm they're in")
+end
+-- the circles: the first one holds, then the storm moves in (its centre too)
+local firstCenter = Mock.repAttributes.StormCenter
+local holdLeft = (Mock.repAttributes.StormMovesAt or 0) - Mock.workspace:GetServerTimeNow()
+if Mock.repAttributes.StormShrinking or holdLeft <= 0 then
+	fail("the first circle should hold for a while after the carpet has crossed")
+end
+dev("Advance", { seconds = math.max(1, holdLeft + 5) })
+step(2)
+if Mock.repAttributes.StormShrinking ~= true or Mock.repAttributes.StormStage ~= 1 then
+	fail("the storm should close in on the first circle")
+end
+dev("Advance", { seconds = 60 })
+step(2)
+if
+	Mock.repAttributes.StormStage ~= 2
+	or Mock.repAttributes.StormRadius > Config.Royale.Circles[1].radius * arena.radius + 1
+then
+	fail("after the first circle the next one should be revealed")
+end
+if firstCenter == Mock.repAttributes.StormCenter and Mock.repAttributes.StormRadius < 600 then
+	print("  (the first circle happened to be centred where the storm started)")
+end
+-- the final storm burns everyone out: the match is decided
+dev("God", { on = false })
+dev("Advance", { seconds = 400 })
+local winnersBefore = winners
+if not waitUntil(function()
+	return winners > winnersBefore
+end, 300) then
+	fail("the Battle Royale never finished")
+end
+local places = {}
+for _, c in riders do
+	if c.place then
+		if places[c.place] then
+			fail("two mages finished in place " .. c.place)
+		end
+		places[c.place] = true
+	end
+end
+if not me.place then
+	fail("the player should have a finishing place")
+end
+waitUntil(function()
+	return me ~= nil and not me.inMatch and Mock.repAttributes.Phase ~= "Ended"
+end, 30)
+-- (straight on to the duel queue, so no second battle royale starts)
+queueAction:InvokeServer("Join", "Duel")
+if finishedModes[#finishedModes] ~= "Royale" then
+	fail("the match should be reported as a Battle Royale, got " .. tostring(finishedModes[#finishedModes]))
+end
+if player:GetAttribute("Mode") ~= nil or player:GetAttribute("Riding") or player:GetAttribute("Gliding") then
+	fail("back in the library the player's mode and carpet flags should be cleared")
+end
+print(string.format("battle royale: %d mages, %d chests, finished %s", #riders, royaleChests, tostring(me.place)))
+
+-- 7. A 1v1 duel: alone in the queue, a bot steps in. One spell and one potion each, nobody else
+--    can interfere, and the winner earns coins.
+queueAction:InvokeServer("Join", "Duel")
+if not waitUntil(function()
+	return me.duel ~= nil
+end, Config.Duel.BotAfter + 10) then
+	fail("a bot should take on a lonely duelist")
+end
+local duel = me.duel
+if duel then
+	if player:GetAttribute("Mode") ~= "Duel" or player:GetAttribute("DuelState") ~= "Countdown" then
+		fail("the duel should start with a countdown")
+	end
+	local rival = if duel.a == me then duel.b else duel.a
+	local wandCount, spells = 0, 0
+	for _, wand in me.inventory.wands do
+		if wand then
+			wandCount += 1
+			for _, slot in wand.slots do
+				if slot then
+					spells += 1
+				end
+			end
+		end
+	end
+	local potions = 0
+	for _, n in me.inventory.consumables do
+		potions += n
+	end
+	if wandCount ~= 1 or spells ~= 1 or potions ~= 1 then
+		fail(
+			string.format(
+				"duelists get one spell and one potion (%d wands, %d spells, %d potions)",
+				wandCount,
+				spells,
+				potions
+			)
+		)
+	end
+	if DamageService.canHurt(rival, me, false) then
+		fail("no damage before the duel's countdown ends")
+	end
+	waitUntil(function()
+		return duel.state == "Fight"
+	end, 10)
+	if not DamageService.canHurt(rival, me, false) then
+		fail("duelists can hurt each other once the fight is on")
+	end
+	local coinsBefore = DataService.profile(player).coins
+	rival.lastAttacker = me
+	rival.lastAttackTime = Mock.workspace:GetServerTimeNow()
+	rival.humanoid.Health = 0
+	step(1)
+	if duel.winner ~= me or duelResults[#duelResults] ~= true then
+		fail("knocking the rival out should win the duel")
+	end
+	local gained = DataService.profile(player).coins - coinsBefore
+	if gained < Config.Duel.WinCoins then
+		fail("the duel winner should earn " .. Config.Duel.WinCoins .. " coins, got " .. gained)
+	end
+	step(6)
+	if me.duel ~= nil or player:GetAttribute("Mode") ~= nil or me.inMatch then
+		fail("after the duel the player should be back in the library")
+	end
+	if not me.queued or me.queuedMode ~= "Duel" then
+		fail("duelists stay queued for their next opponent")
+	end
+end
+queueAction:InvokeServer("Leave")
+print("duel: one spell, one potion, won against a bot")
 
 for _, w in Mock.warnings do
 	fail(w)

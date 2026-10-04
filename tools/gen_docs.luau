@@ -19,6 +19,7 @@ local MapDefs = shared.load("Server/Map/MapDefs")
 local Cosmetics = shared.load("Shared/Cosmetics")
 local Achievements = shared.load("Shared/Achievements")
 local Familiars = shared.load("Shared/Familiars")
+local Modes = shared.load("Shared/Modes")
 
 local out = {}
 local function line(s: string?)
@@ -193,11 +194,99 @@ for _, class in Classes.List do
 end
 line()
 
+line("## Game modes")
+line()
+line("| | Mode | Players | |")
+line("|---|---|---|---|")
+for _, mode in Modes.List do
+	line(string.format("| %s | **%s** | %s | %s |", mode.icon, mode.name, mode.players, mode.description))
+end
+line()
+do
+	local D, R = Config.Duel, Config.Royale
+	line(
+		string.format(
+			"**Duels:** a bot steps in after %ds alone; sudden death at %ds (%d damage a second), time limit %ds; %d coins for a win, %d for a loss; up to %d duels at once.",
+			D.BotAfter,
+			D.SuddenDeathAt,
+			D.SuddenDeathDps,
+			D.TimeLimit,
+			D.WinCoins,
+			D.LoseCoins,
+			D.MaxArenas
+		)
+	)
+	line()
+	line(
+		string.format(
+			"**Battle Royale:** up to %d mages (bots fill to %d). The queue gathers for %ds while the island is built, then the magic carpet crosses it in %ds, %d studs up. Gliders fall at %d studs/s and steer at %d studs/s. Chests refill at %ds.",
+			R.MaxParticipants,
+			R.FillTo,
+			R.GatherTime,
+			R.CarpetTime,
+			R.CarpetAltitude,
+			R.GlideFallSpeed,
+			R.GlideSpeed,
+			R.ChestRefillAt
+		)
+	)
+	line()
+	line("| Storm circle | Shown for | Closes in | Radius (share of the island) | Damage outside |")
+	line("|---|---|---|---|---|")
+	for i, c in R.Circles do
+		line(
+			string.format(
+				"| %d | %ds | %ds | %d%% | %d/s |",
+				i,
+				c.wait,
+				c.shrink,
+				math.floor(c.radius * 100 + 0.5),
+				c.dps
+			)
+		)
+	end
+	line()
+	local royale = MapDefs.Royale
+	line(
+		string.format(
+			"**%s %s** (radius %d studs, %d scattered chests plus those in its towns and landmarks):",
+			royale.icon,
+			royale.name,
+			royale.radius,
+			royale.outerChests
+		)
+	)
+	line()
+	line("| Realm | Named places | Landmarks | Weather |")
+	line("|---|---|---|---|")
+	for _, b in royale.biomes do
+		local names, landmarks = {}, {}
+		for _, n in b.named do
+			table.insert(names, n.name)
+		end
+		for _, kind in b.pois do
+			-- ("iceSpire" -> "ice spire")
+			table.insert(landmarks, string.lower((string.gsub(kind, "(%u)", " %1"))))
+		end
+		line(
+			string.format(
+				"| **%s** | %s | %d (%s) | %s |",
+				b.name,
+				table.concat(names, ", "),
+				b.poiCount,
+				table.concat(landmarks, ", "),
+				b.weather or "Clear"
+			)
+		)
+	end
+	line()
+end
+
 line("## Maps")
 line()
 line(
 	string.format(
-		"Players vote between %d random maps in the lobby before every match. Each match generates a fresh layout of the chosen map: terrain, ruins and chest spots are different every time. The cornucopia always holds %d chests.",
+		"In Survival Games, players vote between %d random maps in the lobby before every match. Each match generates a fresh layout of the chosen map: terrain, ruins and chest spots are different every time. The cornucopia always holds %d chests.",
 		Config.Match.VoteOptions,
 		Config.Arena.CornucopiaChests
 	)

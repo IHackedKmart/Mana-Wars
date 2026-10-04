@@ -247,6 +247,7 @@ local UIS = {
 	MouseIconEnabled = true,
 	InputBegan = Mock.signal(),
 	InputEnded = Mock.signal(),
+	JumpRequest = Mock.signal(),
 	GetMouseLocation = function()
 		return Vector2.new(640, 360)
 	end,
@@ -553,14 +554,24 @@ local votePanel = lobby:FindFirstChild("MapVote", true)
 local joinButton = lobby:FindFirstChild("JoinButton", true)
 local leaveButton = lobby:FindFirstChild("LeaveButton", true)
 check(State.inHub(), "a player out of the match and not queued is in the hub")
-check(joinButton and joinButton.Visible and not leaveButton.Visible, "the hub should show Join Game")
-check(string.find(joinButton.Text, "JOIN GAME", 1, true) ~= nil, "join button text")
+check(joinButton and joinButton.Visible and not leaveButton.Visible, "the hub should show Play")
+check(string.find(joinButton.Text, "PLAY", 1, true) ~= nil, "join button text")
 check(not votePanel.Visible, "players in the hub should not see the vote")
 check(not VoteService.vote(player, ballot[1].id), "players in the hub can't vote")
 check(hudText("Match starting in"), "the hub HUD should say a match is starting")
 shot("06_hub")
+-- Play opens the game mode menu; picking Survival Games joins its queue
 clickNamed(lobby, "JoinButton")
+local modeMenu = gui("ModeMenu")
+check(modeMenu and modeMenu.Enabled, "Play should open the game mode menu")
+check(not me.queued, "opening the menu doesn't join anything yet")
+for _, id in { "Survival", "Duel", "Royale" } do
+	check(modeMenu:FindFirstChild("Mode_" .. id, true) ~= nil, "the menu should offer " .. id)
+end
+shot("06a_modes")
+clickNamed(modeMenu, "Play_Survival")
 Mock.step(0.6, true)
+check(not modeMenu.Enabled, "picking a mode closes the menu")
 check(me.queued and State.queued(), "Join Game should put the player in the queue")
 check(not joinButton.Visible and leaveButton.Visible, "queued players should see Leave queue")
 check(hudText("Map vote"), "queued players should see the vote timer")
@@ -582,6 +593,7 @@ clickNamed(lobby, "LeaveButton")
 check(not me.queued and joinButton.Visible and not votePanel.Visible, "Leave queue should go back to the hub")
 check(VoteService.payload().counts[ballot[1].id] == 0, "leaving the queue should withdraw the vote")
 clickNamed(lobby, "JoinButton")
+clickNamed(modeMenu, "Play_Survival")
 clickNamed(lobby, "Vote_" .. ballot[1].id)
 check(VoteService.payload().counts[ballot[1].id] == 1, "voting again after rejoining")
 check(#QueueService.waiting() == 1, "one player in the queue")
@@ -1746,6 +1758,128 @@ do
 	DailyRewardService.today = realToday
 	ServerConfig.Achievements.BadgeIds.Victor = nil
 	checkWarnings("retention")
+end
+
+-- 19. Game modes on screen: switching queues from the library, a duel's HUD, and the battle
+--     royale's carpet (jump button, hints, place names over the island).
+do
+	local ServerGameState = server.load("Server/Services/GameState")
+	local QueueService = server.load("Server/Services/QueueService")
+	local modeMenu = gui("ModeMenu")
+	local lobby = gui("Lobby")
+	player:SetAttribute("Alive", false)
+	player:SetAttribute("InMatch", false)
+	me.inMatch = false
+	me.alive = false
+	QueueService.join(player, "Duel")
+	Mock.step(0.3, true)
+	local modeButton = lobby:FindFirstChild("ModeButton", true)
+	check(modeButton and modeButton.Visible, "modes: queued players can change their mode")
+	check(string.find(textOf(modeButton) or "", "1v1 Duel", 1, true) ~= nil, "modes: the button names the queue")
+	check(hudText("🤺 Looking for a duel opponent"), "modes: the duel queue's HUD")
+	clickNamed(lobby, "ModeButton")
+	check(modeMenu.Enabled, "modes: the change button opens the menu")
+	check(
+		string.find(textOf(modeMenu:FindFirstChild("Play_Duel", true)) or "", "Queued", 1, true) ~= nil,
+		"modes: the menu marks the current queue"
+	)
+	clickNamed(modeMenu, "Play_Royale")
+	Mock.step(0.3, true)
+	check(me.queuedMode == "Royale", "modes: switching to the battle royale")
+
+	-- a duel in progress
+	player:SetAttribute("Mode", "Duel")
+	player:SetAttribute("DuelState", "Fight")
+	player:SetAttribute("DuelOpponent", "Grimble")
+	player:SetAttribute("DuelEndsAt", Mock.workspace:GetServerTimeNow() + 60)
+	Mock.step(0.3, true)
+	check(hudText("🤺 Duel vs Grimble"), "modes: the duel HUD names the rival")
+	player:SetAttribute("Mode", nil)
+	player:SetAttribute("DuelState", nil)
+
+	-- the battle royale carpet
+	local arenaFolder = Mock.workspace:FindFirstChild("Arena") or Instance.new("Folder", Mock.workspace)
+	arenaFolder.Name = "Arena"
+	local places = Instance.new("Folder", arenaFolder)
+	places.Name = "Locations"
+	local anchor = Instance.new("Part", places)
+	local label = Instance.new("BillboardGui", anchor)
+	label.Enabled = false
+	local t0 = Mock.workspace:GetServerTimeNow()
+	ServerGameState.setPublic("MatchMode", "Royale")
+	ServerGameState.setPublic("CarpetFrom", Vector3.new(-800, 330, 0))
+	ServerGameState.setPublic("CarpetTo", Vector3.new(800, 330, 0))
+	ServerGameState.setPublic("CarpetStart", t0 - 5)
+	ServerGameState.setPublic("CarpetDuration", 50)
+	ServerGameState.setPublic("CarpetSize", Vector3.new(25.5, 0.6, 23))
+	ServerGameState.setPublic("CarpetActive", true)
+	ServerGameState.setPhase("Carpet", t0 + 45)
+	player:SetAttribute("InMatch", true)
+	player:SetAttribute("Alive", true)
+	player:SetAttribute("Mode", "Royale")
+	player:SetAttribute("Riding", true)
+	player:SetAttribute("CarpetSeat", Vector3.new(0, 2.6, 0))
+	Mock.step(0.3, true)
+	local carpetModel = Mock.workspace:FindFirstChild("MagicCarpet")
+	check(carpetModel ~= nil and #carpetModel:GetChildren() > 20, "carpet: the magic carpet is drawn")
+	local seatAt = carpetModel and carpetModel.PrimaryPart.Position
+	check(
+		seatAt and root.Position.Y > 320 and math.abs(root.Position.X - seatAt.X) < 3,
+		"carpet: the rider is flown along in their seat"
+	)
+	local carpetGui = gui("Carpet")
+	local jumpButton = carpetGui and carpetGui:FindFirstChild("JumpButton")
+	check(jumpButton and jumpButton.Visible, "carpet: the jump button shows once it's flying")
+	check(label.Enabled, "carpet: place names float over the island while riding")
+	check(hudText("🧞 Riding the magic carpet"), "carpet: the HUD says you're riding")
+	shot("18_carpet")
+	local jumps = Mock.remoteCounts["RoyaleAction:Jump"] or 0
+	clickNamed(carpetGui, "JumpButton")
+	check((Mock.remoteCounts["RoyaleAction:Jump"] or 0) == jumps + 1, "carpet: the button asks to jump")
+	UIS.JumpRequest:Fire()
+	Mock.step(0.1, true)
+	check((Mock.remoteCounts["RoyaleAction:Jump"] or 0) == jumps + 1, "carpet: one jump at a time")
+	player:SetAttribute("Riding", false)
+	player:SetAttribute("Gliding", true)
+	Mock.step(0.3, true)
+	check(not jumpButton.Visible, "carpet: no jump button while gliding")
+	check(hudText("🍃 Gliding down"), "carpet: the HUD says you're gliding")
+	local hint = carpetGui:FindFirstChild("CarpetHint")
+	check(hint and hint.Visible and string.find(textOf(hint) or "", "Gliding", 1, true), "carpet: the glide hint")
+	player:SetAttribute("Gliding", false)
+	ServerGameState.setPublic("CarpetActive", false)
+	ServerGameState.setPhase("Battle", 0)
+	ServerGameState.setPublic("StormStage", 2)
+	ServerGameState.setPublic("StormShrinking", false)
+	ServerGameState.setPublic("StormMovesAt", Mock.workspace:GetServerTimeNow() + 42)
+	ServerGameState.setPublic("StormNextCenter", Vector3.new(100, 15, 50))
+	ServerGameState.setPublic("StormNextRadius", 300)
+	ServerGameState.setPublic("StormActive", true)
+	ServerGameState.setPublic("StormRadius", 600)
+	player:SetAttribute("RealmName", "The Frostlands")
+	Mock.step(0.3, true)
+	check(Mock.workspace:FindFirstChild("MagicCarpet") == nil, "carpet: gone once everyone is down")
+	check(not label.Enabled, "carpet: place names hide again on the ground")
+	check(hudText("Storm moves in 0:4"), "royale: the HUD counts down to the next storm")
+	local realmShown = false
+	for _, inst in gui("HUD"):GetDescendants() do
+		if inst.ClassName == "TextLabel" and string.find(textOf(inst) or "", "📍 The Frostlands", 1, true) then
+			realmShown = true
+		end
+	end
+	check(realmShown, "royale: the HUD says which realm you're in")
+	local nextWall = Mock.workspace:FindFirstChild("ClientStorm"):FindFirstChild("NextCircle1")
+	check(nextWall and nextWall.Transparency < 1, "royale: the next circle is drawn")
+	shot("19_royale_hud")
+	player:SetAttribute("Mode", nil)
+	player:SetAttribute("RealmName", nil)
+	player:SetAttribute("InMatch", false)
+	player:SetAttribute("Alive", false)
+	ServerGameState.setPublic("MatchMode", "Survival")
+	ServerGameState.setPublic("StormNextRadius", nil)
+	ServerGameState.setPublic("StormActive", false)
+	places:Destroy()
+	checkWarnings("modes")
 end
 
 if failures > 0 then

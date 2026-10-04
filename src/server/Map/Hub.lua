@@ -775,7 +775,7 @@ function Hub.build(): HubInfo
 		18,
 		24,
 		Props.ARCANE,
-		"Join the game",
+		"Pick a game mode",
 		"Portal to the Athenaeum"
 	)
 	joinPortal:SetAttribute("PortalAction", "JoinQueue")
@@ -783,8 +783,8 @@ function Hub.build(): HubInfo
 		model,
 		CFrame.lookAt(at(0, -88, 35), at(0, 0, 35)),
 		Vector2.new(36, 7),
-		"⚔️  JOIN THE GAME  ⚔️",
-		"Walk through the portal to queue for the next match"
+		"▶️  PLAY  ▶️",
+		"Survival Games · 1v1 Duels · Battle Royale"
 	)
 
 	---------------------------------------------------------------- east: practice range

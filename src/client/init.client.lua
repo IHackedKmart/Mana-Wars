@@ -24,6 +24,8 @@ local DevController = require(Controllers.DevController)
 local AuctionController = require(Controllers.AuctionController)
 local ChatController = require(Controllers.ChatController)
 local AchievementsController = require(Controllers.AchievementsController)
+local ModeMenuController = require(Controllers.ModeMenuController)
+local CarpetController = require(Controllers.CarpetController)
 
 State.init()
 Widgets.initTooltip()
@@ -43,6 +45,8 @@ DevController.init()
 AuctionController.init()
 ChatController.init()
 AchievementsController.init()
+ModeMenuController.init()
+CarpetController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
 InputController.onToggleGrimoire = GrimoireController.toggle
@@ -57,6 +61,12 @@ LobbyController.onOpenAuction = function()
 	WardrobeController.close()
 	AchievementsController.close()
 	AuctionController.open()
+end
+LobbyController.onOpenModes = function()
+	WardrobeController.close()
+	AuctionController.close()
+	AchievementsController.close()
+	ModeMenuController.toggle()
 end
 LobbyController.onOpenAchievements = function()
 	WardrobeController.close()

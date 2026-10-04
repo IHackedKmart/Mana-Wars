@@ -1282,6 +1282,488 @@ function Landmarks.stump(
 	return { { cframe = CFrame.new(center.X, g + 1, center.Z), tier = "Shrine" } }
 end
 
+---------------------------------------------------------------------------
+-- The battle royale's named locations: villages, a town, castles, and bigger versions of the
+-- realms' own landmarks. Cottage and tower chests are "House" tier; the best loot is "Shrine".
+---------------------------------------------------------------------------
+
+local PLASTER = { rgb(232, 222, 200), rgb(222, 208, 182), rgb(236, 230, 214), rgb(214, 198, 176) }
+
+-- A half-timbered cottage on its own little foundation, door facing `facing` (a point).
+-- Returns a chest spot inside it.
+local function cottage(
+	parent: Instance,
+	at: Vector3,
+	facing: Vector3,
+	heightAt: HeightFn,
+	rng: Random,
+	style: Style
+): ChestSpot
+	local model = Build.model("Cottage", parent)
+	local w, d, wallH = rng:NextNumber(11, 14), rng:NextNumber(9, 11), 7.5
+	local floorY =
+		foundation(model, Vector3.new(at.X, 0, at.Z), math.max(w, d) + 2, heightAt, style.floor, style.floorColor)
+	local base = CFrame.lookAt(Vector3.new(at.X, floorY, at.Z), Vector3.new(facing.X, floorY, facing.Z))
+	local plaster = pick(rng, PLASTER)
+	local beam = style.wood:Lerp(Color3.new(0, 0, 0), 0.2)
+	-- walls: back, sides, and a front with a doorway (the front faces -Z, toward `facing`)
+	block(model, "Wall", Vector3.new(w, wallH, 1), base * CFrame.new(0, wallH / 2, d / 2), M.SmoothPlastic, plaster)
+	for side = -1, 1, 2 do
+		block(
+			model,
+			"Wall",
+			Vector3.new(1, wallH, d),
+			base * CFrame.new(side * w / 2, wallH / 2, 0),
+			M.SmoothPlastic,
+			plaster
+		)
+		local seg = (w - 4) / 2
+		block(
+			model,
+			"Wall",
+			Vector3.new(seg, wallH, 1),
+			base * CFrame.new(side * (2 + seg / 2), wallH / 2, -d / 2),
+			M.SmoothPlastic,
+			plaster
+		)
+		local window = block(
+			model,
+			"Window",
+			Vector3.new(0.3, 2, 2.4),
+			base * CFrame.new(side * (w / 2 + 0.1), wallH * 0.55, 0),
+			M.Neon,
+			rgb(255, 214, 140),
+			true
+		)
+		if side == 1 and rng:NextNumber() < 0.5 then
+			glow(window, window.Color, 14, 1)
+		end
+	end
+	block(
+		model,
+		"Lintel",
+		Vector3.new(4.4, wallH - 5.5, 1),
+		base * CFrame.new(0, 5.5 + (wallH - 5.5) / 2, -d / 2),
+		M.SmoothPlastic,
+		plaster
+	)
+	-- timber frame
+	for _, c in { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } } do
+		block(
+			model,
+			"Beam",
+			Vector3.new(0.8, wallH, 0.8),
+			base * CFrame.new(c[1] * w / 2, wallH / 2, c[2] * d / 2),
+			M.Wood,
+			beam
+		)
+	end
+	block(model, "Beam", Vector3.new(w + 0.6, 0.6, d + 0.6), base * CFrame.new(0, wallH, 0), M.Wood, beam)
+	-- a pitched roof in one of the realm's colours
+	local roofColor = pick(rng, style.banner):Lerp(rgb(90, 60, 50), 0.35)
+	local roof = base * CFrame.new(0, wallH + 2.2, 0) * CFrame.Angles(0, math.pi / 2, 0)
+	Build.wedge({
+		Name = "Roof",
+		Size = Vector3.new(d + 1.6, 4.4, w / 2 + 0.8),
+		CFrame = roof * CFrame.new(0, 0, -(w / 4 + 0.4)),
+		Material = M.Slate,
+		Color = roofColor,
+	}, model)
+	Build.wedge({
+		Name = "Roof",
+		Size = Vector3.new(d + 1.6, 4.4, w / 2 + 0.8),
+		CFrame = roof * CFrame.new(0, 0, w / 4 + 0.4) * CFrame.Angles(0, math.pi, 0),
+		Material = M.Slate,
+		Color = roofColor:Lerp(Color3.new(0, 0, 0), 0.12),
+	}, model)
+	if rng:NextNumber() < 0.5 then
+		local chimney = block(
+			model,
+			"Chimney",
+			Vector3.new(1.8, 5, 1.8),
+			base * CFrame.new(w / 2 - 2, wallH + 3, d / 4),
+			M.Brick,
+			rgb(140, 90, 70)
+		)
+		Build.make("Smoke", { Color = rgb(220, 220, 225), Opacity = 0.15, RiseVelocity = 4, Size = 2.5 }, chimney)
+	end
+	return {
+		cframe = base * CFrame.new(rng:NextNumber(-w / 4, w / 4), 1, d / 2 - 2) * CFrame.Angles(0, math.pi, 0),
+		tier = "House",
+	}
+end
+
+local function well(parent: Instance, at: Vector3, heightAt: HeightFn, style: Style)
+	local model = Build.model("Well", parent)
+	local g = heightAt(at.X, at.Z)
+	Build.cylinder(
+		Vector3.new(at.X, g + 1.2, at.Z),
+		6,
+		2.4,
+		{ Name = "Well", Material = style.stone, Color = style.stoneColors[1] },
+		model
+	)
+	Build.cylinder(
+		Vector3.new(at.X, g + 2.45, at.Z),
+		4.6,
+		0.2,
+		{ Name = "Water", Material = M.Glass, Color = rgb(60, 150, 200) },
+		model
+	)
+	for side = -1, 1, 2 do
+		block(model, "Post", Vector3.new(0.6, 5, 0.6), CFrame.new(at.X + side * 2.6, g + 4, at.Z), M.Wood, style.wood)
+	end
+	Build.wedge({
+		Name = "WellRoof",
+		Size = Vector3.new(7, 1.6, 3),
+		CFrame = CFrame.new(at.X, g + 7.2, at.Z - 1.5),
+		Material = M.WoodPlanks,
+		Color = style.wood,
+	}, model)
+	Build.wedge({
+		Name = "WellRoof",
+		Size = Vector3.new(7, 1.6, 3),
+		CFrame = CFrame.new(at.X, g + 7.2, at.Z + 1.5) * CFrame.Angles(0, math.pi, 0),
+		Material = M.WoodPlanks,
+		Color = style.wood,
+	}, model)
+end
+
+local function ring(count: number, radius: number, rng: Random, center: Vector3): { Vector3 }
+	local out = {}
+	local start = rng:NextNumber(0, math.pi * 2)
+	for i = 1, count do
+		local a = start + (i / count) * math.pi * 2 + rng:NextNumber(-0.15, 0.15)
+		local r = radius + rng:NextNumber(-3, 3)
+		table.insert(out, Vector3.new(center.X + math.cos(a) * r, 0, center.Z + math.sin(a) * r))
+	end
+	return out
+end
+
+-- A village: cottages around a square with a well and a market stall.
+function Landmarks.village(
+	parent: Instance,
+	center: Vector3,
+	heightAt: HeightFn,
+	rng: Random,
+	style: Style
+): { ChestSpot }
+	local model = landmark(parent, "Village")
+	local spots: { ChestSpot } = {}
+	for i, p in ring(6, 26, rng, center) do
+		local spot = cottage(model, p, center, heightAt, rng, style)
+		if i % 2 == 1 then
+			table.insert(spots, spot)
+		end
+	end
+	well(model, center, heightAt, style)
+	for i = 1, 4 do
+		local a = i / 4 * math.pi * 2 + 0.4
+		local p = Vector3.new(center.X + math.cos(a) * 12, 0, center.Z + math.sin(a) * 12)
+		lantern(model, Vector3.new(p.X, heightAt(p.X, p.Z) + 4, p.Z))
+		block(
+			model,
+			"LampPost",
+			Vector3.new(0.5, 4, 0.5),
+			CFrame.new(p.X, heightAt(p.X, p.Z) + 2, p.Z),
+			M.Metal,
+			rgb(50, 44, 40)
+		)
+	end
+	local g = heightAt(center.X + 7, center.Z + 7)
+	table.insert(spots, { cframe = CFrame.new(center.X + 7, g + 1, center.Z + 7), tier = "Shrine" })
+	return spots
+end
+
+-- The island's biggest town, in the middle: a ring of cottages, a market and a mage's tower.
+function Landmarks.town(parent: Instance, center: Vector3, heightAt: HeightFn, rng: Random, style: Style): { ChestSpot }
+	local model = landmark(parent, "Town")
+	local spots: { ChestSpot } = {}
+	for i, p in ring(9, 44, rng, center) do
+		local spot = cottage(model, p, center, heightAt, rng, style)
+		if i % 2 == 0 then
+			table.insert(spots, spot)
+		end
+	end
+	-- the mage's tower: the best loot is at the top
+	local g = heightAt(center.X, center.Z)
+	local tower = CFrame.new(center.X, g, center.Z)
+	Build.cylinder(
+		tower.Position + Vector3.new(0, 9, 0),
+		12,
+		18,
+		{ Name = "Tower", Material = style.stone, Color = style.stoneColors[1] },
+		model
+	)
+	Build.cylinder(
+		tower.Position + Vector3.new(0, 18.6, 0),
+		14,
+		1.2,
+		{ Name = "TowerTop", Material = style.stone, Color = style.stoneColors[2] },
+		model
+	)
+	for i = 1, 10 do
+		local a = i / 10 * math.pi * 2
+		block(
+			model,
+			"Merlon",
+			Vector3.new(2, 2.4, 1.4),
+			tower * CFrame.new(math.cos(a) * 6.4, 20.4, math.sin(a) * 6.4) * CFrame.Angles(0, -a, 0),
+			style.stone,
+			style.stoneColors[2]
+		)
+	end
+	local orb = block(
+		model,
+		"Orb",
+		Vector3.new(3, 3, 3),
+		tower * CFrame.new(0, 26, 0) * CFrame.Angles(math.rad(45), 0, math.rad(45)),
+		M.Neon,
+		style.accent,
+		true
+	)
+	glow(orb, style.accent, 40, 2.5)
+	-- a spiral of steps up the outside
+	for i = 0, 15 do
+		local a = i * 0.42
+		block(
+			model,
+			"Step",
+			Vector3.new(4, 0.8, 3),
+			tower * CFrame.Angles(0, a, 0) * CFrame.new(0, 1 + i * 1.15, -7.4),
+			style.stone,
+			style.stoneColors[3]
+		)
+	end
+	table.insert(spots, { cframe = tower * CFrame.new(2, 20.2, 2), tier = "Shrine" })
+	-- market stalls and benches around the square
+	for i = 1, 3 do
+		local a = i / 3 * math.pi * 2 + 0.6
+		local p = Vector3.new(center.X + math.cos(a) * 22, 0, center.Z + math.sin(a) * 22)
+		local gy = heightAt(p.X, p.Z)
+		local stall = CFrame.lookAt(Vector3.new(p.X, gy, p.Z), Vector3.new(center.X, gy, center.Z))
+		local c1 = style.banner[(i - 1) % #style.banner + 1]
+		for _, o in { { -2.5, -1.5 }, { 2.5, -1.5 }, { -2.5, 1.5 }, { 2.5, 1.5 } } do
+			block(model, "Post", Vector3.new(0.4, 6, 0.4), stall * CFrame.new(o[1], 3, o[2]), M.Wood, style.wood)
+		end
+		for k = 0, 4 do
+			block(
+				model,
+				"Awning",
+				Vector3.new(1.1, 0.25, 4),
+				stall * CFrame.new(-2.2 + k * 1.1, 6.2, 0),
+				M.Fabric,
+				if k % 2 == 0 then c1 else rgb(246, 236, 214),
+				true
+			)
+		end
+		block(model, "Counter", Vector3.new(5, 2.4, 1.2), stall * CFrame.new(0, 1.2, -1.8), M.WoodPlanks, style.wood)
+	end
+	for i = 1, 6 do
+		local a = i / 6 * math.pi * 2
+		local p = Vector3.new(center.X + math.cos(a) * 33, 0, center.Z + math.sin(a) * 33)
+		lantern(model, Vector3.new(p.X, heightAt(p.X, p.Z) + 5, p.Z))
+		block(
+			model,
+			"LampPost",
+			Vector3.new(0.5, 5, 0.5),
+			CFrame.new(p.X, heightAt(p.X, p.Z) + 2.5, p.Z),
+			M.Metal,
+			rgb(50, 44, 40)
+		)
+	end
+	return spots
+end
+
+-- A castle: curtain walls with a gate, four round towers and a keep in the courtyard.
+function Landmarks.castle(
+	parent: Instance,
+	center: Vector3,
+	heightAt: HeightFn,
+	rng: Random,
+	style: Style
+): { ChestSpot }
+	local model = landmark(parent, "Castle")
+	local floorY = foundation(model, center, 46, heightAt, style.floor, style.floorColor)
+	local yaw = CFrame.new(center.X, floorY, center.Z) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
+	local S = 20 -- half the wall length
+	local wallH = 12
+	local stone = style.stoneColors
+	for side = 0, 3 do
+		local wall = yaw * CFrame.Angles(0, side * math.pi / 2, 0) * CFrame.new(0, 0, -S)
+		if side == 0 then
+			-- the gate side: two pieces and an arch
+			for k = -1, 1, 2 do
+				block(
+					model,
+					"Wall",
+					Vector3.new(S - 4, wallH, 3),
+					wall * CFrame.new(k * (S + 4) / 2, wallH / 2, 0),
+					style.stone,
+					stone[1]
+				)
+			end
+			block(model, "Gatehouse", Vector3.new(10, 4, 4), wall * CFrame.new(0, wallH - 2, 0), style.stone, stone[2])
+			block(
+				model,
+				"Portcullis",
+				Vector3.new(7.6, 0.5, 0.4),
+				wall * CFrame.new(0, wallH - 4.3, -1.4),
+				M.Metal,
+				rgb(50, 46, 44),
+				true
+			)
+		else
+			block(
+				model,
+				"Wall",
+				Vector3.new(S * 2, wallH, 3),
+				wall * CFrame.new(0, wallH / 2, 0),
+				style.stone,
+				stone[(side % #stone) + 1]
+			)
+		end
+		for i = 0, 9 do
+			block(
+				model,
+				"Merlon",
+				Vector3.new(2, 2.2, 3.2),
+				wall * CFrame.new(-S + 2 + i * 4, wallH + 1.1, -0.1),
+				style.stone,
+				stone[2]
+			)
+		end
+		block(
+			model,
+			"Walkway",
+			Vector3.new(S * 2, 1, 3),
+			wall * CFrame.new(0, wallH - 0.5, 2.6),
+			M.WoodPlanks,
+			style.wood
+		)
+	end
+	-- round towers on the corners, flying the realm's banner
+	for i, c in { { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } } do
+		local at = (yaw * CFrame.new(c[1] * S, 0, c[2] * S)).Position
+		Build.cylinder(
+			at + Vector3.new(0, 9, 0),
+			9,
+			18,
+			{ Name = "Tower", Material = style.stone, Color = stone[(i % #stone) + 1] },
+			model
+		)
+		Build.cylinder(
+			at + Vector3.new(0, 18.6, 0),
+			10.5,
+			1.2,
+			{ Name = "TowerTop", Material = style.stone, Color = stone[2] },
+			model
+		)
+		banner(model, at + Vector3.new(0, 19, 0), 8, style.banner[(i - 1) % #style.banner + 1], i)
+	end
+	-- the keep, with a ramp up to its roof
+	local keep = yaw * CFrame.new(0, 0, 6)
+	block(model, "Keep", Vector3.new(14, 14, 12), keep * CFrame.new(0, 7, 0), style.stone, stone[3])
+	block(model, "KeepDoor", Vector3.new(4, 6, 0.6), keep * CFrame.new(0, 3, -6.1), M.WoodPlanks, style.wood, true)
+	Build.wedge({
+		Name = "Ramp",
+		Size = Vector3.new(4, 14, 18),
+		CFrame = keep * CFrame.new(-9, 7, 3) * CFrame.Angles(0, math.pi, 0),
+		Material = style.stone,
+		Color = stone[1],
+	}, model)
+	for i = 0, 5 do
+		block(model, "Merlon", Vector3.new(2, 2, 1), keep * CFrame.new(-6 + i * 2.4, 15, -5.6), style.stone, stone[2])
+	end
+	local brazier =
+		block(model, "Brazier", Vector3.new(2.4, 1, 2.4), keep * CFrame.new(4, 14.5, 3), M.Metal, rgb(60, 52, 46))
+	Build.make("Fire", { Size = 4, Heat = 7 }, brazier)
+	glow(brazier, rgb(255, 160, 80), 26, 2)
+	return {
+		{ cframe = keep * CFrame.new(0, 15, 2), tier = "Shrine" },
+		{ cframe = yaw * CFrame.new(-14, 1, -12), tier = "House" },
+		{ cframe = yaw * CFrame.new(14, 1, -12) * CFrame.Angles(0, math.pi, 0), tier = "House" },
+	}
+end
+
+local function merge(into: { ChestSpot }, more: { ChestSpot })
+	for _, spot in more do
+		table.insert(into, spot)
+	end
+end
+
+local function offset(center: Vector3, angle: number, distance: number): Vector3
+	return Vector3.new(center.X + math.cos(angle) * distance, 0, center.Z + math.sin(angle) * distance)
+end
+
+-- The Ashlands' forge-town: the dwarven forge, an obsidian gate and smoking vents around them.
+function Landmarks.cinderforge(
+	parent: Instance,
+	center: Vector3,
+	heightAt: HeightFn,
+	rng: Random,
+	style: Style
+): { ChestSpot }
+	local spots = Landmarks.forge(parent, center, heightAt, rng, style)
+	local a = rng:NextNumber(0, math.pi * 2)
+	merge(spots, Landmarks.obsidianGate(parent, offset(center, a, 32), heightAt, rng, style))
+	merge(spots, Landmarks.camp(parent, offset(center, a + 2.4, 30), heightAt, rng, style))
+	return spots
+end
+
+-- The desert's market town: the bazaar, a step pyramid behind it and palms around a pool.
+function Landmarks.oasisTown(
+	parent: Instance,
+	center: Vector3,
+	heightAt: HeightFn,
+	rng: Random,
+	style: Style
+): { ChestSpot }
+	local spots = Landmarks.bazaar(parent, center, heightAt, rng, style)
+	local a = rng:NextNumber(0, math.pi * 2)
+	merge(spots, Landmarks.pyramid(parent, offset(center, a, 44), heightAt, rng, style))
+	for _, p in ring(3, 22, rng, center) do
+		merge(spots, { cottage(parent, p, center, heightAt, rng, style) })
+	end
+	return spots
+end
+
+-- The Wildwood's fairy glade: a ring of glowing mushrooms, a hollow stump and giant toadstools.
+function Landmarks.glowcap(
+	parent: Instance,
+	center: Vector3,
+	heightAt: HeightFn,
+	rng: Random,
+	style: Style
+): { ChestSpot }
+	local spots = Landmarks.fairyRing(parent, center, heightAt, rng, style)
+	local a = rng:NextNumber(0, math.pi * 2)
+	merge(spots, Landmarks.stump(parent, offset(center, a, 28), heightAt, rng, style))
+	merge(spots, Landmarks.stump(parent, offset(center, a + 2.2, 30), heightAt, rng, style))
+	return spots
+end
+
+-- A small village with a windmill.
+function Landmarks.millbrook(
+	parent: Instance,
+	center: Vector3,
+	heightAt: HeightFn,
+	rng: Random,
+	style: Style
+): { ChestSpot }
+	local model = landmark(parent, "Village")
+	local spots: { ChestSpot } = {}
+	for i, p in ring(4, 20, rng, center) do
+		local spot = cottage(model, p, center, heightAt, rng, style)
+		if i % 2 == 0 then
+			table.insert(spots, spot)
+		end
+	end
+	well(model, center, heightAt, style)
+	merge(spots, Landmarks.windmill(parent, offset(center, rng:NextNumber(0, math.pi * 2), 38), heightAt, rng, style))
+	return spots
+end
+
 Landmarks.Builders = {
 	ruinedTower = Landmarks.ruinedTower,
 	shrine = Landmarks.shrine,
@@ -1297,6 +1779,13 @@ Landmarks.Builders = {
 	bazaar = Landmarks.bazaar,
 	fairyRing = Landmarks.fairyRing,
 	stump = Landmarks.stump,
+	village = Landmarks.village,
+	town = Landmarks.town,
+	castle = Landmarks.castle,
+	cinderforge = Landmarks.cinderforge,
+	oasisTown = Landmarks.oasisTown,
+	glowcap = Landmarks.glowcap,
+	millbrook = Landmarks.millbrook,
 }
 
 -- How much room each landmark needs (keeps chests, trees and other landmarks out of it).
@@ -1304,6 +1793,13 @@ Landmarks.Footprint = {
 	pyramid = 26,
 	ancientOak = 24,
 	bazaar = 18,
+	village = 36,
+	town = 58,
+	castle = 34,
+	cinderforge = 50,
+	oasisTown = 66,
+	glowcap = 42,
+	millbrook = 50,
 }
 
 return Landmarks

@@ -208,9 +208,39 @@ Kits (classes) decide what you start each match with. The Apprentice is free; ev
 | 🌟 | **Archmage** | Archmage | Staff of the Archmage (Legendary), Warding Focus (Epic) | Arcane Rain, Fireworks, Starfall, Magic Missile, Escape Step, Bulwark | Arcane x2, Fractal, Skyfall, Triple, +1 random |
 | ☄️ | **Harbinger** | Archmage | Harbinger's Rod (Legendary), Chaos Scepter (Epic) | Watchful Eye, Meteor, Seeking Inferno, Fireball, Chaos Orb, Sparkler | Chaos, Explosive x2, Gigantic, Sentry, +1 random |
 
+## Game modes
+
+| | Mode | Players | |
+|---|---|---|---|
+| ⚔️ | **Survival Games** | Up to 12 mages | Vote on one of five islands, start on a pedestal around the cornucopia, loot chests and outlast everyone as the Mana Storm closes in. |
+| 🤺 | **1v1 Duel** | 2 mages | Face a single rival in a floating arena. You each get a random spell and one potion: no chests, no excuses. Starts as soon as an opponent is found. |
+| 🧞 | **Battle Royale** | Up to 50 mages | Ride a flying carpet across an enormous island of five lands, jump off wherever you like and glide down. Loot villages, castles and ruins while the storm circle shrinks. |
+
+**Duels:** a bot steps in after 15s alone; sudden death at 75s (6 damage a second), time limit 150s; 3 coins for a win, 1 for a loss; up to 6 duels at once.
+
+**Battle Royale:** up to 50 mages (bots fill to 20). The queue gathers for 30s while the island is built, then the magic carpet crosses it in 50s, 330 studs up. Gliders fall at 32 studs/s and steer at 55 studs/s. Chests refill at 300s.
+
+| Storm circle | Shown for | Closes in | Radius (share of the island) | Damage outside |
+|---|---|---|---|---|
+| 1 | 100s | 60s | 62% | 2/s |
+| 2 | 55s | 45s | 36% | 4/s |
+| 3 | 40s | 40s | 18% | 6/s |
+| 4 | 30s | 30s | 7% | 10/s |
+| 5 | 20s | 30s | 0% | 15/s |
+
+**🧞 The Sundered Realms** (radius 1000 studs, 140 scattered chests plus those in its towns and landmarks):
+
+| Realm | Named places | Landmarks | Weather |
+|---|---|---|---|
+| **The Heartland** | Spellcaster's Square | 3 (shrine, camp, windmill) | Clear |
+| **The Frostlands** | Frostfang Hold, Rimeholm | 5 (ice spire, lodge, watchtower, ruined tower, shrine) | Snow |
+| **The Ashlands** | Cinderforge, Ashfall Keep | 5 (obsidian gate, ruined tower, watchtower, camp, shrine) | Ash |
+| **The Sunscar Desert** | Sunscar Bazaar, Dunewatch | 5 (pyramid, ruined tower, camp, watchtower, shrine) | Dust |
+| **The Wildwood** | Glowcap Hollow, Mossbrook | 5 (stump, fairy ring, ancient oak, camp, ruined tower) | Spores |
+
 ## Maps
 
-Players vote between 3 random maps in the lobby before every match. Each match generates a fresh layout of the chosen map: terrain, ruins and chest spots are different every time. The cornucopia always holds 10 chests.
+In Survival Games, players vote between 3 random maps in the lobby before every match. Each match generates a fresh layout of the chosen map: terrain, ruins and chest spots are different every time. The cornucopia always holds 10 chests.
 
 | | Map | Radius | Scattered chests | Landmarks | Weather | |
 |---|---|---|---|---|---|---|
@@ -328,7 +358,7 @@ Every item a coffer hands out can turn out to be a **familiar** instead (Tattere
 
 ## Achievements
 
-Each pays its Enchanted Coins once (315 in all). Players also get **3 coins a day** for logging in (days start at midnight UTC).
+Each pays its Enchanted Coins once (345 in all). Players also get **3 coins a day** for logging in (days start at midnight UTC).
 
 | | Achievement | Goal | Reward |
 |---|---|---|---|
@@ -339,6 +369,8 @@ Each pays its Enchanted Coins once (315 in all). Players also get **3 coins a da
 | 🏆 | **Victor** | Win a match. | 10 💰 |
 | 👑 | **Champion** | Win 10 matches. | 30 💰 |
 | 🌟 | **Living Legend** | Win 50 matches. | 100 💰 |
+| 🤺 | **Honour Bound** | Win 5 duels. | 10 💰 |
+| 🧞 | **Carpet Champion** | Win a Battle Royale. | 20 💰 |
 | 🥉 | **Survivor** | Finish a match in the top 3. | 5 💰 |
 | 🎮 | **Regular** | Play 25 matches. | 15 💰 |
 | 🔮 | **Spellwright** | Forge 10 spells in the Spellforge. | 10 💰 |

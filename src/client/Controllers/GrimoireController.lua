@@ -212,9 +212,20 @@ chapter("Welcome", "📖  Welcome", function()
 			.. Config.Match.MaxParticipants
 			.. " mages drop onto an island, loot chests, craft spells, and fight until one is left standing."
 	)
-	subheading("How a match plays out")
+	subheading("Game modes")
 	para(
-		"<b>1. Join.</b> Everyone starts in <b>Arcanum Plaza</b>, the hub. Practise as long as you like, then walk through the <b>portal</b> (or press <b>⚔️ Join Game</b>) to join the queue.\n"
+		"Press <b>▶️ Play</b> (or walk through the Plaza's portal) and pick one:\n"
+			.. "<b>⚔️ Survival Games:</b> the classic, explained below.\n"
+			.. "<b>🤺 1v1 Duel:</b> a floating arena, one rival, one random spell and one random potion each. Sudden death after "
+			.. Config.Duel.SuddenDeathAt
+			.. " seconds.\n"
+			.. "<b>🧞 Battle Royale:</b> up to "
+			.. Config.Royale.MaxParticipants
+			.. " mages ride a <b>magic carpet</b> across an enormous island of five realms. Press <b>SPACE</b> to jump off wherever you like and glide down (steer with your movement keys; nobody can hurt you until you land). Loot the towns, castles and villages, and stay inside the <b>storm circles</b>: the next one shows as a faint white wall before the storm moves in."
+	)
+	subheading("How a Survival Games match plays out")
+	para(
+		"<b>1. Join.</b> Everyone starts in <b>Arcanum Plaza</b>, the hub. Practise as long as you like, then walk through the <b>portal</b> (or press <b>▶️ Play</b>) and pick Survival Games.\n"
 			.. "<b>2. Vote.</b> The portal takes you to the library, the <b>Arcane Athenaeum</b>. Vote for the next map on the right of your screen.\n"
 			.. "<b>3. Pedestals.</b> Everyone is placed around the <b>cornucopia</b>, the ring of chests in the middle. Wait for the gong!\n"
 			.. "<b>4. Grace period.</b> For the first "
@@ -586,7 +597,8 @@ chapter("Controls", "🎮  Controls", function()
 			.. "<b>Switch wand:</b> 1-4, or Q to cycle (gamepad: L1/R1)\n"
 			.. "<b>Spellbook & Spellforge:</b> B (gamepad: Y)\n"
 			.. "<b>Grimoire:</b> H\n"
-			.. "<b>Join the game:</b> walk through the Plaza's portal, or press ⚔️ Join Game\n"
+			.. "<b>Join the game:</b> walk through the Plaza's portal, or press ▶️ Play, then pick a mode\n"
+			.. "<b>Jump off the magic carpet:</b> SPACE (mobile: jump, gamepad: A)\n"
 			.. "<b>Open chests:</b> E (hold).  <b>Take everything:</b> F\n"
 			.. "<b>Potions:</b> "
 			.. table.concat(potions, ",  ")

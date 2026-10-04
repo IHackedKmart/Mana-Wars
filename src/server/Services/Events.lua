@@ -4,7 +4,8 @@
 --
 -- Events (all start with the player they're about):
 --   Kill(player)                            Win(player)
---   MatchFinished(player, place, outOf, kills, mapId, classId)
+--   MatchFinished(player, place, outOf, kills, mapId, classId, mode)   ("Survival" or "Royale")
+--   DuelFinished(player, won, rivalIsBot)   ModeQueued(player, mode)
 --   ChestOpened(player, tier)               Forged(player)
 --   CofferOpened(player, boxId)             FamiliarFound(player, familiar)
 --   Crafted(player, garment)                AuctionSold(player, price)   AuctionBought(player, price)

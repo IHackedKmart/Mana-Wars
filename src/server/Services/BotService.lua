@@ -248,10 +248,12 @@ local function think(c: Combatant)
 	local t = now()
 	animate(c)
 
-	if c.locked or GameState.phase == "Countdown" then
+	-- frozen on a pedestal / in a duel countdown, or still coming down from the carpet
+	if c.locked or c.dropping or (not c.duel and GameState.phase == "Countdown") then
 		hum:Move(Vector3.zero)
 		return
 	end
+	local duel = c.duel
 
 	if hum.Health < 45 and (c.inventory.consumables.HealingDraught or 0) > 0 then
 		InventoryService.useConsumable(c, "HealingDraught")
@@ -259,16 +261,21 @@ local function think(c: Combatant)
 
 	local center = GameState.stormCenter
 	local toCenter = Vector3.new(center.X - pos.X, 0, center.Z - pos.Z)
-	local outside = toCenter.Magnitude > GameState.stormRadius - 12
+	-- (duelists are far from the main arena's storm)
+	local outside = duel == nil and toCenter.Magnitude > GameState.stormRadius - 12
 
 	if t >= b.nextTargetCheck then
 		b.nextTargetCheck = t + 0.5
 		b.target = nil
-		if GameState.phase == "Battle" then
+		local fighting = if duel
+			then duel.state == "Fight"
+			else GameState.phase == "Battle" or GameState.phase == "Carpet"
+		if fighting then
 			local eye = eyeOf(c)
 			local best, bestDist = nil, b.sight
 			for _, other in Combatants.active() do
-				if other ~= c then
+				-- only rivals in the same fight (a duel, or the main match) who have landed
+				if other ~= c and other.duel == duel and not other.dropping then
 					local d = ((other.root :: BasePart).Position - pos).Magnitude
 					if d < bestDist and WorldQuery.lineOfSight(eye, eyeOf(other)) then
 						best, bestDist = other, d
@@ -323,6 +330,13 @@ local function think(c: Combatant)
 		root.CFrame = CFrame.lookAt(pos, Vector3.new(tp.X, pos.Y, tp.Z))
 		if rng:NextNumber() < 0.025 then
 			hum.Jump = true
+		end
+	elseif duel then
+		-- no line of sight in a duel: go and find the opponent
+		hum.AutoRotate = true
+		local rival = if duel.a == c then duel.b else duel.a
+		if rival and Combatants.isActive(rival) then
+			dest = (rival.root :: BasePart).Position
 		end
 	else
 		hum.AutoRotate = true
@@ -382,14 +396,18 @@ function BotService.all(): { Combatant }
 	return bots
 end
 
+-- Removes every bot from the main arena (bots fighting a duel are left alone).
 function BotService.removeAll()
-	for _, c in bots do
-		if c.model then
-			c.model:Destroy()
+	for i = #bots, 1, -1 do
+		local c = bots[i]
+		if not c.duel then
+			if c.model then
+				c.model:Destroy()
+			end
+			Combatants.remove(c)
+			table.remove(bots, i)
 		end
-		Combatants.remove(c)
 	end
-	table.clear(bots)
 end
 
 function BotService.remove(c: Combatant)

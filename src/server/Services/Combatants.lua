@@ -47,6 +47,9 @@ export type Combatant = {
 	devGod: boolean?, -- dev panel: takes no damage
 	devMana: boolean?, -- dev panel: spells cost no mana (or health)
 	bot: { [string]: any }?,
+	queuedMode: string, -- which game mode they're queued for (see Shared/Modes)
+	duel: any?, -- the 1v1 duel they're fighting in (DuelService), if any
+	dropping: string?, -- battle royale: "riding" the carpet or "gliding" down (can't fight yet)
 }
 
 local Combatants = {}
@@ -96,6 +99,9 @@ function Combatants.create(name: string, player: Player?): Combatant
 		place = nil,
 		familiar = nil,
 		bot = nil,
+		queuedMode = "Survival",
+		duel = nil,
+		dropping = nil,
 	}
 	byId[c.id] = c
 	if player then

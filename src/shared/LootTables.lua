@@ -35,6 +35,14 @@ LootTables.Tiers = {
 		maxWandRank = 4,
 		healChance = 0.5,
 	},
+	House = { -- inside the battle royale's cottages and castles
+		displayName = "Cupboard",
+		rolls = { 1, 3 },
+		luck = 0.4,
+		weights = { Part = 48, Spell = 24, Wand = 11, Consumable = 17 },
+		maxWandRank = 5,
+		healChance = 0.55,
+	},
 	Cornucopia = {
 		displayName = "Cornucopia Chest",
 		rolls = { 2, 3 },

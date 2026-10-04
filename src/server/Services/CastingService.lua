@@ -185,7 +185,7 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 		return false, "inactive"
 	end
 	-- match fighters cast during the grace period and the battle; the lobby Spell Lab always works
-	if not c.practice and not GameState.combatAllowed() then
+	if not c.practice and not GameState.combatAllowedFor(c) then
 		return false, "not now"
 	end
 	if (c.status.frozenUntil or 0) > now() then

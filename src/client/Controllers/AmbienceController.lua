@@ -1,12 +1,16 @@
 -- Per-map weather drawn around the camera while you're on the island:
--- snow on Frostpeak, falling ash on Ashen Wastes, drifting dust on Sandsea, glowing spores in Fungal Hollow.
+-- snow on Frostpeak, falling ash on Ashen Wastes, drifting dust on Sandsea, glowing spores in Fungal Hollow
+-- (and on the battle royale island, the weather of whichever realm you're in).
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 
 local AmbienceController = {}
+
+local player = Players.LocalPlayer
 
 local WEATHER: { [string]: { [string]: any } } = {
 	Snow = {
@@ -92,7 +96,11 @@ function AmbienceController.init()
 		local pos = camera.CFrame.Position
 		-- no weather up in the lobby (or while the lobby is watching through the window)
 		local onIsland = pos.Y < Config.Arena.LobbyHeight - 100
-		setWeather(if onIsland then tostring(ReplicatedStorage:GetAttribute("MapWeather") or "") else "")
+		-- (the battle royale island's weather depends on which realm you're in)
+		local weather = if player:GetAttribute("Mode") == "Royale"
+			then player:GetAttribute("RealmWeather")
+			else ReplicatedStorage:GetAttribute("MapWeather")
+		setWeather(if onIsland then tostring(weather or "") else "")
 		emitterPart.CFrame = CFrame.new(pos + Vector3.new(0, 25, 0))
 	end)
 end

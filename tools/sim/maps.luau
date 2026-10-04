@@ -248,6 +248,165 @@ for _, def in MapDefs.List do
 	end
 end
 
+-- The battle royale island: five realms, named places, chests everywhere, no cornucopia
+do
+	local def = MapDefs.Royale
+	local before = #Mock.warnings
+	local writesBefore = voxelWrites
+	local arena = nil
+	local started = os.clock()
+	local co = Mock.task.spawn(function()
+		arena = MapService.generate(4321, def)
+	end)
+	local guard = 0
+	while coroutine.status(co) ~= "dead" and guard < 60000 do
+		Mock.step(1 / 60)
+		guard += 1
+	end
+	if not arena then
+		fail("Royale: generation did not finish")
+	else
+		local tiers = {}
+		local outerPositions = {}
+		for _, spot in arena.chestSpots do
+			tiers[spot.tier] = (tiers[spot.tier] or 0) + 1
+			if spot.tier == "Outer" then
+				table.insert(outerPositions, spot.cframe.Position)
+			end
+			local p = spot.cframe.Position
+			if Vector3.new(p.X, 0, p.Z).Magnitude > def.radius then
+				fail("Royale: a chest is out at sea")
+			end
+		end
+		local folder = Mock.workspace:FindFirstChild("Arena")
+		local parts, labels, hidden = 0, 0, 0
+		for _, inst in folder:GetDescendants() do
+			if inst:IsA("BasePart") then
+				parts += 1
+			end
+			if inst:GetAttribute("Location") then
+				labels += 1
+				local gui = inst:FindFirstChildOfClass("BillboardGui")
+				if gui and gui.Enabled == false then
+					hidden += 1
+				end
+			end
+		end
+		local decorCount = #folder:FindFirstChild("Decor"):GetChildren()
+		local named = 0
+		for _, b in def.biomes do
+			named += #b.named
+		end
+		print(
+			string.format(
+				"%-14s r=%d  chests: %d outer, %d ruins, %d cupboards  named places: %d  decor: %d  parts: %d  voxel chunks: %d  (%.1fs)",
+				def.name,
+				def.radius,
+				tiers.Outer or 0,
+				tiers.Shrine or 0,
+				tiers.House or 0,
+				#arena.locations,
+				decorCount,
+				parts,
+				voxelWrites - writesBefore,
+				os.clock() - started
+			)
+		)
+		if #arena.pedestals ~= 0 or tiers.Cornucopia then
+			fail("Royale: the island has no cornucopia or pedestals")
+		end
+		if (tiers.Outer or 0) < def.outerChests * 0.8 then
+			fail("Royale: only " .. (tiers.Outer or 0) .. " scattered chests")
+		end
+		if (tiers.House or 0) < 12 or (tiers.Shrine or 0) < 15 then
+			fail("Royale: the towns and landmarks should hold plenty of chests")
+		end
+		if #arena.locations ~= named or labels ~= named or hidden ~= named then
+			fail("Royale: every named place needs a (hidden until the drop) floating label")
+		end
+		for i, a in arena.locations do
+			for j = i + 1, #arena.locations do
+				local b = arena.locations[j]
+				if (a.pos - b.pos).Magnitude < a.radius + b.radius then
+					fail("Royale: " .. a.name .. " overlaps " .. b.name)
+				end
+			end
+			local realm = arena.realmAt(a.pos.X, a.pos.Z)
+			if a.pos.Y <= def.terrain.liquidLevel + 1 then
+				fail("Royale: " .. a.name .. " is under water")
+			end
+			if not realm or (a.realm ~= realm.name and a.realm ~= "The Heartland") then
+				fail("Royale: " .. a.name .. " is not in " .. a.realm)
+			end
+		end
+		if not folder:FindFirstChild("Volcano") then
+			fail("Royale: the Ashlands need their volcano")
+		end
+		if decorCount < 800 then
+			fail("Royale: too little decoration (" .. decorCount .. ")")
+		end
+		if parts > 60000 then
+			fail("Royale: the island is too heavy: " .. parts .. " parts")
+		end
+		for i = 1, #outerPositions do
+			for j = i + 1, #outerPositions do
+				local a, b = outerPositions[i], outerPositions[j]
+				if (Vector3.new(a.X, 0, a.Z) - Vector3.new(b.X, 0, b.Z)).Magnitude < Config.Arena.ChestSpacing - 8 then
+					fail("Royale: two scattered chests are too close together")
+				end
+			end
+		end
+		local edge = folder:FindFirstChild("WorldEdge")
+		if not edge or edge.Position.Y + edge.Size.Y / 2 < Config.Royale.CarpetAltitude + 50 then
+			fail("Royale: the world's edge should rise well above the carpet")
+		end
+		for i = before + 1, #Mock.warnings do
+			fail("Royale: " .. Mock.warnings[i])
+		end
+	end
+end
+
+-- The battle royale's storm circles: each inside the one before and well inside the coast, and
+-- the storm only ever closes in
+do
+	local StormCircles = server.load("Server/Services/StormCircles")
+	local circles = Config.Royale.Circles
+	local R = MapDefs.Royale.radius
+	local bad = 0
+	for seed = 1, 60 do
+		local plan = StormCircles.plan(circles, R, 15, Mock.Random.new(seed))
+		if #plan ~= #circles then
+			bad += 1
+		end
+		for _, stage in plan do
+			local shift = Vector3.new(stage.toCenter.X - stage.fromCenter.X, 0, stage.toCenter.Z - stage.fromCenter.Z)
+			local flat = Vector3.new(stage.toCenter.X, 0, stage.toCenter.Z)
+			if shift.Magnitude + stage.toRadius > stage.fromRadius + 0.01 then
+				bad += 1
+			end
+			if stage.toRadius < R * 0.8 and flat.Magnitude + stage.toRadius > R * 0.8 + 0.01 then
+				bad += 1
+			end
+		end
+		local last = math.huge
+		for t = 0, plan[#plan].shrinkUntil + 30, 1.5 do
+			local state = StormCircles.at(plan, t)
+			if state.radius > last + 1e-6 then
+				bad += 1
+			end
+			last = state.radius
+		end
+		if StormCircles.at(plan, 0).dps ~= 0 or StormCircles.at(plan, 1e6).radius ~= 0 then
+			bad += 1
+		end
+	end
+	if bad > 0 then
+		fail("storm circles: " .. bad .. " broken circles or moments")
+	else
+		print("storm circles: 60 plans, every circle nested inside the last and inland")
+	end
+end
+
 if failures > 0 then
 	print(failures .. " failure(s)")
 	process.exit(1)

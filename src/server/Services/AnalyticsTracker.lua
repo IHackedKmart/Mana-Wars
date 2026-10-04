@@ -103,12 +103,32 @@ function AnalyticsTracker.init()
 	end)
 	Events.on(
 		"MatchFinished",
-		function(player: Player, place: number, _outOf: number, kills: number, mapId: string, classId: string)
+		function(
+			player: Player,
+			place: number,
+			_outOf: number,
+			kills: number,
+			mapId: string,
+			classId: string,
+			mode: string?
+		)
 			AnalyticsTracker.onboard(player, 4)
-			AnalyticsTracker.custom(player, "MatchFinished", place, { mapId, classId })
+			AnalyticsTracker.custom(player, "MatchFinished", place, { mapId, classId, mode or "Survival" })
 			AnalyticsTracker.custom(player, "MatchKills", kills, { mapId })
 		end
 	)
+	Events.on("DuelFinished", function(player: Player, won: boolean, rivalIsBot: boolean)
+		AnalyticsTracker.onboard(player, 4)
+		AnalyticsTracker.custom(
+			player,
+			"DuelFinished",
+			if won then 1 else 0,
+			{ if rivalIsBot then "Bot" else "Player" }
+		)
+	end)
+	Events.on("ModeQueued", function(player: Player, mode: string)
+		AnalyticsTracker.custom(player, "ModeQueued", 1, { mode })
+	end)
 	Events.on("CofferOpened", function(player: Player)
 		AnalyticsTracker.onboard(player, 5)
 	end)

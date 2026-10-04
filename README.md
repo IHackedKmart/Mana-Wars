@@ -2,7 +2,7 @@
 
 A Roblox battle royale that crosses **old-school Minecraft Survival Games** with **Noita-style spellcrafting**.
 
-Everyone starts in a floating plaza where they can hang out and practise spells for as long as they like. Walking through the portal joins the queue for the next match. Up to 12 mages then vote on a map in a floating library and drop onto pedestals around a cornucopia of chests. When the gong sounds there's a 5-second breather. After that it's a fight, so you can risk the middle for the best loot or run for the hills. More chests are spread across a freshly generated island, and they hold three things:
+Everyone starts in a floating plaza where they can hang out and practise spells for as long as they like. Press **▶️ PLAY** (or walk through the portal) to pick a game mode: **Survival Games**, a **1v1 Duel** or a 50-mage **Battle Royale** (see [Game modes](#game-modes)). In Survival Games, up to 12 mages vote on a map in a floating library and drop onto pedestals around a cornucopia of chests. When the gong sounds there's a 5-second breather. After that it's a fight, so you can risk the middle for the best loot or run for the hills. More chests are spread across a freshly generated island, and they hold three things:
 
 - **Wands.** Randomly generated, each with its own rarity, spell slots, mana pool, cast delay, recharge time, multicast, spread and perks.
 - **Fully made spells.** 69 hand-designed ones such as Fireball, Chain Lightning, Black Hole, Hydra Storm and Doom Turret, plus randomly generated ones.
@@ -11,6 +11,49 @@ Everyone starts in a floating plaza where they can hang out and practise spells 
 The chests refill halfway through, a Mana Storm closes in, and the last mage standing wins. There are 5 maps to vote on, and 17 kits to start with: a free Apprentice kit, plus 16 more sold in tiers from $0.99 to $25.
 
 Every match also pays out **Enchanted Coins** by finishing place. Spend them on **coffers** of robe and hat parts, stitch your own outfit at the **Tailor's Loom** (with auras like billowing smoke, trailing lightning and stardust on the rarest pieces), collect **familiars** that follow you around, and trade parts, outfits or familiars with other players at the **auction house**.
+
+## Game modes
+
+**▶️ PLAY** (or the Plaza's portal) opens the mode menu. Picking a mode joins its queue and takes you to the library. To switch, press **🔄 Queued for … · change** under the Leave button any time before your match starts.
+
+| | Mode | Players | How it plays |
+|---|---|---|---|
+| ⚔️ | **Survival Games** | up to 12 | The classic: vote on one of five islands, start on a pedestal around the cornucopia, loot, and outlast the Mana Storm. |
+| 🤺 | **1v1 Duel** | 2 | A floating arena high above everything, with cover pillars and low walls. Both duelists get the same wand with **one random spell** and **one random potion**. There are no chests. After a 3-second countdown you fight. At 75 seconds the arena starts burning you both (sudden death), and at 2:30 the mage with more health wins. The winner earns 3 coins and the loser 1. A duel starts as soon as two mages are queued, or a bot steps in after 15 seconds alone. You stay queued afterwards, so the next opponent comes along on their own. Up to 6 duels run at once. |
+| 🧞 | **Battle Royale** | up to 50 | Ride a **magic carpet** across an enormous island of five realms, jump off wherever you like, glide down, loot villages, castles and ruins, and outlast the shrinking storm circles. See below. |
+
+Survival Games and Battle Royale take turns in the main arena. Whichever queue's first player has waited longest goes next. Duels run at the same time as either of them.
+
+### Battle Royale: the Sundered Realms
+
+- **The island.** It has a radius of 1,000 studs, about five times the area of the biggest Survival map, and is generated fresh every match. The Heartland meadows sit in the middle, with four realms around them, each with its own ground, decoration, landmarks and weather:
+  - the snowy **Frostlands** to the north, with mountain ridges
+  - the **Ashlands** to the east, with a smoking volcano
+  - the **Sunscar Desert** to the south, with stepped mesas
+  - the dark **Wildwood** to the west, a forest of oaks, pines and giant mushrooms
+- **Nine named places, joined by roads:**
+  - **Spellcaster's Square**, a town in the middle with a mage tower and a market
+  - **Frostfang Hold** and **Ashfall Keep**, castles with walls, towers and a keep
+  - **Rimeholm**, **Dunewatch** and **Mossbrook**, villages of cottages around a well (Mossbrook has a windmill)
+  - **Cinderforge**, a forge town near the volcano
+  - **Sunscar Bazaar**, an oasis market with a pyramid
+  - **Glowcap Hollow**, a fairy glade
+  
+  There are also 23 smaller landmarks spread across the realms.
+- **About 200 chests.** Roughly 150 are dotted over the island. The rest are in cottage cupboards, shrines, towers and castles.
+- **The magic carpet.**
+  - The queue stays open for 30 seconds while the island is built. Bots top the match up to 20 mages.
+  - Everyone then boards one huge flying carpet. It crosses the island in a straight line, 330 studs up, on a different path every match. While you ride, the names of the places float over them.
+  - Press **SPACE**, **🧞 JUMP OFF** or the jump button on a phone or gamepad to jump off. You glide down on a little rug of your own, steering with your movement keys. Anyone still aboard after 50 seconds is tipped off at the far end.
+  - Until you land, you can't cast and nobody can hurt you.
+- **Storm circles.**
+  - The storm starts around the whole island and closes in five times.
+  - Each next circle shows as a faint white wall, and the HUD counts down to when the storm moves. Then the wall moves in, its centre sliding over to the new circle.
+  - Each circle sits inside the last one. Being outside hurts more at every stage, from 2 up to 15 damage a second.
+  - The chests refill after 5 minutes.
+- **Coins** are paid by finishing place, the same as Survival Games (12 for 1st, down to 1 from 12th place on). The HUD shows which realm you're in.
+
+Tune the modes in `Config.Duel` and `Config.Royale`, and the island itself in `MapDefs.Royale`.
 
 ## The hub: Arcanum Plaza
 
@@ -22,7 +65,7 @@ Every player spawns here, and nothing pulls you into a match until you choose to
 - two market stalls flanking the spawn: the **Tailor's Loom** (craft and wear robes and hats) and the **Coffer** merchant (spend Enchanted Coins on loot boxes)
 - the **Gilded Gavel**, an auction house pavilion in the south-west, where players buy and sell robe and hat parts or finished outfits
 
-- **Join the game.** Walk through the big **portal** at the north end, or press **⚔ JOIN GAME** at the top of the screen. That puts you in the queue and takes you to the library.
+- **Join the game.** Walk through the big **portal** at the north end, or press **▶️ PLAY** at the top of the screen, then pick a game mode. That puts you in its queue and takes you to the library.
 - **Spell Lab.** Outside a match you carry a sandbox kit: a practice staff, a twin-cast scepter, showcase spells and 3 copies of **every** spell part. Dummies never die, and practice spells can't hurt other players. The kit is swapped for your real starting kit when a match starts. **♻ Restock Spell Lab** in the Spellbook refills everything.
 - **Tutorial.** On your first visit a step-by-step tutorial teaches crafting by doing. You open the Spellbook, forge a spell, slot it into a wand, hit a dummy, then build a spell with a trigger and payload. Each step finishes itself when you do it, and the next button glows.
 - **Grimoire.** Press **H**, or use a lectern, to open an in-game encyclopedia. It covers how a match works, how crafting works, how wands work, every Form, Element, Modifier and Trigger, the premade spell library, the kits and their tiers and odds, coins, coffers and outfits, and the controls. You can also replay the tutorial from it.
@@ -32,8 +75,8 @@ Every player spawns here, and nothing pulls you into a match until you choose to
 
 Joining the game takes you to a library floating above the island. It has towering bookshelves, chandeliers, stained glass, a spinning orrery and floating books, plus a glass scrying window in the floor so you can watch the match below.
 
-- **Map vote.** As soon as someone is queued, a 30-second vote opens: a ballot of 3 maps on the right of the screen (the map just played is left off). Only queued players can vote. Players in the hub get a heads-up and can still join. The most votes wins, ties are broken at random, and the vote is cut to 10 seconds once all 12 pedestals are spoken for.
-- **The match** takes everyone in the queue, plus bots if there are fewer than 8 players. People who join mid-match wait here for the next one. They can spectate, or practise on the **Practice Terrace** through the north arch.
+- **Map vote (Survival Games).** As soon as someone is queued, a 30-second vote opens: a ballot of 3 maps on the right of the screen (the map just played is left off). Only queued players can vote. Players in the hub get a heads-up and can still join. The most votes wins, ties are broken at random, and the vote is cut to 10 seconds once all 12 pedestals are spoken for.
+- **The match** takes everyone in the mode's queue, plus bots if there are fewer than 8 players (20 in a Battle Royale). People who join mid-match wait here for the next one. They can spectate, or practise on the **Practice Terrace** through the north arch.
 - **After a match** you come back here, still queued, so the next round starts on its own. To take a break, use the portal on the south wall or press **↩ Leave queue** to return to the Plaza.
 
 ## Making your own spells
@@ -97,8 +140,11 @@ Every match generates a fresh layout of the chosen map: hills, rivers and lakes,
 | Spellbook & Spellforge | **B** | **📖 Spellbook** (left), or **Bag** | Y |
 | Grimoire (encyclopedia) | **H** | **📜 Grimoire** (left) | |
 | 🛠 Dev panel (Studio and the game's owner only) | **`** | **🛠 Dev** button | |
-| Join the game | walk through the Plaza's portal, or **⚔ JOIN GAME** | **⚔ JOIN GAME** | |
+| Join the game | walk through the Plaza's portal, or **▶️ PLAY**, then pick a mode | **▶️ PLAY** | |
+| Switch game mode | **🔄 Queued for … · change** (in the library) | the same | |
 | Leave the queue | the library's portal, or **↩ Leave queue** | **↩ Leave queue** | |
+| Jump off the magic carpet | **Space**, or **🧞 JUMP OFF** | the jump button | A |
+| Steer a glide | W A S D | the thumbstick | left stick |
 | Open chest | E (hold) | tap the prompt | X |
 | Take everything from a chest | F | **Take All** | |
 | Potions | Z X C V | tap the potion | |
@@ -122,7 +168,7 @@ The Spellbook has three columns: your **wands** on the left (each card shows its
 
 ### Easiest way: open the place file
 1. Open **`build/ManaWars.rbxlx`** in Roblox Studio (File → Open from File).
-2. Press **Play** (F5). You appear in Arcanum Plaza, and the tutorial starts on your first visit. Practise as long as you like. When you're ready, walk through the portal at the north end (or press **⚔ JOIN GAME**). The map vote opens in the library, a match starts when it closes, and bots fill empty spots so you can play solo.
+2. Press **Play** (F5). You appear in Arcanum Plaza, and the tutorial starts on your first visit. Practise as long as you like. When you're ready, walk through the portal at the north end (or press **▶️ PLAY**) and pick a mode. For Survival Games the map vote opens in the library and a match starts when it closes. A Battle Royale takes off after 30 seconds, and a duel starts with a bot after 15 seconds alone. Bots fill empty spots, so you can play every mode solo.
 
 If you change the code in `src/`, rebuild the place file with `rojo build -o build/ManaWars.rbxlx`.
 
@@ -139,7 +185,7 @@ Press **`** (the backquote key, left of 1) or click **🛠 Dev** at the top righ
 - **Cosmetics:** pick a rarity (and Shiny), then give 6 parts, wear a whole outfit, or get every familiar at that rarity.
 - **Kits:** unlock every kit, back to normal, or **lock** them to test the kit shop as a new player would see it.
 - **Fighting:** full loadout, god mode, infinite mana, a wand of any rarity, or any of the 69 premade spells into your bag.
-- **Match:** start a match right now (skips the vote), skip the countdown or grace period, jump the clock 60s ahead (chest refill, storm), end the match, choose how many bots fill it, knock out the bots, refill every chest.
+- **Match:** start a Survival match right now (skips the vote), start a Battle Royale (skips the gathering), queue for a duel, skip the countdown or grace period, jump the clock 60s ahead (chest refill, storm circles), end the match, choose how many bots fill a Survival match, knock out the bots, refill every chest.
 - **Market & profile:** put items up for sale from a "Test Merchant" so you can test buying on your own, or reset your profile to a brand new player's (it asks twice).
 
 Things to know:
@@ -150,7 +196,7 @@ Things to know:
 - To turn the panel off in live servers entirely, set `Config.Dev.Enabled = false`. It always works in Studio.
 
 ### Before you publish
-- **Server size:** set the place's **Max Players**. You'll find it in Studio under *File → Game Settings → Places* (click the place's ⋯ → Edit), or in the place's settings on the Creator Dashboard. **12** fills every pedestal. Going a little higher (e.g. 16) gives the Plaza a crowd: if more than 12 people queue, the extra players wait in the library for the next round, first come first served.
+- **Server size:** set the place's **Max Players**. You'll find it in Studio under *File → Game Settings → Places* (click the place's ⋯ → Edit), or in the place's settings on the Creator Dashboard. **50** lets a Battle Royale fill up. Survival Games still takes 12 per match, and anyone beyond that waits in the library for the next round, first come first served. Duels run alongside, two players at a time. If you'd rather keep servers small, 12 to 16 works too, and bots fill the Battle Royale.
 - **DataStores and MemoryStore:** in *Game Settings → Security*, turn on **Enable Studio Access to API Services** so coins, outfits, wins, kills and tutorial progress save while you test in Studio. Published games always have access. The auction house uses MemoryStoreService for the shared market. Without API access it falls back to a market for the current server only, and nothing is saved.
 - **Kits for sale:** create one game pass per paid kit on the Creator Dashboard (*your experience → Monetization → Passes*), priced at its tier (see [Kits and tiers](#kits-and-tiers)), and paste each pass id into `src/shared/Config.lua` → `Config.Kits.GamePassIds`. A kit whose id is still `0` shows as "not on sale yet". While you test in Studio, every kit is unlocked (`StudioUnlocksAll`).
 - **Voice chat (optional):** turn it on under *Game Settings → Communication* (**Enable Microphone**). Roblox voice is spatial, so players hear mages near them and voices fade with distance. It matches proximity text chat with no extra code. Only players who have verified voice on their accounts can use it.
@@ -243,7 +289,7 @@ So mixing rarities always works, but a matched set looks the best.
 ## Daily reward, achievements and the leaderboard
 
 - **Daily reward.** The first time you play each day (days start at midnight UTC) you get **3 Enchanted Coins** (`Config.Rewards.DailyCoins`). Come back on consecutive days to build a streak. If you're still online at midnight, the next day's reward arrives without rejoining.
-- **Achievements.** 17 lifetime goals, each paying coins once (315 in all): first kill, 25 and 100 kills, first win, 10 and 50 wins, a top-3 finish, 25 matches, forging 10 spells, opening 100 chests and 10 coffers, stitching a robe or hat, finding 5 familiars or a Shiny one, a first auction sale and a 7-day streak. Open them with **🏆 Achievements** in the Plaza or the library to see your progress bars. The full list is in [docs/CATALOG.md](docs/CATALOG.md#achievements). Stats players had before this update count, so veterans unlock theirs the first time they join.
+- **Achievements.** 19 lifetime goals, each paying coins once (345 in all): first kill, 25 and 100 kills, first win, 10 and 50 wins, 5 duel wins, a Battle Royale win, a top-3 finish, 25 matches, forging 10 spells, opening 100 chests and 10 coffers, stitching a robe or hat, finding 5 familiars or a Shiny one, a first auction sale and a 7-day streak. Open them with **🏆 Achievements** in the Plaza or the library to see your progress bars. The full list is in [docs/CATALOG.md](docs/CATALOG.md#achievements). Stats players had before this update count, so veterans unlock theirs the first time they join.
 - **Roblox badges (optional).** Every achievement can also award a real badge that shows on players' profiles. Create the badges on the Creator Dashboard (*your experience → Engagement → Badges*) and paste each id into `Config.Achievements.BadgeIds` under the achievement's id (e.g. `Victor = 2150000001`). Players who already unlocked the achievement get the badge the next time they join.
 - **The Hall of Champions.** A gilded board behind the spawn in the Plaza lists the **top 10 by wins and by kills across every server, all time**. Scores are saved after each match and when a player leaves, and each server re-reads the lists every 2 minutes (`Config.Leaderboard`). It needs DataStores, so turn on API access to see it in Studio.
 
@@ -253,7 +299,7 @@ The game reports to Roblox's built-in analytics (*Creator Dashboard → your exp
 
 - **Onboarding funnel:** Joined → Finished the tutorial → Joined the queue → Finished a match → Opened a coffer. Each step is logged once per player. Players from before this update aren't counted as new.
 - **Economy:** every Enchanted Coin earned (placements, daily reward, achievements, salvage, auction sales) and spent (each coffer, auction purchases), with the balance after it. Coins from the Dev panel are left out.
-- **Custom events:** `MatchFinished` (value = finishing place, broken down by map and kit), `MatchKills`, `KitPicked`, `KitPurchased`, `AchievementUnlocked` and `DailyStreak`.
+- **Custom events:** `MatchFinished` (value = finishing place, broken down by map, kit and mode), `MatchKills`, `DuelFinished` (won or lost, against a player or a bot), `ModeQueued` (which modes players pick), `KitPicked`, `KitPurchased`, `AchievementUnlocked` and `DailyStreak`.
 
 Set `Config.Analytics.Enabled = false` to turn it all off. Analytics can never break the game: every call is wrapped so a failure is just skipped.
 
@@ -269,19 +315,19 @@ All of it uses particle textures that ship with Roblox, so no uploads are needed
 
 ## Multiplayer
 
-Mana Wars is multiplayer out of the box, like the original survival-games servers. Each Roblox server has its own hub, queue and back-to-back matches:
+Mana Wars is multiplayer out of the box, like the original survival-games servers. Each Roblox server has its own hub, queues and back-to-back matches:
 
-- Everyone in the server shares the Plaza. Each player decides when to join the queue, and everyone queued votes on the map and is placed on the pedestals together, up to 12 players.
+- Everyone in the server shares the Plaza. Each player decides when to join a queue, and for which mode. Everyone queued for Survival Games votes on the map and is placed on the pedestals together, up to 12 players. A Battle Royale takes up to 50. Survival Games and Battle Royale take turns in the main arena, while duels run at the same time in their own floating arenas.
 - Anyone can watch a running match from the hub or the library with **👁 Spectate the match**.
-- **When does a match start?** As soon as `Config.Bots.MinRealPlayers` players (default 1) are queued, the 30-second vote begins. Everyone else in the server can still join before it closes. On a busy server you may want to raise `MinRealPlayers` (e.g. to 4) so matches wait for a crowd.
-- **Bots are only filler.** They top a match up to `Config.Bots.FillTo` (8) participants, so a busy server plays with no bots at all. Set `Config.Bots.Enabled = false` to require real players (`Config.Match.MinPlayers`).
+- **When does a match start?** As soon as `Config.Bots.MinRealPlayers` players (default 1) are queued for Survival Games, the 30-second vote begins (for a Battle Royale, `Config.Royale.MinRealPlayers` starts the 30-second gathering). Everyone else in the server can still join before it closes. On a busy server you may want to raise `MinRealPlayers` (e.g. to 4) so matches wait for a crowd.
+- **Bots are only filler.** They top a match up to `Config.Bots.FillTo` (8) participants, or `Config.Royale.FillTo` (20) in a Battle Royale, so a busy server plays with no bots at all. A lonely duelist gets a bot after `Config.Duel.BotAfter` seconds. Set `Config.Bots.Enabled = false` to require real players (`Config.Match.MinPlayers`).
 - `Config.Queue.StayQueuedAfterMatch` (on by default) keeps players in the queue between matches. Turn it off to send everyone back to the Plaza after each match.
 - **Proximity chat.** Text chat only reaches mages within **70 studs** of whoever is talking (`Config.Chat.Range`), and chat bubbles fade at the same distance. Hub chatter stays in the hub, the queue in the library talks among itself, and in a match you only talk to whoever is close, so nobody can call out positions from across the map. Eliminated players respawn far from the arena, so they can't whisper to the living. Set `Config.Chat.Proximity = false` for one server-wide chat. The server applies the filter (`ChatService`), so clients can't get around it.
 - **Test multiplayer in Studio:** open the **Test** tab, pick a number of players under **Clients and Servers** (e.g. 3), and press **Start**. Studio opens a server window plus one window per player.
 
 ## Tuning the game
 
-Almost every number lives in **`src/shared/Config.lua`**: match timings (the grace period, vote length, storm speed and damage), the queue, how many bots fill a match, chest counts, the Spell Lab kit, inventory limits, spell nesting depth, and the kit game passes.
+Almost every number lives in **`src/shared/Config.lua`**: match timings (the grace period, vote length, storm speed and damage), duels (`Config.Duel`) and the Battle Royale (`Config.Royale`: carpet height, speed and glide, the storm circles, bot fill), the queue, how many bots fill a match, chest counts, the Spell Lab kit, inventory limits, spell nesting depth, and the kit game passes.
 
 | Want to... | Edit |
 |---|---|
@@ -291,6 +337,11 @@ Almost every number lives in **`src/shared/Config.lua`**: match timings (the gra
 | change chest loot odds | `src/shared/LootTables.lua` |
 | add or change a kit, its tier, price or bonus odds | `src/shared/Classes.lua` (and its game pass id in `Config.Kits`) |
 | add a map, or change a map's size, terrain (rivers, mesas, volcano), colours, decoration, landmarks, clouds, colour grading, weather or lighting | `src/server/Map/MapDefs.lua` (one table per map) |
+| change the Battle Royale island: its realms, named places, chest count, decoration | `MapDefs.Royale` in `src/server/Map/MapDefs.lua` (layout in `RealmGen.lua`, terrain in `TerrainGen.makeRealmLand`) |
+| change the towns, villages and castles | `village`, `town`, `castle` and friends in `src/server/Map/Landmarks.lua` |
+| change the duel arenas | `src/server/Map/DuelArena.lua` |
+| change the magic carpet's look | `src/client/Controllers/CarpetController.lua` (its path and rules are in `CarpetService.lua`) |
+| change the game mode menu's names and descriptions | `src/shared/Modes.lua` |
 | change trees, rocks, flowers and other decoration | `src/server/Map/Decor.lua` |
 | change or add landmarks (ruins, the windmill, the pyramid...) | `src/server/Map/Landmarks.lua` (list a new one in a map's `pois`) |
 | change bridges, the volcano's smoke or the aurora | `src/server/Map/Scenery.lua` |
@@ -322,9 +373,11 @@ src/
     Spells/        SpellParts, SpellBuilder (recipe -> stats), PremadeSpells, SpellNames
     WandGenerator, LootTables, Classes, Items, Consumables, Rarity, ProjectileSim, Remotes
     Cosmetics (robe/hat parts, coffers, resonance, enchantments), OutfitBuilder (dressing characters),
-    Familiars (species, powers, coffer rolls)
+    Familiars (species, powers, coffer rolls), Modes (the game modes on the Play menu)
   server/        (ServerScriptService.Server)
-    Services/      MatchService (game loop), QueueService (hub <-> queue), VoteService (map vote),
+    Services/      MatchService (the main arena's game loop: Survival Games and Battle Royale), QueueService
+                   (hub <-> per-mode queues), VoteService (map vote), DuelService (1v1 duels),
+                   CarpetService (the Battle Royale's magic carpet and gliding), StormCircles (its storm circles),
                    CastingService (wand decks + mana),
                    SpellExecutor (forms, impacts, triggers), ProjectileService, ZoneService,
                    DamageService, StatusService, InventoryService (Spellforge), ChestService,
@@ -334,12 +387,15 @@ src/
                    AnalyticsTracker (Roblox analytics), Events (the bus they all listen on),
                    ChatService (proximity chat), DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
                    outfits), FamiliarService (Nip, Last Ember), AuctionService (the cross-server auction house)
-    Map/           MapDefs (the 5 maps), TerrainGen (hills, rivers, mesas, volcano, roads), Decor (trees,
-                   rocks, flowers), Landmarks (points of interest), Scenery (bridges, volcano smoke, aurora),
+    Map/           MapDefs (the 5 maps + the Battle Royale island), TerrainGen (hills, rivers, mesas, volcano,
+                   roads, and the realm island's blended biomes), RealmGen (the Battle Royale island's layout),
+                   DuelArena (floating duel arenas), Decor (trees, rocks, flowers), Landmarks (points of interest,
+                   towns, villages, castles), Scenery (bridges, volcano smoke, aurora, floating place names),
                    Structures (cornucopia, chests), Hub (Arcanum Plaza), Lobby (the library), Props (shared building blocks)
   client/        (StarterPlayerScripts.Client)
     Controllers/   HUD, Spellbook/Spellforge, Grimoire, Tutorial, chest window, lobby (join/leave queue,
-                   vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom, familiars), Auction house,
+                   vote, kit shop, spectate), the Play menu (ModeMenuController), the magic carpet and gliding
+                   (CarpetController), Wardrobe (coffers, Tailor's Loom, familiars), Auction house,
                    familiars (FamiliarController + FamiliarBuilder), the 🛠 Dev panel (DevController),
                    Achievements window (AchievementsController), chat note (ChatController), input, effects (FXController + VFX),
                    storm, weather
@@ -356,17 +412,20 @@ The game logic is tested outside Roblox:
 ```bash
 python3 tools/run_tests.py          # unit tests for spells, wands, loot, kits, coffers, crafting, auras and familiars (needs the `luau` CLI)
 lune run tools/sim/combat           # every premade spell, the wild parts (walls, hydra, fractal, swaps, rewinds...), 1500 random spells, Spell Lab rules
-lune run tools/sim/client           # real client UI + real server: forge, slot, loot, cast, buy a kit, join/leave the queue, vote, Grimoire, the tutorial,
+lune run tools/sim/client           # real client UI + real server: forge, slot, loot, cast, buy a kit, the Play menu, join/leave the queue, vote, Grimoire, the tutorial,
                                     #   open coffers, stitch and wear a robe, outfits on R15/R6 bodies, sell/buy/cancel on the auction house,
                                     #   saving and rejoining, every spell effect in every element (drawn and cleaned up), and
                                     #   familiars: every species at every rarity, summoning, each kind of power, trading, saving,
                                     #   the dev panel (Unlock Everything, switches, strangers locked out, profile reset),
                                     #   proximity chat (near/far/between lives, the off switch), and the daily reward streak,
-                                    #   achievements (unlocks, coins, badges, the window), the global leaderboard and analytics events
-lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, two full matches with bots
-                                    #   (distinct finishing places, exact coin payouts, saved profile), leave the queue, then
-                                    #   start / skip / end a match from the dev panel, and the Hall of Champions board
-lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps, checking chests, spacing and decoration
+                                    #   achievements (unlocks, coins, badges, the window), the global leaderboard and analytics events,
+                                    #   switching modes, the duel HUD, the magic carpet (riding, jump button, glide, place names) and storm circles
+lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, pick Survival Games, two full matches
+                                    #   with bots (distinct finishing places, exact coin payouts, saved profile), leave the queue,
+                                    #   start / skip / end a match from the dev panel, the Hall of Champions board, then a whole
+                                    #   Battle Royale (20 mages board the carpet, jump, glide, land, storm circles) and a duel against a bot
+lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps and the Battle Royale island, checking chests,
+                                    #   spacing, decoration, named places and that storm circles always nest
 lune run tools/sim/glyphs           # fails on any symbol or emoji Roblox would draw as a square (✦, ✕, ⚔ without U+FE0F, 💰...)
 ```
 
@@ -382,7 +441,7 @@ The PNGs are approximate: they use stand-in fonts and estimate how text wraps. T
 **Pictures of the maps and outfits** work the same way. `mapshot` generates arenas with the real map code and saves what it built, and `maprender` draws an aerial view, the cornucopia, every landmark and a ground-level vista of each (or a line-up of mannequins wearing every robe and hat):
 
 ```bash
-lune run tools/sim/mapshot build/maps                  # every arena (add map ids to pick, Hub for the hub + library, Outfits for the line-up)
+lune run tools/sim/mapshot build/maps                  # every arena (add map ids to pick, Royale for the Battle Royale island, Hub for the hub + library, Outfits for the line-up)
 node tools/ui/maprender.cjs build/maps/*.json          # needs Node, Playwright and three (npm install three playwright)
 ```
 
@@ -395,7 +454,8 @@ The `tools/sim` scripts run the actual game modules on a small fake engine (`too
 - **Visuals are built from code.** The plaza, library, trees and ruins are made from parts (the blocky look is an intentional Minecraft nod), icons are emoji, and there are no custom meshes or animations yet. Dropping in Creator Store models for chests, wands and bookshelves would be a big visual upgrade.
 - **Bots walk in straight lines and jump when stuck.** They don't pathfind, which is fine on open terrain but clumsy around ruins.
 - **Balance is a first pass.** Use `Config.lua`, `MapDefs.lua` and `SpellParts.lua` to tune it once real players are in.
-- **One server = one hub and one match at a time.** That's how classic survival-games servers worked. Once the game is popular, a separate hub *place* that queues players from many servers and teleports full groups into match servers (`TeleportService:ReserveServer`) would keep every match at 12.
+- **One server = one hub and one big match at a time** (Survival Games or a Battle Royale, plus any number of duels alongside). That's how classic survival-games servers worked. Once the game is popular, a separate hub *place* that queues players from many servers and teleports full groups into match servers (`TeleportService:ReserveServer`) would let both big modes run at once and keep every Battle Royale full.
+- **The Battle Royale island is big.** It takes a Roblox server several seconds to build, which is why the carpet waits for the 30-second gathering. There's no minimap yet. The floating place names and the storm walls are how you find your way.
 - **Paid kits.** The top tiers are a real head start (that's the point of them), but the best gear in the game is still in the chests. Check Roblox's current monetization and paid-random-item policies before you publish.
 - **Coffers are earned, not bought.** Coffers cost Enchanted Coins, which only come from playing, so they aren't paid random items. Their odds are still shown on every coffer. If you ever sell coins for Robux, the coffers become paid random items, and Roblox's rules for those (disclosed odds, age and region limits) apply.
 - **The auction house shows the newest 200 listings.** That's plenty at launch. A busy market would want server-side search and paging (more sorted maps keyed by type and price).

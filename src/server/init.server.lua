@@ -31,6 +31,8 @@ local order = {
 	"DailyRewardService",
 	"LeaderboardService",
 	"BotService",
+	"DuelService",
+	"CarpetService",
 	"MatchService",
 	"DevService",
 }

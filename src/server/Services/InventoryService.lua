@@ -422,7 +422,7 @@ end
 ---------------------------------------------------------------------------
 
 function InventoryService.useConsumable(c: Combatant, id: string): (boolean, string?)
-	if not Combatants.canAct(c) or (not c.practice and not GameState.combatAllowed()) then
+	if not Combatants.canAct(c) or (not c.practice and not GameState.combatAllowedFor(c)) then
 		return false, "Not now"
 	end
 	local inv = c.inventory

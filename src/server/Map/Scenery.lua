@@ -1,5 +1,5 @@
 -- Big set dressing that isn't a landmark: bridges where roads cross rivers, the volcano's smoking
--- crater, and the aurora over Frostpeak.
+-- crater, the aurora over Frostpeak and the floating place names of the battle royale island.
 
 local Build = require(script.Parent.Build)
 local MapDefs = require(script.Parent.MapDefs)
@@ -204,6 +204,53 @@ function Scenery.aurora(parent: Instance, radius: number, height: number, rng: R
 			high.CanQuery = false
 		end
 	end
+end
+
+-- A place name floating high over one of the battle royale island's named locations. It starts
+-- hidden: each client shows the names only while its mage rides the carpet or glides down, so
+-- they can pick where to land.
+function Scenery.locationLabel(parent: Instance, name: string, realm: string, at: Vector3, color: Color3): Part
+	local anchor = Build.part({
+		Name = "Location",
+		Size = Vector3.new(1, 1, 1),
+		CFrame = CFrame.new(at + Vector3.new(0, 45, 0)),
+		Transparency = 1,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+	}, parent)
+	anchor:SetAttribute("Location", name)
+	local gui = Build.make("BillboardGui", {
+		Name = "Label",
+		Size = UDim2.fromOffset(280, 64),
+		MaxDistance = 6000,
+		AlwaysOnTop = true,
+		LightInfluence = 0,
+		Enabled = false,
+	}, anchor)
+	Build.make("TextLabel", {
+		Name = "Place",
+		Size = UDim2.fromScale(1, 0.62),
+		BackgroundTransparency = 1,
+		Text = name,
+		TextColor3 = Color3.fromRGB(255, 236, 176),
+		TextStrokeColor3 = Color3.fromRGB(30, 20, 10),
+		TextStrokeTransparency = 0.1,
+		Font = Enum.Font.Fantasy,
+		TextScaled = true,
+	}, gui)
+	Build.make("TextLabel", {
+		Name = "Realm",
+		Size = UDim2.fromScale(1, 0.34),
+		Position = UDim2.fromScale(0, 0.64),
+		BackgroundTransparency = 1,
+		Text = realm,
+		TextColor3 = color,
+		TextStrokeTransparency = 0.3,
+		Font = Enum.Font.GothamBold,
+		TextScaled = true,
+	}, gui)
+	return anchor
 end
 
 return Scenery

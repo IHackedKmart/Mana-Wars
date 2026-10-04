@@ -291,7 +291,17 @@ function renderScript(data, defaults, width, height) {
 	if (data.kind === "arena") {
 		const R = data.radius;
 		const py = data.plazaY;
+		// (the aerial shots look through much more air than the ground-level ones: thin the fog out)
+		const fogNear = scene.fog.near, fogFar = scene.fog.far;
+		scene.fog.near = Math.max(fogNear, R * 1.4);
+		scene.fog.far = Math.max(fogFar, R * 4);
 		shoot("1_overview", new THREE.Vector3(0, R * 1.05, R * 1.15), new THREE.Vector3(0, 0, R * 0.05), 55);
+		if (R > 700) {
+			// the battle royale island: straight down, like the map on the carpet
+			shoot("0_topdown", new THREE.Vector3(0, R * 2.15, 1), new THREE.Vector3(0, 0, 0), 55);
+		}
+		scene.fog.near = fogNear;
+		scene.fog.far = fogFar;
 		shoot("2_cornucopia", new THREE.Vector3(10, py + 34, 78), new THREE.Vector3(0, py + 4, 0), 60);
 		const marks = (Array.isArray(data.landmarks) ? data.landmarks : []).slice(0, 6);
 		marks.forEach((m, i) => {

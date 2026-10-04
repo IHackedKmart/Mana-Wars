@@ -24,6 +24,46 @@ Config.Match = {
 	RespawnToLobbyDelay = 4,
 }
 
+-- Game modes (see src/shared/Modes.lua) ----------------------------------------
+-- 1v1 duels run in their own floating arenas, alongside whatever the main arena is doing.
+Config.Duel = {
+	MaxArenas = 6, -- duels that can run at once
+	ArenaRadius = 44,
+	BotAfter = 15, -- seconds alone in the duel queue before a bot takes you on
+	Countdown = 3,
+	SuddenDeathAt = 75, -- seconds into the fight: the arena starts burning both mages
+	SuddenDeathDps = 6,
+	TimeLimit = 150, -- then the healthier mage wins (a draw if level)
+	WinCoins = 3,
+	LoseCoins = 1,
+	WandRarity = "Rare", -- both duelists get the same wand
+	SpellRarities = { "Common", "Uncommon", "Rare", "Epic" }, -- the random spell comes from these
+}
+
+-- Battle royale: up to 50 mages drop from a flying carpet onto an enormous island.
+-- (Set the place's Max Players to 50 or more for full lobbies; Survival Games still takes 12.)
+Config.Royale = {
+	MaxParticipants = 50,
+	FillTo = 20, -- bots top a battle royale up to this many mages (busy servers need none)
+	MinRealPlayers = 1,
+	GatherTime = 30, -- the queue stays open this long once someone joins
+	CarpetAltitude = 330,
+	CarpetTime = 50, -- seconds for the carpet to cross; anyone still aboard is dropped at the end
+	GlideFallSpeed = 32, -- studs per second while gliding down
+	GlideSpeed = 55, -- sideways steering speed while gliding
+	-- the storm circles (timed from the carpet's take-off): each one is shown on the map, waits, then
+	-- the storm shrinks to it (a share of the island's radius); outside it burns for `dps`
+	Circles = {
+		{ wait = 100, shrink = 60, radius = 0.62, dps = 2 },
+		{ wait = 55, shrink = 45, radius = 0.36, dps = 4 },
+		{ wait = 40, shrink = 40, radius = 0.18, dps = 6 },
+		{ wait = 30, shrink = 30, radius = 0.07, dps = 10 },
+		{ wait = 20, shrink = 30, radius = 0, dps = 15 },
+	},
+	ChestRefillAt = 300,
+	HardTimeLimit = 1000,
+}
+
 -- Bots fill empty slots so that small servers (and solo testing) still get a real match.
 Config.Bots = {
 	Enabled = true,

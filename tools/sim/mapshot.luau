@@ -3,7 +3,7 @@
 	every part, the lighting) as JSON, so tools/ui/maprender.cjs can draw them as pictures:
 
 		lune run tools/sim/mapshot build/maps            -- every map
-		lune run tools/sim/mapshot build/maps Ashen      -- one map (by id)
+		lune run tools/sim/mapshot build/maps Ashen      -- one map (by id; Royale is the battle royale island)
 		lune run tools/sim/mapshot build/maps Hub        -- the hub (Arcanum Plaza) and the library
 		node tools/ui/maprender.cjs build/maps/*.json
 
@@ -402,7 +402,9 @@ if only.Outfits then
 	stage:Destroy()
 end
 
-for _, def in MapDefs.List do
+local defs = table.clone(MapDefs.List)
+table.insert(defs, MapDefs.Royale)
+for _, def in defs do
 	if next(only) ~= nil and not only[def.id] then
 		continue
 	end

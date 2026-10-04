@@ -33,6 +33,46 @@ export type Decor = {
 	nearWater: number?, -- only within this many studs of water / lava / ice
 }
 
+export type Materials = {
+	surface: Enum.Material,
+	alt: Enum.Material,
+	alt2: Enum.Material,
+	shore: Enum.Material,
+	cliff: Enum.Material,
+	peak: Enum.Material,
+	under: Enum.Material,
+	path: Enum.Material,
+	riverbed: Enum.Material?, -- dry rivers
+	wet: { material: Enum.Material, height: number }?, -- a band of this just above the waterline
+	patches: { { material: Enum.Material, scale: number, threshold: number } }?,
+	strata: { Enum.Material }?, -- striped cliffs, bottom to top
+}
+
+-- One realm of a realm map (the battle royale island): its own shape, materials, decoration,
+-- landmarks and named locations. `angle` places it around the middle (nil = the heartland).
+export type Biome = {
+	id: string,
+	name: string,
+	angle: number?, -- degrees (0 = east / +X, 90 = south / +Z)
+	shape: {
+		base: number,
+		hills: number,
+		hillScale: number,
+		detail: number,
+		rough: number,
+		peaks: number?, -- ridged mountains this tall
+		mesas: { scale: number, threshold: number, step: number, steps: number }?,
+		volcano: { height: number, radius: number, crater: number }?,
+	},
+	materials: Materials,
+	decor: { Decor },
+	pois: { string }, -- landmarks scattered over the realm
+	poiCount: number,
+	style: Style,
+	named: { { name: string, builder: string, radius: number, angle: number } }, -- named locations
+	weather: string?,
+}
+
 export type MapDef = {
 	id: string,
 	name: string,
@@ -55,20 +95,7 @@ export type MapDef = {
 		mesas: { scale: number, threshold: number, step: number, steps: number }?,
 		volcano: { height: number, radius: number, crater: number }?,
 	},
-	materials: {
-		surface: Enum.Material,
-		alt: Enum.Material,
-		alt2: Enum.Material,
-		shore: Enum.Material,
-		cliff: Enum.Material,
-		peak: Enum.Material,
-		under: Enum.Material,
-		path: Enum.Material,
-		riverbed: Enum.Material?, -- dry rivers
-		wet: { material: Enum.Material, height: number }?, -- a band of this just above the waterline
-		patches: { { material: Enum.Material, scale: number, threshold: number } }?,
-		strata: { Enum.Material }?, -- striped cliffs, bottom to top
-	},
+	materials: Materials,
 	colors: { [Enum.Material]: Color3 },
 	paths: { width: number, crossing: string }, -- crossing: "bridge" | "causeway" | "none"
 	decor: { Decor },
@@ -91,6 +118,8 @@ export type MapDef = {
 	sky: string?, -- extra sky dressing: "Aurora"
 	weather: string?,
 	hazard: string?,
+	biomes: { Biome }?, -- a realm map (the battle royale island) instead of a single biome
+	royale: boolean?, -- no cornucopia: players drop in from the magic carpet
 }
 
 -- Terrain colours shared by every map; each map overrides what it needs.
@@ -661,6 +690,276 @@ MapDefs.ById = {} :: { [string]: MapDef }
 for _, def in MapDefs.List do
 	MapDefs.ById[def.id] = def
 end
+
+---------------------------------------------------------------------------
+-- The battle royale island: The Sundered Realms. Not in the Survival Games vote: it's only used by
+-- the Battle Royale mode. A heartland in the middle and four realms around it, each borrowing the
+-- look of one of the islands above, with named locations to drop on.
+---------------------------------------------------------------------------
+
+-- A map's decoration with every count scaled (the realms are each about the size of a whole map).
+local function scaled(list: { Decor }, factor: number): { Decor }
+	local out = {}
+	for _, d in list do
+		local copy = table.clone(d)
+		copy.count = math.max(1, math.floor(d.count * factor + 0.5))
+		table.insert(out, copy)
+	end
+	return out
+end
+
+local byId = MapDefs.ById
+
+MapDefs.Royale = {
+	id = "Royale",
+	name = "The Sundered Realms",
+	icon = "🧞",
+	description = "An enormous island of five realms for up to 50 mages. Drop from the magic carpet anywhere you like.",
+	radius = 1000,
+	royale = true,
+	terrain = {
+		base = 14,
+		hills = 20,
+		hillScale = 200,
+		detail = 10,
+		rough = 2,
+		mountains = 0,
+		liquidLevel = 4,
+		liquid = M.Water,
+		peakHeight = 125,
+		cliffHeight = 95,
+	},
+	materials = byId.Verdant.materials,
+	colors = colors({
+		[M.Grass] = rgb(104, 158, 62),
+		[M.LeafyGrass] = rgb(52, 104, 50),
+		[M.Ground] = rgb(128, 98, 66),
+		[M.Sand] = rgb(226, 204, 148),
+		[M.Rock] = rgb(112, 114, 124),
+		[M.Mud] = rgb(86, 66, 50),
+		[M.Cobblestone] = rgb(130, 128, 120),
+		[M.Snow] = rgb(236, 242, 255),
+		[M.Ice] = rgb(160, 214, 250),
+		[M.Glacier] = rgb(110, 196, 245),
+		[M.Slate] = rgb(92, 104, 128),
+		[M.Basalt] = rgb(40, 36, 40),
+		[M.Asphalt] = rgb(64, 56, 58),
+		[M.Salt] = rgb(214, 196, 80),
+		[M.CrackedLava] = rgb(255, 104, 24),
+		[M.Sandstone] = rgb(204, 120, 76),
+		[M.Limestone] = rgb(238, 206, 160),
+		[M.Pavement] = rgb(214, 184, 140),
+	}),
+	paths = { width = 6, crossing = "bridge" },
+	decor = {},
+	pois = {},
+	poiCount = 0,
+	outerChests = 140,
+	style = byId.Verdant.style,
+	biomes = {
+		{
+			id = "Heartland",
+			name = "The Heartland",
+			angle = nil,
+			shape = { base = 14, hills = 16, hillScale = 220, detail = 8, rough = 2 },
+			-- (meadow grass only: the Wildwood's darker leafy grass sets the forest apart)
+			materials = {
+				surface = M.Grass,
+				alt = M.Grass,
+				alt2 = M.Ground,
+				shore = M.Sand,
+				cliff = M.Rock,
+				peak = M.Rock,
+				under = M.Ground,
+				path = M.Ground,
+				patches = {
+					{ material = M.Mud, scale = 30, threshold = 0.44 },
+					{ material = M.Cobblestone, scale = 24, threshold = 0.48 },
+				},
+			},
+			decor = {
+				{ kind = "tree", styles = { "oak", "oak", "birch", "autumn" }, count = 70 },
+				{ kind = "bush", styles = { "bush", "berrybush" }, count = 40 },
+				{ kind = "bush", styles = { "flower" }, count = 120, cluster = { 5, 10 }, spread = 6 },
+				{ kind = "rock", styles = { "mossystone" }, count = 20 },
+			},
+			pois = { "shrine", "camp", "windmill" },
+			poiCount = 3,
+			style = byId.Verdant.style,
+			named = { { name = "Spellcaster's Square", builder = "town", radius = 0, angle = 0 } },
+		},
+		{
+			id = "Frost",
+			name = "The Frostlands",
+			angle = -90,
+			shape = { base = 22, hills = 34, hillScale = 180, detail = 14, rough = 4, peaks = 120 },
+			materials = {
+				surface = M.Snow,
+				alt = M.Snow,
+				alt2 = M.Ice,
+				shore = M.Glacier,
+				cliff = M.Slate,
+				peak = M.Snow,
+				under = M.Rock,
+				path = M.Slate,
+				patches = {
+					{ material = M.Slate, scale = 34, threshold = 0.4 },
+					{ material = M.Ice, scale = 50, threshold = 0.38 },
+				},
+			},
+			decor = scaled(byId.Frostpeak.decor, 0.7),
+			pois = { "iceSpire", "lodge", "watchtower", "ruinedTower", "shrine" },
+			poiCount = 5,
+			style = byId.Frostpeak.style,
+			named = {
+				{ name = "Frostfang Hold", builder = "castle", radius = 0.7, angle = -100 },
+				{ name = "Rimeholm", builder = "village", radius = 0.47, angle = -68 },
+			},
+			weather = "Snow",
+		},
+		{
+			id = "Ashen",
+			name = "The Ashlands",
+			angle = 0,
+			shape = {
+				base = 14,
+				hills = 26,
+				hillScale = 150,
+				detail = 16,
+				rough = 5,
+				volcano = { height = 150, radius = 170, crater = 30 },
+			},
+			materials = {
+				surface = M.Basalt,
+				alt = M.Asphalt,
+				alt2 = M.Basalt,
+				shore = M.CrackedLava,
+				cliff = M.Basalt,
+				peak = M.Basalt,
+				under = M.Basalt,
+				path = M.Asphalt,
+				patches = {
+					{ material = M.CrackedLava, scale = 44, threshold = 0.46 },
+					{ material = M.Salt, scale = 24, threshold = 0.5 },
+					{ material = M.Asphalt, scale = 50, threshold = 0.25 },
+				},
+				strata = { M.Basalt, M.Asphalt, M.Basalt },
+			},
+			decor = scaled(byId.Ashen.decor, 0.8),
+			pois = { "obsidianGate", "ruinedTower", "watchtower", "camp", "shrine" },
+			poiCount = 5,
+			style = byId.Ashen.style,
+			named = {
+				{ name = "Cinderforge", builder = "cinderforge", radius = 0.48, angle = 24 },
+				{ name = "Ashfall Keep", builder = "castle", radius = 0.62, angle = -32 },
+			},
+			weather = "Ash",
+		},
+		{
+			id = "Sand",
+			name = "The Sunscar Desert",
+			angle = 90,
+			shape = {
+				base = 15,
+				hills = 16,
+				hillScale = 130,
+				detail = 8,
+				rough = 1.5,
+				mesas = { scale = 140, threshold = 0.26, step = 5.5, steps = 3 },
+			},
+			materials = {
+				surface = M.Sand,
+				alt = M.Sand,
+				alt2 = M.Sandstone,
+				shore = M.Sand,
+				cliff = M.Sandstone,
+				peak = M.Sandstone,
+				under = M.Sandstone,
+				path = M.Pavement,
+				wet = { material = M.Grass, height = 4 },
+				patches = {
+					{ material = M.Sandstone, scale = 55, threshold = 0.35 },
+					{ material = M.Limestone, scale = 30, threshold = 0.46 },
+				},
+				strata = { M.Sandstone, M.Limestone, M.Sandstone, M.Pavement },
+			},
+			decor = scaled(byId.Sandsea.decor, 0.7),
+			pois = { "pyramid", "ruinedTower", "camp", "watchtower", "shrine" },
+			poiCount = 5,
+			style = byId.Sandsea.style,
+			named = {
+				{ name = "Sunscar Bazaar", builder = "oasisTown", radius = 0.68, angle = 108 },
+				{ name = "Dunewatch", builder = "village", radius = 0.46, angle = 70 },
+			},
+			weather = "Dust",
+		},
+		{
+			id = "Wildwood",
+			name = "The Wildwood",
+			angle = 180,
+			shape = { base = 14, hills = 28, hillScale = 160, detail = 12, rough = 3 },
+			materials = {
+				surface = M.LeafyGrass,
+				alt = M.LeafyGrass,
+				alt2 = M.Mud,
+				shore = M.Mud,
+				cliff = M.Rock,
+				peak = M.Rock,
+				under = M.Mud,
+				path = M.Ground,
+				patches = {
+					{ material = M.Mud, scale = 26, threshold = 0.4 },
+					{ material = M.Ground, scale = 40, threshold = 0.48 },
+				},
+			},
+			decor = {
+				{ kind = "tree", styles = { "oak", "pine", "pine", "oak" }, count = 280 },
+				{ kind = "tree", styles = { "bigmushroom", "conemushroom", "mushroomcluster" }, count = 60 },
+				{ kind = "bush", styles = { "smallmushroom" }, count = 90, cluster = { 2, 5 }, spread = 4 },
+				{ kind = "bush", styles = { "glowflower" }, count = 50, cluster = { 3, 6 }, spread = 5 },
+				{ kind = "bush", styles = { "log", "mushroomring", "bush" }, count = 50 },
+				{ kind = "bush", styles = { "fireflies" }, count = 14 },
+				{ kind = "rock", styles = { "mossy", "shelf" }, count = 40 },
+			},
+			pois = { "stump", "fairyRing", "ancientOak", "camp", "ruinedTower" },
+			poiCount = 5,
+			style = byId.Fungal.style,
+			named = {
+				{ name = "Glowcap Hollow", builder = "glowcap", radius = 0.68, angle = 172 },
+				{ name = "Mossbrook", builder = "millbrook", radius = 0.47, angle = 205 },
+			},
+			weather = "Spores",
+		},
+	},
+	lighting = {
+		ClockTime = 13.4,
+		Brightness = 2.8,
+		OutdoorAmbient = rgb(140, 140, 150),
+		Ambient = rgb(72, 72, 84),
+		ColorShift_Top = rgb(255, 242, 220),
+		EnvironmentDiffuseScale = 1,
+		EnvironmentSpecularScale = 1,
+	},
+	atmosphere = {
+		Density = 0.2,
+		Offset = 0.1,
+		Color = rgb(200, 216, 242),
+		Decay = rgb(120, 130, 172),
+		Glare = 0.3,
+		Haze = 0.9,
+	},
+	post = {
+		saturation = 0.2,
+		contrast = 0.08,
+		brightness = 0.02,
+		tint = rgb(255, 250, 242),
+		bloom = 0.6,
+		sunRays = 0.08,
+	},
+	clouds = { cover = 0.5, density = 0.55, color = rgb(255, 255, 255) },
+	water = { color = rgb(40, 130, 175), transparency = 0.5, reflectance = 0.6, waves = 0.15 },
+} :: MapDef
+MapDefs.ById.Royale = MapDefs.Royale
 
 -- The plaza (and pedestal ring) are flattened to this height.
 function MapDefs.plazaHeight(def: MapDef): number

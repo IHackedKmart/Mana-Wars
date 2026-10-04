@@ -29,6 +29,8 @@ export type Land = {
 	baseHeightAt: (number, number) -> number, -- the ground before roads were added
 	riverAt: (number, number) -> number, -- 0 = no river, 1 = the middle of the channel
 	surfaceAt: (number, number, number, number) -> Enum.Material,
+	materialsAt: (number, number) -> MapDefs.Materials, -- the material set used at a point
+	biomeAt: ((number, number) -> number)?, -- realm maps: which biome (index into def.biomes)
 	isPath: (number, number) -> boolean,
 	paths: { { Vector3 } },
 	volcano: Vector3?, -- the middle of the crater, at the crater floor
@@ -169,41 +171,11 @@ function TerrainGen.makeLand(seed: number, def: MapDef): Land
 		return h
 	end
 
-	local m = def.materials
 	local function surfaceAt(x: number, z: number, h: number, slope: number): Enum.Material
-		local wob = math.noise(x / 16, z / 16, 5.5)
 		if V and (x - vx) ^ 2 + (z - vz) ^ 2 < (V.crater + 2) ^ 2 then
 			return Enum.Material.CrackedLava
-		elseif h < T.liquidLevel + 1.5 + wob then
-			return m.shore
-		elseif m.wet and h < T.liquidLevel + m.wet.height + wob * 1.5 then
-			return m.wet.material
-		elseif h > T.peakHeight + wob * 10 then
-			return m.peak
-		elseif slope > 1.15 or h > T.cliffHeight + wob * 12 then
-			return m.cliff
 		end
-		if m.riverbed and riverAt(x, z) > 0.2 then
-			return m.riverbed
-		end
-		if slope < 0.9 and isPath(x, z) then
-			return m.path
-		end
-		if m.patches then
-			for i, p in m.patches do
-				if math.noise((x + ox) / p.scale, (z + oz) / p.scale, 2.2 + i * 1.7) > p.threshold then
-					return p.material
-				end
-			end
-			return m.surface
-		end
-		local patch = math.noise(x / 45, z / 45, 2.2)
-		if patch > 0.25 then
-			return m.alt
-		elseif patch < -0.35 then
-			return m.alt2
-		end
-		return m.surface
+		return TerrainGen.surfaceWith(def, def.materials, x, z, h, slope, ox, oz, riverAt, isPath)
 	end
 
 	local land: Land = {
@@ -213,10 +185,234 @@ function TerrainGen.makeLand(seed: number, def: MapDef): Land
 		baseHeightAt = baseHeightAt,
 		riverAt = riverAt,
 		surfaceAt = surfaceAt,
+		materialsAt = function()
+			return def.materials
+		end,
+		biomeAt = nil,
 		isPath = isPath,
 		paths = {},
 		volcano = nil,
 		volcanoCrater = if V then V.crater else 0,
+		pathCells = pathCells,
+		cellKey = cellKey,
+	}
+	if V then
+		land.volcano = Vector3.new(vx, baseHeightAt(vx, vz), vz)
+	end
+	return land
+end
+
+-- Picks the surface material at a point from a material set (shore, wet band, peaks, cliffs,
+-- riverbeds, roads, then noise patches).
+function TerrainGen.surfaceWith(
+	def: MapDef,
+	m: MapDefs.Materials,
+	x: number,
+	z: number,
+	h: number,
+	slope: number,
+	ox: number,
+	oz: number,
+	riverAt: (number, number) -> number,
+	isPath: (number, number) -> boolean
+): Enum.Material
+	local T = def.terrain
+	local wob = math.noise(x / 16, z / 16, 5.5)
+	if h < T.liquidLevel + 1.5 + wob then
+		return m.shore
+	elseif m.wet and h < T.liquidLevel + m.wet.height + wob * 1.5 then
+		return m.wet.material
+	elseif h > T.peakHeight + wob * 10 then
+		return m.peak
+	elseif slope > 1.15 or h > T.cliffHeight + wob * 12 then
+		return m.cliff
+	end
+	if m.riverbed and riverAt(x, z) > 0.2 then
+		return m.riverbed
+	end
+	if slope < 0.9 and isPath(x, z) then
+		return m.path
+	end
+	if m.patches then
+		for i, p in m.patches do
+			if math.noise((x + ox) / p.scale, (z + oz) / p.scale, 2.2 + i * 1.7) > p.threshold then
+				return p.material
+			end
+		end
+		return m.surface
+	end
+	local patch = math.noise(x / 45, z / 45, 2.2)
+	if patch > 0.25 then
+		return m.alt
+	elseif patch < -0.35 then
+		return m.alt2
+	end
+	return m.surface
+end
+
+-- Realm maps (the battle royale island): a heartland in the middle and a ring of biomes around it,
+-- each with its own shape (peaks, mesas, a volcano), materials and decoration, blended at the
+-- borders, with beaches and open sea instead of a mountain wall around the edge.
+function TerrainGen.makeRealmLand(seed: number, def: MapDef): Land
+	local biomes = def.biomes :: { MapDefs.Biome }
+	local rng = Random.new(seed)
+	local ox, oz = rng:NextNumber(-5000, 5000), rng:NextNumber(-5000, 5000)
+	local T = def.terrain
+	local R = def.radius
+	local sectors = 0
+	for _, b in biomes do
+		if b.angle then
+			sectors += 1
+		end
+	end
+	local half = math.pi / math.max(1, sectors)
+
+	-- the volcano sits in the realm that has one, most of the way out
+	local vx, vz, V = 0, 0, nil :: { height: number, radius: number, crater: number }?
+	for _, b in biomes do
+		if b.shape.volcano and b.angle then
+			V = b.shape.volcano
+			local a = math.rad(b.angle) + rng:NextNumber(-0.12, 0.12)
+			vx, vz = math.cos(a) * R * 0.66, math.sin(a) * R * 0.66
+		end
+	end
+
+	-- how much each biome counts at a point (they add up to 1)
+	local function weights(x: number, z: number): { number }
+		local r = math.sqrt(x * x + z * z) / R + math.noise((x + ox) / 180, (z + oz) / 180, 5.2) * 0.07
+		local inner = 1 - smoothstep(0.24, 0.34, r)
+		local a = math.atan2(z, x) + math.noise((x + ox) / 320, (z + oz) / 320, 13.1) * 0.5
+		local w = table.create(#biomes, 0)
+		local total = 0
+		for i, b in biomes do
+			if b.angle then
+				local da = math.abs(((a - math.rad(b.angle) + math.pi) % (2 * math.pi)) - math.pi)
+				w[i] = (1 - smoothstep(half - 0.16, half + 0.16, da)) * (1 - inner)
+			else
+				w[i] = inner
+			end
+			total += w[i]
+		end
+		for i = 1, #w do
+			w[i] /= math.max(total, 1e-6)
+		end
+		return w
+	end
+
+	-- the biome whose materials and decoration a point gets (with a ragged border)
+	local function biomeAt(x: number, z: number): number
+		local w = weights(x, z)
+		local best, bestW = 1, -math.huge
+		for i, wi in w do
+			local v = wi + math.noise(x / 26, z / 26, i * 3.3) * 0.14
+			if v > bestW then
+				best, bestW = i, v
+			end
+		end
+		return best
+	end
+
+	local function mesaAt(
+		S: { scale: number, threshold: number, step: number, steps: number },
+		x: number,
+		z: number
+	): number
+		local m = math.noise((x + ox) / S.scale, (z + oz) / S.scale, 8.83)
+		local h = 0
+		for i = 0, S.steps - 1 do
+			local threshold = S.threshold + i * 0.085
+			h += S.step * smoothstep(threshold, threshold + 0.022, m)
+		end
+		return h
+	end
+
+	local plaza = MapDefs.plazaHeight(def)
+	local function baseHeightAt(x: number, z: number): number
+		local d = math.sqrt(x * x + z * z)
+		local w = weights(x, z)
+		local nx, nz = x + ox, z + oz
+		-- each realm's own hills, blended (blending the noise scale instead would squeeze the hills
+		-- into ripples along the borders)
+		local base, h = 0, 0
+		local fine1, fine2 = math.noise(nx / 64, nz / 64, 7.13), math.noise(nx / 22, nz / 22, 3.31)
+		for i, b in biomes do
+			local wi = w[i]
+			if wi > 0 then
+				local sh = b.shape
+				base += sh.base * wi
+				h += wi * (sh.base + math.noise(nx / sh.hillScale, nz / sh.hillScale, 0.37) * sh.hills + fine1 * sh.detail + fine2 * sh.rough)
+			end
+		end
+		local inland = 1 - smoothstep(R * 0.8, R * 0.95, d)
+		for i, b in biomes do
+			local wi = w[i]
+			if wi > 0.01 then
+				local sh = b.shape
+				if sh.peaks then
+					local ridge = 1 - math.abs(math.noise(nx / 240, nz / 240, 9.4))
+					h += ridge ^ 3 * sh.peaks * wi * inland
+				end
+				if sh.mesas then
+					h += mesaAt(sh.mesas, x, z) * wi * inland
+				end
+			end
+		end
+		-- a flat square in the very middle (the heart of the island's biggest town)
+		local t = smoothstep(55, 95, d)
+		h = plaza * (1 - t) + h * t
+		-- the volcano
+		if V then
+			local v = V :: { height: number, radius: number, crater: number }
+			local dv = math.sqrt((x - vx) ^ 2 + (z - vz) ^ 2)
+			if dv < v.radius then
+				local cone = v.height * (1 - dv / v.radius) ^ 1.7
+				if dv < v.crater then
+					cone = v.height * (1 - v.crater / v.radius) ^ 1.7 - (v.crater - dv) * 0.8
+				end
+				h = math.max(h, base + cone + math.noise(x / 18, z / 18, 4.2) * 4)
+			end
+		end
+		-- beaches, then open sea, around a ragged coastline
+		local angle = math.atan2(z, x)
+		local coast = R - 40 + math.noise(math.cos(angle) * 2.4 + ox * 0.001, math.sin(angle) * 2.4, 3.7) * 70
+		local sea = smoothstep(coast - 80, coast + 30, d)
+		h += (T.liquidLevel - 14 - h) * sea
+		return h
+	end
+
+	local pathCells: { [number]: boolean } = {}
+	local function cellKey(x: number, z: number): number
+		return (math.floor(x / RES) + 4096) * 8192 + (math.floor(z / RES) + 4096)
+	end
+	local function isPath(x: number, z: number): boolean
+		return pathCells[cellKey(x, z)] == true
+	end
+	local function noRiver(_x: number, _z: number): number
+		return 0
+	end
+	local function materialsAt(x: number, z: number): MapDefs.Materials
+		return biomes[biomeAt(x, z)].materials
+	end
+	local function surfaceAt(x: number, z: number, h: number, slope: number): Enum.Material
+		if V and (x - vx) ^ 2 + (z - vz) ^ 2 < ((V :: any).crater + 2) ^ 2 then
+			return Enum.Material.CrackedLava
+		end
+		return TerrainGen.surfaceWith(def, materialsAt(x, z), x, z, h, slope, ox, oz, noRiver, isPath)
+	end
+
+	local land: Land = {
+		def = def,
+		seed = seed,
+		heightAt = baseHeightAt,
+		baseHeightAt = baseHeightAt,
+		riverAt = noRiver,
+		surfaceAt = surfaceAt,
+		materialsAt = materialsAt,
+		biomeAt = biomeAt,
+		isPath = isPath,
+		paths = {},
+		volcano = nil,
+		volcanoCrater = if V then (V :: any).crater else 0,
 		pathCells = pathCells,
 		cellKey = cellKey,
 	}
@@ -277,9 +473,6 @@ function TerrainGen.generate(land: Land)
 	end)
 
 	local T = def.terrain
-	local surfaceSoil = def.materials.under
-	local cliffMaterial = def.materials.cliff
-	local strata = def.materials.strata
 	local R = math.ceil((def.radius + 96) / RES) * RES
 	local cells = (2 * R) // RES
 	local ny = (MAX_Y - MIN_Y) // RES
@@ -323,6 +516,10 @@ function TerrainGen.generate(land: Land)
 						math.abs(heights[gx + 1][gz] - heights[gx - 1][gz])
 						+ math.abs(heights[gx][gz + 1] - heights[gx][gz - 1])
 					) / (2 * RES)
+					local mats = land.materialsAt(x, z)
+					local surfaceSoil = mats.under
+					local cliffMaterial = mats.cliff
+					local strata = mats.strata
 					local surface = land.surfaceAt(x, z, h, slope)
 					local striped = strata ~= nil and surface == cliffMaterial
 					local warp = if striped then math.noise(x / 60, z / 60, 3.9) * 4 else 0

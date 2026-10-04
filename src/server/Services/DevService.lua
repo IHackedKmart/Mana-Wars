@@ -375,10 +375,20 @@ end
 
 -- Match -----------------------------------------------------------------------
 
-actions.StartMatch = function(player)
-	QueueService.join(player)
+actions.StartMatch = function(player, args)
+	local mode = if args.mode == "Royale" or args.mode == "Duel" then args.mode else "Survival"
+	local ok, message = QueueService.join(player, mode)
+	if not ok then
+		return false, message
+	end
+	if mode == "Duel" then
+		return true, "Queued for a duel (a bot steps in after " .. Config.Duel.BotAfter .. "s alone)"
+	end
 	MatchService.devSkip()
-	return true, "Joined the queue and skipped the vote"
+	return true,
+		if mode == "Royale"
+			then "Joined the Battle Royale and skipped the wait"
+			else "Joined the queue and skipped the vote"
 end
 
 actions.Skip = function()

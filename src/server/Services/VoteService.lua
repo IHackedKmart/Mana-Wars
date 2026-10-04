@@ -99,6 +99,9 @@ function VoteService.vote(player: Player, mapId: any): (boolean, string?)
 	if not c or not c.queued then
 		return false, "Join the game through the portal to vote"
 	end
+	if c.queuedMode ~= "Survival" then
+		return false, "The map vote is for Survival Games"
+	end
 	for _, def in options do
 		if def.id == mapId then
 			votes[player] = mapId

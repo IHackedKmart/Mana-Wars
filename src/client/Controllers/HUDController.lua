@@ -563,14 +563,39 @@ local function updatePhase()
 	local alive = ReplicatedStorage:GetAttribute("AliveCount") or 0
 	local queued = tonumber(ReplicatedStorage:GetAttribute("QueueCount")) or 0
 	local start = ReplicatedStorage:GetAttribute("MatchStartedAt") or now
-	local running = phase == "Countdown" or phase == "Grace" or phase == "Battle"
+	local running = phase == "Countdown" or phase == "Grace" or phase == "Battle" or phase == "Carpet"
 	bigCount.Visible = false
+
+	-- in a duel: the opponent and the duel's own clock
+	if player:GetAttribute("Mode") == "Duel" then
+		local state = player:GetAttribute("DuelState")
+		local left = (tonumber(player:GetAttribute("DuelEndsAt")) or 0) - now
+		phaseTitle.Text = "🤺 Duel vs " .. tostring(player:GetAttribute("DuelOpponent") or "?")
+		if state == "Countdown" then
+			phaseSub.Text = "One spell, one potion. Get ready..."
+			bigCount.Visible = left > 0
+			bigCount.Text = tostring(math.max(1, math.ceil(left)))
+		elseif state == "Fight" then
+			phaseSub.Text = if player:GetAttribute("DuelSudden")
+				then "Sudden death! The arena burns · time up in " .. fmtTime(left)
+				else "Fight! Sudden death in " .. fmtTime(left)
+		else
+			phaseSub.Text = "Back to the library in a moment"
+		end
+		return
+	end
+
+	local arenaMode = ReplicatedStorage:GetAttribute("MatchMode") or "Survival"
+	local royale = arenaMode == "Royale"
 
 	-- In the hub: what's going on, and whether it's worth joining right now
 	if State.inHub() then
 		if phase == "Voting" then
 			phaseTitle.Text = "Match starting in " .. fmtTime(remaining)
 			phaseSub.Text = plural(queued, "mage") .. " in the queue · join through the portal!"
+		elseif phase == "Gathering" then
+			phaseTitle.Text = "🧞 Battle Royale in " .. fmtTime(remaining)
+			phaseSub.Text = "The magic carpet is boarding · join through the portal!"
 		elseif phase == "Loading" or running then
 			phaseTitle.Text = "Match in progress"
 			phaseSub.Text = plural(alive, "mage") .. " alive · join the queue for the next one"
@@ -584,9 +609,57 @@ local function updatePhase()
 		return
 	end
 
+	-- queued for a mode the main arena isn't playing right now
+	local mine = State.queuedMode()
+	if not State.inMatch() and mine == "Duel" then
+		phaseTitle.Text = "🤺 Looking for a duel opponent"
+		phaseSub.Text = "Your duel starts as soon as someone is found"
+		return
+	end
+	if not State.inMatch() and mine and mine ~= arenaMode and phase ~= "Waiting" then
+		phaseTitle.Text = if mine == "Royale"
+			then "Queued for 🧞 Battle Royale"
+			else "Queued for ⚔️ Survival Games"
+		phaseSub.Text = "It starts once the current "
+			.. (if royale then "Battle Royale" else "Survival Games match")
+			.. " is over"
+		return
+	end
+
 	if phase == "Waiting" then
 		phaseTitle.Text = "In the queue"
 		phaseSub.Text = "Waiting for more players to join"
+	elseif phase == "Gathering" then
+		local aboard = tonumber(ReplicatedStorage:GetAttribute("QueueRoyale")) or queued
+		phaseTitle.Text = "🧞 The carpet leaves in " .. fmtTime(remaining)
+		phaseSub.Text = plural(aboard, "mage") .. " aboard · up to " .. Config.Royale.MaxParticipants
+	elseif phase == "Carpet" then
+		local takeOff = tonumber(ReplicatedStorage:GetAttribute("CarpetStart")) or now
+		if now < takeOff then
+			phaseTitle.Text = "🧞 All aboard!"
+			phaseSub.Text = "The carpet takes off in " .. math.max(1, math.ceil(takeOff - now)) .. "s"
+		elseif player:GetAttribute("Riding") then
+			phaseTitle.Text = "🧞 Riding the magic carpet"
+			phaseSub.Text = "Jump with SPACE · everyone is tipped off in " .. fmtTime(remaining)
+		elseif player:GetAttribute("Gliding") then
+			phaseTitle.Text = "🍃 Gliding down"
+			phaseSub.Text = "Steer with your movement keys · " .. alive .. " mages in the match"
+		else
+			phaseTitle.Text = "🧞 The carpet is crossing the island"
+			phaseSub.Text = alive .. " mages alive · loot fast, others are still landing"
+		end
+	elseif phase == "Battle" and royale then
+		local stage = tonumber(ReplicatedStorage:GetAttribute("StormStage")) or 1
+		local movesIn = (tonumber(ReplicatedStorage:GetAttribute("StormMovesAt")) or now) - now
+		if stage > #Config.Royale.Circles then
+			phaseTitle.Text = "The final storm"
+		elseif ReplicatedStorage:GetAttribute("StormShrinking") then
+			phaseTitle.Text = "The storm is closing · " .. fmtTime(movesIn)
+		else
+			phaseTitle.Text = "Storm moves in " .. fmtTime(movesIn)
+		end
+		local realm = player:GetAttribute("RealmName")
+		phaseSub.Text = alive .. " mages alive" .. (if realm then "  ·  📍 " .. tostring(realm) else "")
 	elseif phase == "Voting" then
 		phaseTitle.Text = "Map vote  " .. fmtTime(remaining)
 		phaseSub.Text = "Vote on the right · " .. plural(queued, "mage") .. " in the queue"
@@ -667,7 +740,11 @@ local function updateCombat()
 	crosshair.Position = UDim2.fromOffset(screen.X / scale, screen.Y / scale)
 
 	local root3 = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if root3 and State.alive() and ReplicatedStorage:GetAttribute("StormActive") then
+	-- (duelists are far from the storm, and it can't touch anyone still coming down from the carpet)
+	local safe = player:GetAttribute("Mode") == "Duel"
+		or player:GetAttribute("Riding")
+		or player:GetAttribute("Gliding")
+	if root3 and State.alive() and not safe and ReplicatedStorage:GetAttribute("StormActive") then
 		local center = ReplicatedStorage:GetAttribute("StormCenter") or Vector3.zero
 		local radius = ReplicatedStorage:GetAttribute("StormRadius") or 1e5
 		local d = Vector3.new(root3.Position.X - center.X, 0, root3.Position.Z - center.Z).Magnitude

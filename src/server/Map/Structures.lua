@@ -346,6 +346,7 @@ end
 
 local CHEST_STYLE = {
 	Outer = { body = Color3.fromRGB(140, 95, 55), trim = Color3.fromRGB(90, 90, 95), glow = nil },
+	House = { body = Color3.fromRGB(110, 76, 50), trim = Color3.fromRGB(150, 120, 70), glow = nil },
 	Cornucopia = {
 		body = Color3.fromRGB(120, 80, 45),
 		trim = Color3.fromRGB(212, 175, 55),
