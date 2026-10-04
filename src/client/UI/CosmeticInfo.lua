@@ -1,8 +1,9 @@
--- Tooltip / detail text for robe and hat parts and finished garments.
+-- Tooltip / detail text for robe and hat parts, finished garments and familiars.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Cosmetics = require(ReplicatedStorage.Shared.Cosmetics)
+local Familiars = require(ReplicatedStorage.Shared.Familiars)
 local Rarity = require(ReplicatedStorage.Shared.Rarity)
 local Theme = require(script.Parent.Theme)
 local ItemInfo = require(script.Parent.ItemInfo)
@@ -98,6 +99,77 @@ function CosmeticInfo.garment(g: any): ItemInfo.Info
 		icon = Cosmetics.Garments[g.kind].icon,
 		iconColor = CosmeticInfo.color(g.parts[slots[1]]),
 	}
+end
+
+function CosmeticInfo.familiarColor(f: any): Color3
+	local variant = Familiars.variantOf(f)
+	return Theme.rgb(variant.rgb)
+end
+
+function CosmeticInfo.familiarIcon(f: any): string
+	local s = Familiars.SpeciesById[f.species]
+	return if s then s.icon else "🐾"
+end
+
+function CosmeticInfo.familiar(f: any): ItemInfo.Info
+	local s = Familiars.SpeciesById[f.species]
+	local variant = Familiars.variantOf(f)
+	local power = Familiars.powerOf(f)
+	local lines = {
+		{ "Species", if s then s.name else tostring(f.species) },
+		{ "Colour", variant.name },
+		{ "Power", if power then power.name else "none (just for show)" },
+	}
+	if f.shiny then
+		table.insert(lines, { "Shiny", "✨ yes" })
+	end
+	local body = {}
+	local text = Familiars.powerText(f)
+	if text then
+		table.insert(body, "✦ " .. text)
+	elseif s then
+		table.insert(
+			body,
+			"Just for show. Rare and rarer "
+				.. s.name
+				.. "s have a small power: "
+				.. Familiars.speciesPowerName(s.id)
+				.. "."
+		)
+	end
+	if s then
+		table.insert(body, "\n" .. s.blurb)
+	end
+	local box = Cosmetics.Boxes[f.box]
+	return {
+		title = f.name,
+		color = Theme.rarity(f.rarity),
+		subtitle = f.rarity .. " familiar" .. (if box then "  ·  from the " .. box.name else ""),
+		lines = lines,
+		body = table.concat(body, "\n"),
+		icon = CosmeticInfo.familiarIcon(f),
+		iconColor = CosmeticInfo.familiarColor(f),
+	}
+end
+
+-- Info / icon / colour for any wardrobe item ("Part", "Garment" or "Familiar").
+function CosmeticInfo.item(kind: string, item: any): ItemInfo.Info
+	if kind == "Garment" then
+		return CosmeticInfo.garment(item)
+	elseif kind == "Familiar" then
+		return CosmeticInfo.familiar(item)
+	end
+	return CosmeticInfo.part(item)
+end
+
+function CosmeticInfo.itemIcon(kind: string, item: any): (string, Color3)
+	if kind == "Garment" then
+		local def = Cosmetics.Garments[item.kind]
+		return def.icon, CosmeticInfo.color(item.parts[def.slots[1]])
+	elseif kind == "Familiar" then
+		return CosmeticInfo.familiarIcon(item), CosmeticInfo.familiarColor(item)
+	end
+	return CosmeticInfo.icon(item), CosmeticInfo.color(item)
 end
 
 -- Total stats of a worn outfit, as text lines.

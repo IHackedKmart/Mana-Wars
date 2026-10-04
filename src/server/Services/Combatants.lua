@@ -43,6 +43,7 @@ export type Combatant = {
 	lastSwap: number,
 	gear: { [string]: number }, -- stat bonuses from the robe and hat being worn (see Cosmetics)
 	place: number?, -- finishing place in the current match (1 = winner)
+	familiar: any?, -- the familiar following them (see Familiars), for its power
 	bot: { [string]: any }?,
 }
 
@@ -91,6 +92,7 @@ function Combatants.create(name: string, player: Player?): Combatant
 		lastSwap = 0,
 		gear = {},
 		place = nil,
+		familiar = nil,
 		bot = nil,
 	}
 	byId[c.id] = c

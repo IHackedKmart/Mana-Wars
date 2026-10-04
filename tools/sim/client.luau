@@ -1072,6 +1072,206 @@ do
 	checkWarnings("effect cleanup")
 end
 
+-- 16. Familiars: every species renders at every rarity, summoning from the Familiars tab, the stat
+--     powers, Nip, Last Ember, Keen Nose and Night Eyes, coffer drops, trading and saving.
+do
+	local Familiars = server.load("Shared/Familiars")
+	local FamiliarService = server.load("Server/Services/FamiliarService")
+	local FamiliarBuilder = client.load("Client/Controllers/FamiliarBuilder")
+	local FamiliarController = client.load("Client/Controllers/FamiliarController")
+	local rng = Mock.Random.new(11)
+
+	-- every species builds and animates, with grander effects at higher rarities
+	local stage = Instance.new("Folder", Mock.workspace)
+	stage.Name = "FamiliarStage"
+	local function count(model, class: string, name: string?): number
+		local n = 0
+		for _, d in model:GetDescendants() do
+			if d:IsA(class) and (name == nil or d.Name == name) then
+				n += 1
+			end
+		end
+		return n
+	end
+	for _, species in Familiars.Species do
+		for r = Rarity.rank(species.minRarity), 6 do
+			local look = {
+				species = species.id,
+				rarity = Rarity.Order[r],
+				variant = species.variants[#species.variants].id,
+				shiny = r == 6,
+			}
+			local rig = FamiliarBuilder.build(look, stage, true)
+			check(rig ~= nil, species.id .. " should build")
+			if rig then
+				for t = 0, 2, 0.25 do
+					FamiliarBuilder.pose(rig, CFrame.new(0, 3, 0), t, t % 1)
+				end
+				local label = species.id .. " at " .. look.rarity
+				check(count(rig.model, "BasePart") >= 4, label .. " should have a body")
+				check((count(rig.model, "PointLight", "RarityGlow") > 0) == (r >= 3), label .. ": glow from Rare")
+				check((count(rig.model, "Trail", "MythicTrail") > 0) == (r >= 6), label .. ": trail at Mythic")
+				check(
+					(count(rig.model, "ParticleEmitter", "ShinySparkles") > 0) == look.shiny,
+					label .. ": shiny sparkles"
+				)
+				FamiliarBuilder.destroy(rig)
+			end
+		end
+	end
+	stage:Destroy()
+	print(string.format("familiars: %d species, %d to collect", #Familiars.Species, Familiars.varietyCount()))
+	checkWarnings("familiar models")
+
+	local function give(species: string, rarity: string)
+		local f = Familiars.roll(rng, 5, rarity, species)
+		WardrobeService.giveItem(player, "Familiar", f)
+		Mock.step(0.1, true)
+		return f
+	end
+	local function summon(f)
+		local loom = gui("Wardrobe")
+		if not loom.Enabled then
+			usePrompt("Wardrobe")
+		end
+		clickNamed(loom, "Tab_Familiars")
+		clickNamed(loom, "Familiar_" .. f.uid)
+		clickNamed(loom, "SummonButton")
+		Mock.step(0.6, true)
+	end
+
+	-- a Common one is just for show; a Rare one of the same kind adds its little bonus
+	local plain = give("DustBunny", "Common")
+	summon(plain)
+	check(State.wardrobe.equipped.Familiar == plain.uid, "Summon should send for the familiar")
+	check(character:GetAttribute("Familiar") == Familiars.encode(plain), "the familiar's look goes on the character")
+	check(FamiliarController.count() >= 1, "clients should build the familiar")
+	local fam = Mock.workspace:FindFirstChild("Familiars")
+	check(fam and fam:FindFirstChild("Familiar_DustBunny") ~= nil, "a Dust Bunny should be following you")
+	local baseSpeed = me.gear.speed or 0
+	local quick = give("DustBunny", "Rare")
+	summon(quick)
+	check(math.abs((me.gear.speed or 0) - baseSpeed - 0.02) < 1e-6, "a Rare Dust Bunny adds 2% speed")
+	checkWarnings("summon")
+
+	-- Nip: in the Spell Lab it only nips training dummies
+	dummy.isDummy = true
+	dummy.inMatch = true
+	dummy.alive = true
+	dummyRoot.CFrame = CFrame.new(0, 3, -6)
+	me.practice = true
+	local fox = give("EmberFox", "Rare")
+	summon(fox)
+	local before = dummy.humanoid.Health
+	check(FamiliarService.tryNip(me, 1000) == true, "the Ember Fox should nip the dummy")
+	Mock.step(0.5, true)
+	check(dummy.humanoid.Health < before, "the nip should hurt the dummy")
+	print(string.format("familiars: a Rare Ember Fox nipped a dummy for %d", before - dummy.humanoid.Health))
+	check(FamiliarService.tryNip(me, 1001) == false, "nips have a cooldown")
+	me.practice = false
+	check(FamiliarService.tryNip(me, 2000) == false, "outside the Spell Lab dummies are off limits")
+	checkWarnings("nip")
+
+	-- Last Ember: the Phoenix Chick bursts when its mage falls
+	me.practice = true
+	local phoenix = give("PhoenixChick", "Legendary")
+	summon(phoenix)
+	before = dummy.humanoid.Health
+	FamiliarService.onDeath(me, root.Position)
+	Mock.step(0.3, true)
+	check(dummy.humanoid.Health < before, "Last Ember should burn nearby foes")
+	me.practice = false
+	checkWarnings("last ember")
+
+	-- Keen Nose: the owner sees the nearest unopened chest outlined
+	local arena = Mock.workspace:FindFirstChild("Arena") or Instance.new("Folder", Mock.workspace)
+	arena.Name = "Arena"
+	local chests = arena:FindFirstChild("Chests") or Instance.new("Folder", arena)
+	chests.Name = "Chests"
+	local chest = Instance.new("Model", chests)
+	chest.Name = "TestChest"
+	local lidPart = Instance.new("Part", chest)
+	lidPart.CFrame = CFrame.new(0, 3, 20)
+	chest.PrimaryPart = lidPart
+	chest:SetAttribute("ChestId", "test")
+	local raven = give("StormRaven", "Epic")
+	summon(raven)
+	gui("Wardrobe").Enabled = false
+	player:SetAttribute("Alive", true)
+	Mock.step(1, true)
+	local keen = fam:FindFirstChild("KeenNose")
+	check(keen and keen.Enabled and keen.Adornee == chest, "Keen Nose should outline the chest")
+	chest:SetAttribute("Opened", true)
+	Mock.step(1, true)
+	check(keen and not keen.Enabled, "opened chests aren't pointed out")
+	chest:Destroy()
+
+	-- Night Eyes: every 12s the nearest enemy is outlined for a moment
+	local owl = give("FrostOwl", "Rare")
+	summon(owl)
+	gui("Wardrobe").Enabled = false
+	player:SetAttribute("Alive", true)
+	local bots = Mock.workspace:FindFirstChild("Bots") or Instance.new("Folder", Mock.workspace)
+	bots.Name = "Bots"
+	local bot = Instance.new("Model", bots)
+	bot.Name = "SpottedBot"
+	local botRoot = Instance.new("Part", bot)
+	botRoot.Name = "HumanoidRootPart"
+	botRoot.CFrame = CFrame.new(30, 3, 0)
+	Instance.new("Humanoid", bot)
+	bot:SetAttribute("InMatch", true)
+	Mock.step(13, true)
+	local eyes = fam:FindFirstChild("NightEyes")
+	check(eyes and eyes.Adornee == bot, "Night Eyes should outline the nearby enemy")
+	bot:Destroy()
+	player:SetAttribute("Alive", false)
+	checkWarnings("owner powers")
+
+	-- coffers can drop familiars (forced here), and the reveal shows them
+	local rollIsFamiliar = Familiars.rollIsFamiliar
+	Familiars.rollIsFamiliar = function()
+		return true
+	end
+	WardrobeService.addCoins(player, 1000, nil)
+	usePrompt("Coffers")
+	local loom = gui("Wardrobe")
+	local familiarsBefore = #State.wardrobe.familiars
+	clickNamed(loom, "Open_2")
+	Familiars.rollIsFamiliar = rollIsFamiliar
+	check(#State.wardrobe.familiars == familiarsBefore + 1, "the coffer should have held a familiar")
+	local newest = State.wardrobe.familiars[#State.wardrobe.familiars]
+	check(newest and loom:FindFirstChild("Got_" .. newest.uid, true) ~= nil, "the familiar should be revealed")
+	checkWarnings("coffer familiar")
+
+	-- trade one (not the one following you), and salvage one from the Familiars tab
+	local auction = Remotes.func("AuctionAction").OnServerInvoke
+	check(
+		auction(player, "List", { kind = "Familiar", uid = owl.uid, price = 40 }) == false,
+		"the summoned familiar can't be sold"
+	)
+	check(auction(player, "List", { kind = "Familiar", uid = fox.uid, price = 40 }) == true, "list a familiar")
+	local listing = next(State.wardrobe.listings)
+	check(listing ~= nil and State.wardrobe.listings[listing].kind == "Familiar", "the listing holds a familiar")
+	check(auction(player, "Cancel", { id = listing }) == true, "take it back")
+	local coins = State.wardrobe.coins
+	clickNamed(loom, "Tab_Familiars")
+	clickNamed(loom, "Familiar_" .. plain.uid)
+	clickNamed(loom, "SalvageButton")
+	check(State.wardrobe.coins == coins + Familiars.SalvageValue[1], "salvaging a Common familiar pays 5")
+	checkWarnings("trade familiars")
+
+	-- familiars and the summoned one are saved
+	local n = #State.wardrobe.familiars
+	DataService.save(player, true)
+	DataService.load(player)
+	Mock.step(0.3, true)
+	check(#State.wardrobe.familiars == n, "familiars should be saved")
+	check(State.wardrobe.equipped.Familiar == owl.uid, "the summoned familiar should be remembered")
+	check(character:GetAttribute("Familiar") == Familiars.encode(owl), "and sent for again after loading")
+	loom.Enabled = false
+	checkWarnings("familiar save")
+end
+
 if failures > 0 then
 	print(failures .. " failure(s)")
 	process.exit(1)

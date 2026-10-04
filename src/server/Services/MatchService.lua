@@ -28,6 +28,7 @@ local BotService = require(script.Parent.BotService)
 local VoteService = require(script.Parent.VoteService)
 local QueueService = require(script.Parent.QueueService)
 local WardrobeService = require(script.Parent.WardrobeService)
+local FamiliarService = require(script.Parent.FamiliarService)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -172,6 +173,7 @@ onDied = function(c: Combatant)
 		end
 	end
 	local pos = if c.root then (c.root :: BasePart).Position else nil
+	FamiliarService.onDeath(c, pos)
 	local killer: Combatant? = nil
 	if c.lastAttacker and c.lastAttacker ~= c and now() - c.lastAttackTime < 20 then
 		killer = c.lastAttacker

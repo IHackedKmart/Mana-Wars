@@ -1,6 +1,7 @@
 -- The Gilded Gavel: the auction house. Opened from the pavilion in the Plaza or the hub button.
---   Browse      - everything for sale (filter by parts / robes / hats and rarity), buy with coins
---   Sell        - put a loose part or an unworn robe / hat up for a price (the house keeps 10%)
+--   Browse      - everything for sale (filter by parts / robes / hats / familiars and rarity)
+--   Sell        - put a loose part, an unworn robe / hat or a resting familiar up for a price
+--                 (the house keeps 10%)
 --   My listings - what you have on the market; take unsold items back
 -- The market is shared by every server when MemoryStore is available.
 
@@ -13,6 +14,7 @@ local Remotes = require(Shared.Remotes)
 local Config = require(Shared.Config)
 local Rarity = require(Shared.Rarity)
 local Cosmetics = require(Shared.Cosmetics)
+local Familiars = require(Shared.Familiars)
 local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
@@ -85,21 +87,14 @@ end
 -- Item helpers
 ---------------------------------------------------------------------------
 
-local function itemInfo(kind: string, item: any)
-	return if kind == "Garment" then CosmeticInfo.garment(item) else CosmeticInfo.part(item)
-end
-
-local function itemIcon(kind: string, item: any): (string, Color3)
-	if kind == "Garment" then
-		local def = Cosmetics.Garments[item.kind]
-		return def.icon, CosmeticInfo.color(item.parts[def.slots[1]])
-	end
-	return CosmeticInfo.icon(item), CosmeticInfo.color(item)
-end
+local itemInfo = CosmeticInfo.item
+local itemIcon = CosmeticInfo.itemIcon
 
 local function typeLabel(kind: string, item: any): string
 	if kind == "Garment" then
 		return item.rarity .. " " .. item.kind:lower()
+	elseif kind == "Familiar" then
+		return item.rarity .. " familiar" .. (if item.shiny then " ✨" else "")
 	end
 	local slot = Cosmetics.Slots[item.slot]
 	return item.rarity .. " " .. (if slot then slot.label:lower() else tostring(item.slot))
@@ -120,7 +115,9 @@ local function proceeds(price: number): number
 end
 
 local function salvageValue(kind: string, item: any): number
-	if kind == "Garment" then
+	if kind == "Familiar" then
+		return Familiars.SalvageValue[Rarity.rank(item.rarity)] or 1
+	elseif kind == "Garment" then
 		local v = 0
 		for _, p in item.parts do
 			v += Cosmetics.SalvageValue[Rarity.rank(p.rarity)] or 1
@@ -238,13 +235,13 @@ end
 -- Browse
 ---------------------------------------------------------------------------
 
-local FILTER_KINDS: { [string]: string } = { Parts = "Part", Robes = "Robe", Hats = "Hat" }
+local FILTER_KINDS: { [string]: string } = { Parts = "Part", Robes = "Robe", Hats = "Hat", Familiars = "Familiar" }
 
 local function matches(l: any): boolean
 	if type(l.item) ~= "table" then
 		return false
 	end
-	local kind: string = if l.kind == "Garment" then l.item.kind else "Part"
+	local kind: string = if l.kind == "Garment" then l.item.kind elseif l.kind == "Familiar" then "Familiar" else "Part"
 	local want = FILTER_KINDS[filter]
 	if want and kind ~= want then
 		return false
@@ -369,7 +366,7 @@ local function buildBrowse(page: Frame)
 		Size = UDim2.new(1, 0, 0, 34),
 		Parent = page,
 	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, name in { "All", "Parts", "Robes", "Hats" } do
+	for i, name in { "All", "Parts", "Robes", "Hats", "Familiars" } do
 		local b = Widgets.button(name, {
 			size = UDim2.fromOffset(96, 32),
 			color = C.Panel3,
@@ -432,7 +429,10 @@ local function sellItem(): (string?, any)
 	if not sel then
 		return nil, nil
 	end
-	local list = if sel.kind == "Garment" then State.wardrobe.garments else State.wardrobe.parts
+	local list = if sel.kind == "Garment"
+		then State.wardrobe.garments
+		elseif sel.kind == "Familiar" then State.wardrobe.familiars or {}
+		else State.wardrobe.parts
 	for _, item in list do
 		if item.uid == sel.uid then
 			return sel.kind, item
@@ -497,7 +497,7 @@ local function refreshSell()
 			iconColor = color,
 			border = Theme.rarity(item.rarity),
 			selected = sellSelected ~= nil and sellSelected.uid == item.uid,
-			label = if kind == "Garment" then item.kind else nil,
+			label = if kind == "Garment" then item.kind elseif kind == "Familiar" then "Familiar" else nil,
 			layoutOrder = order,
 			info = function()
 				return itemInfo(kind, item)
@@ -526,6 +526,11 @@ local function refreshSell()
 			add("Garment", g)
 		end
 	end
+	for _, f in byRarity(w.familiars or {}) do
+		if not wornUids[f.uid] then
+			add("Familiar", f)
+		end
+	end
 	for _, p in byRarity(w.parts) do
 		add("Part", p)
 	end
@@ -536,7 +541,7 @@ local function refreshSell()
 	Widgets.fillInfo(sellInfo, if kind then itemInfo(kind, item) else nil)
 	if not kind then
 		Widgets.label({
-			Text = "Pick something to sell. Worn robes and hats can't be sold: take them off first.",
+			Text = "Pick something to sell. Worn robes and hats, and the familiar following you, can't be sold: take them off (or dismiss it) first.",
 			TextSize = 14,
 			TextColor3 = C.Dim,
 			TextWrapped = true,
@@ -549,7 +554,7 @@ end
 
 local function buildSell(page: Frame)
 	Widgets.label({
-		Text = "YOUR UNWORN ROBES, HATS AND PARTS",
+		Text = "YOUR UNWORN ROBES, HATS, PARTS AND FAMILIARS",
 		Font = Theme.Black,
 		TextSize = 13,
 		TextColor3 = C.Gold,

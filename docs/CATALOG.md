@@ -283,3 +283,45 @@ A **robe** is a Cloth + Trim + Sigil; a **hat** is a Hat shape + Band + Gem. Eac
 | **Blood Attunement** | +N Blood damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Blood damage |
 | **Chaos Attunement** | +N Chaos damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Chaos damage |
 | **Chrono Attunement** | +N Chrono damage | 3% / 4% / 5% / 7% / 9% / 12% | +20% Chrono damage |
+
+### Familiars
+
+Every item a coffer hands out can turn out to be a **familiar** instead (Tattered Satchel 3%, Apprentice's Coffer 5%, Enchanter's Chest 8%, Archmage's Vault 10%, Celestial Reliquary 15% per item). A familiar rolls its rarity from the coffer's usual odds, and 2.5% of familiars are **Shiny** (golden sparkles, looks only). Common and Uncommon familiars are purely cosmetic; from Rare up each species has one minor power that grows with rarity. Rare familiars glow, Epic ones sparkle, Legendary ones carry an elemental aura and Mythic ones leave a trail. **21** species, **532** distinct familiars to collect (species × colour × rarity × shiny).
+
+| | Familiar | From rarity | Coffers | Power (Rare+) | Colours |
+|---|---|---|---|---|---|
+| 🐇 | **Dust Bunny** | Common | Tattered Satchel, Apprentice's Coffer only | Quickpaw | Snow, Ash, Cocoa, Blossom |
+| 🐸 | **Pebble Toad** | Common | any | Springheel | Moss, Stone, Bog, Ruby |
+| 🐭 | **Candle Mouse** | Common | any | Keen Nose | Grey, Cream, Sable |
+| ✨ | **Wisp** | Common | any | Mana Sip | Azure, Violet, Verdant, Ember |
+| 🐈 | **Lucky Tabby** | Uncommon | any | Lucky Charm | Ginger, Tuxedo, Calico, Silver |
+| 🕊️ | **Paper Crane** | Uncommon | any | Attuned (Wind) | Parchment, Crimson, Indigo |
+| 🟢 | **Gel Slime** | Uncommon | any | Guardian | Lime, Berry, Ocean, Honey |
+| 🦋 | **Luna Moth** | Uncommon | any | Mend | Pale Jade, Dusk, Rosy |
+| 🦊 | **Ember Fox** | Rare | any | Nip | Flame, Ashen, Blue-flame |
+| 🦉 | **Frost Owl** | Rare | any | Night Eyes | Snowy, Glacier, Midnight |
+| 📖 | **Tome Mimic** | Rare | Apprentice's Coffer and up | Attuned (Arcane) | Oxblood, Forest, Royal |
+| 🐍 | **Sky Eel** | Rare | Apprentice's Coffer and up | Attuned (Lightning) | Storm, Copper, Neon |
+| 💎 | **Crystal Golemling** | Epic | Enchanter's Chest and up | Guardian | Amethyst, Quartz, Emerald, Ruby |
+| 🪼 | **Void Jelly** | Epic | Enchanter's Chest and up | Nip | Abyss, Ink, Nebula |
+| 🐦 | **Storm Raven** | Epic | Enchanter's Chest and up | Keen Nose | Coal, Thunderhead |
+| 💀 | **Hex Skull** | Epic | Enchanter's Chest and up | Attuned (Blood) | Bone, Obsidian, Gilded |
+| 🐉 | **Dragonling** | Legendary | Archmage's Vault and up | Nip | Crimson, Emerald, Obsidian, Frost |
+| 🔥 | **Phoenix Chick** | Legendary | Archmage's Vault and up | Last Ember | Sunfire, Azure-flame |
+| 🦄 | **Thunder Kirin** | Legendary | Archmage's Vault and up | Quickpaw | Pearl, Gold, Storm |
+| 🐋 | **Star Whale** | Mythic | Celestial Reliquary only | Lucky Charm | Nebula, Aurora |
+| 🐈‍⬛ | **Eclipse Cat** | Mythic | Celestial Reliquary only | Nip | Eclipse, Blood Moon |
+
+| Power | Effect (Rare to Mythic) | Rare / Epic / Legendary / Mythic |
+|---|---|---|
+| **Quickpaw** | +2% to 5% movement speed | 2% / 3% / 4% / 5% |
+| **Springheel** | +4% to 10% jump height | 4% / 6% / 8% / 10% |
+| **Mana Sip** | +3% to 6% mana regeneration | 3% / 4% / 5% / 6% |
+| **Lucky Charm** | +4% to 10% Enchanted Coins from matches | 4% / 6% / 8% / 10% |
+| **Guardian** | -2% to 5% damage taken | 2% / 3% / 4% / 5% |
+| **Mend** | +0.2 to 0.5 health per second | 0.2 / 0.3 / 0.4 / 0.5 |
+| **Attuned** | +3% to 6% its element's damage | 3% / 4% / 5% / 6% |
+| **Keen Nose** | Points out unopened chests within 30 to 60 studs | 30 / 40 / 50 / 60 |
+| **Night Eyes** | Every 12s, outlines the nearest enemy within 50 to 80 studs (only you see it) | 50 / 60 / 70 / 80 |
+| **Nip** | Every 8s, darts at an enemy within 14 studs for 2 to 5 damage | 2 / 3 / 4 / 5 |
+| **Last Ember** | When you fall, it bursts for 8 to 20 fire damage around you | 8 / 12 / 16 / 20 |

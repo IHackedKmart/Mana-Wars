@@ -10,7 +10,7 @@ Everyone starts in a floating plaza where they can hang out and practise spells 
 
 The chests refill halfway through, a Mana Storm closes in, and the last mage standing wins. There are 5 maps to vote on, and 17 kits to start with: a free Apprentice kit, plus 16 more sold in tiers from $0.99 to $25.
 
-Every match also pays out **Enchanted Coins** by finishing place. Spend them on **coffers** of robe and hat parts, stitch your own outfit at the **Tailor's Loom** (with auras like billowing smoke, trailing lightning and stardust on the rarest pieces), and trade parts or finished outfits with other players at the **auction house**.
+Every match also pays out **Enchanted Coins** by finishing place. Spend them on **coffers** of robe and hat parts, stitch your own outfit at the **Tailor's Loom** (with auras like billowing smoke, trailing lightning and stardust on the rarest pieces), collect **familiars** that follow you around, and trade parts, outfits or familiars with other players at the **auction house**.
 
 ## The hub: Arcanum Plaza
 
@@ -165,13 +165,13 @@ New players start with 60 coins and a plain starter robe and hat. Coins can't be
 
 **Coffers** (the Coffer stall, or 👘 Wardrobe & Coffers → Coffers) hold robe and hat parts. Pricier coffers roll rarer parts, and some designs only come from one coffer:
 
-| | Coffer | Price | Parts | Odds |
-|---|---|---|---|---|
-| 👝 | Tattered Satchel | 50 | 1 | 98% Common · 1.8% Uncommon · 0.2% Rare |
-| 🧰 | Apprentice's Coffer | 100 | 1 | 70% Common · 24% Uncommon · 5% Rare · 1% Epic |
-| 🧳 | Enchanter's Chest | 300 | 2 | 30% Common · 40% Uncommon · 22% Rare · 7% Epic · 1% Legendary |
-| 🗝️ | Archmage's Vault | 500 | 2 | 30% Uncommon · 40% Rare · 22% Epic · 7% Legendary · 1% Mythic |
-| 🌠 | Celestial Reliquary | 1000 | 3 | 30% Rare · 40% Epic · 24% Legendary · 6% Mythic (halos, starcrowns, crystalweave and celestial robes only drop here) |
+| | Coffer | Price | Items | Odds | Familiar chance per item |
+|---|---|---|---|---|---|
+| 👝 | Tattered Satchel | 50 | 1 | 98% Common · 1.8% Uncommon · 0.2% Rare | 3% |
+| 🧰 | Apprentice's Coffer | 100 | 1 | 70% Common · 24% Uncommon · 5% Rare · 1% Epic | 5% |
+| 🧳 | Enchanter's Chest | 300 | 2 | 30% Common · 40% Uncommon · 22% Rare · 7% Epic · 1% Legendary | 8% |
+| 🗝️ | Archmage's Vault | 500 | 2 | 30% Uncommon · 40% Rare · 22% Epic · 7% Legendary · 1% Mythic | 10% |
+| 🌠 | Celestial Reliquary | 1000 | 3 | 30% Rare · 40% Epic · 24% Legendary · 6% Mythic (halos, starcrowns, crystalweave, celestial robes, Star Whales and Eclipse Cats only drop here) | 15% |
 
 **The Tailor's Loom.** A **robe** is stitched from a Cloth, a Trim and a Sigil. A **hat** is a Hat shape, a Band and a Gem. Every part rolls its own design (65 across the six slots), one of 36 colours, one of 10 materials (wool up to radiant neon and ethereal forcefield), 1–3 enchantments, and, on Sigils and Gems, one of 20 auras. That's about 146,000 distinct-looking parts, and a finished outfit is any six of them. Garments can be unpicked back into parts, and unwanted parts salvaged for coins.
 
@@ -185,7 +185,29 @@ So mixing rarities always works, but a matched set looks the best.
 
 **Enchantments** are small, capped bonuses that apply in matches: movement speed, max health, wand mana and regen, cast delay, recharge, damage reduction, crit, lifesteal, health regen, jump, coin Fortune, shorter burns and chills, and +damage for one element. Rarer parts carry more and bigger ones, but every stat has a cap (e.g. +12% speed, +25 health), so a full Mythic outfit is an edge, not an auto-win. Outfits are locked in once a match starts. The full tables are in [docs/CATALOG.md](docs/CATALOG.md#robes-hats-and-coffers).
 
-**The auction house (the Gilded Gavel).** List any loose part or unworn robe or hat for a price in coins (up to 10 listings at once). Other players browse by type, rarity and price, and buy with a click and a confirm. The house keeps 10%. Unsold items come back after 48 hours, and you can take a listing back any time before it sells.
+**Familiars.** Any item from a coffer can turn out to be a **familiar** instead (see the last column above). It rolls its rarity from the same odds, and 1 in 40 is **Shiny** (golden sparkles). Summon one from **👘 Wardrobe & Coffers → 🐾 Familiars** and it follows you around the Plaza and into matches. Fliers hover by your shoulder and walkers trot at your heels. Everyone sees everyone's familiar.
+- **21 species** across every rarity, each with 2–4 colours. From Common: Dust Bunny, Pebble Toad, Candle Mouse, Wisp. From Uncommon: Lucky Tabby, Paper Crane, Gel Slime, Luna Moth. From Rare: Ember Fox, Frost Owl, Tome Mimic, Sky Eel. From Epic: Crystal Golemling, Void Jelly, Storm Raven, Hex Skull. From Legendary: Dragonling, Phoenix Chick, Thunder Kirin. Mythic only: Star Whale and Eclipse Cat. A species can roll at its own rarity or higher, so there are 532 distinct familiars to collect.
+- **Common and Uncommon familiars are purely visual.** From **Rare** up, each species has one minor power that grows a little with rarity:
+
+  | Power | Rare → Mythic | Who has it |
+  |---|---|---|
+  | Quickpaw | +2% → +5% movement speed | Dust Bunny, Thunder Kirin |
+  | Springheel | +4% → +10% jump height | Pebble Toad |
+  | Mana Sip | +3% → +6% mana regen | Wisp |
+  | Lucky Charm | +4% → +10% coins from matches | Lucky Tabby, Star Whale |
+  | Guardian | −2% → −5% damage taken | Gel Slime, Crystal Golemling |
+  | Mend | +0.2 → +0.5 health per second | Luna Moth |
+  | Attuned | +3% → +6% damage of its element | Paper Crane (Wind), Tome Mimic (Arcane), Sky Eel (Lightning), Hex Skull (Blood) |
+  | Keen Nose | outlines the nearest unopened chest within 30 → 60 studs | Candle Mouse, Storm Raven |
+  | Night Eyes | every 12s, briefly outlines the nearest enemy within 50 → 80 studs (only you see it) | Frost Owl |
+  | Nip | every 8s, darts at an enemy within 14 studs for 2 → 5 damage | Ember Fox, Void Jelly, Dragonling, Eclipse Cat |
+  | Last Ember | when you fall, bursts for 8 → 20 fire damage around you | Phoenix Chick |
+
+  Familiars follow the normal damage rules: no nipping during the grace period, and in the Spell Lab they only nip training dummies.
+- **Rarer familiars look grander:** Rare ones glow, Epic ones sparkle and get glowing eyes, Legendary ones carry an elemental aura (flames, frost, sparks, smoke…), and Mythic ones also leave a trail.
+- Familiars are built from parts and animated on each player's own computer (flapping wings, wagging tails, swaying tentacles, orbiting crystal shards), so they cost no network traffic. About a third of bots bring a humble familiar along too.
+
+**The auction house (the Gilded Gavel).** List any loose part, unworn robe or hat, or familiar that isn't following you, for a price in coins (up to 10 listings at once). Other players browse by type, rarity and price, and buy with a click and a confirm. The house keeps 10%. Unsold items come back after 48 hours, and you can take a listing back any time before it sells.
 - The market is **shared by every server**. Listings live in a MemoryStore sorted map, so a player in another server can buy your item.
 - Items are held in escrow while listed, buying is atomic (two buyers can never get the same item), and sellers who are offline or in another server are paid through a DataStore mailbox the next time they play.
 - Profiles (coins, wardrobe, listings, stats) are saved with a session lock, so joining two servers at once can't duplicate items.
@@ -229,6 +251,7 @@ Almost every number lives in **`src/shared/Config.lua`**: match timings (the gra
 | change the tutorial or Grimoire text | `src/client/Controllers/TutorialController.lua`, `GrimoireController.lua` |
 | change coin payouts, starting coins, the auction fee or listing limits | `Config.Economy` in `src/shared/Config.lua` |
 | add robe/hat designs, colours, materials, auras or enchantments, or change coffer prices and odds | `src/shared/Cosmetics.lua` |
+| add a familiar species or colour, change powers, familiar odds or the shiny chance | `src/shared/Familiars.lua` (and its body in `src/client/Controllers/FamiliarBuilder.lua`) |
 | change how outfits and auras are built on characters | `src/shared/OutfitBuilder.lua` |
 | change spell effects | `src/client/Controllers/FXController.lua` (what each spell draws) and `VFX.lua` (element styles and building blocks) |
 
@@ -241,7 +264,8 @@ src/
   shared/        (ReplicatedStorage.Shared)  game data + logic used by both sides
     Spells/        SpellParts, SpellBuilder (recipe -> stats), PremadeSpells, SpellNames
     WandGenerator, LootTables, Classes, Items, Consumables, Rarity, ProjectileSim, Remotes
-    Cosmetics (robe/hat parts, coffers, resonance, enchantments), OutfitBuilder (dressing characters)
+    Cosmetics (robe/hat parts, coffers, resonance, enchantments), OutfitBuilder (dressing characters),
+    Familiars (species, powers, coffer rolls)
   server/        (ServerScriptService.Server)
     Services/      MatchService (game loop), QueueService (hub <-> queue), VoteService (map vote),
                    CastingService (wand decks + mana),
@@ -249,13 +273,14 @@ src/
                    DamageService, StatusService, InventoryService (Spellforge), ChestService,
                    PracticeService (training dummies), BotService, ClassService, MapService,
                    DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
-                   outfits), AuctionService (the cross-server auction house)
+                   outfits), FamiliarService (Nip, Last Ember), AuctionService (the cross-server auction house)
     Map/           MapDefs (the 5 maps), TerrainGen, Structures (trees, ruins, cornucopia, chests),
                    Hub (Arcanum Plaza), Lobby (the library), Props (shared building blocks)
   client/        (StarterPlayerScripts.Client)
     Controllers/   HUD, Spellbook/Spellforge, Grimoire, Tutorial, chest window, lobby (join/leave queue,
-                   vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom), Auction house, input,
-                   effects (FXController + VFX), storm, weather
+                   vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom, familiars), Auction house,
+                   familiars (FamiliarController + FamiliarBuilder), input, effects (FXController + VFX),
+                   storm, weather
     UI/            small UI toolkit (Create, Widgets, Theme, ItemInfo)
 ```
 
@@ -266,11 +291,12 @@ The server is authoritative. Clients only send requests like "cast at this point
 The game logic is tested outside Roblox:
 
 ```bash
-python3 tools/run_tests.py          # unit tests for spells, wands, loot, kits, coffers, crafting and auras (needs the `luau` CLI)
+python3 tools/run_tests.py          # unit tests for spells, wands, loot, kits, coffers, crafting, auras and familiars (needs the `luau` CLI)
 lune run tools/sim/combat           # every premade spell, the wild parts (walls, hydra, fractal, swaps, rewinds...), 1500 random spells, Spell Lab rules
 lune run tools/sim/client           # real client UI + real server: forge, slot, loot, cast, buy a kit, join/leave the queue, vote, Grimoire, the tutorial,
                                     #   open coffers, stitch and wear a robe, outfits on R15/R6 bodies, sell/buy/cancel on the auction house,
-                                    #   saving and rejoining, and every spell effect in every element (drawn and cleaned up)
+                                    #   saving and rejoining, every spell effect in every element (drawn and cleaned up), and
+                                    #   familiars: every species at every rarity, summoning, each kind of power, trading, saving
 lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, two full matches with bots
                                     #   (distinct finishing places, exact coin payouts, saved profile), leave the queue
 lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps, checking chests, spacing and decoration

@@ -1,4 +1,5 @@
--- The auction house: players sell cosmetic parts and finished robes / hats for Enchanted Coins.
+-- The auction house: players sell cosmetic parts, finished robes / hats and familiars for
+-- Enchanted Coins.
 --
 -- Listings live in a MemoryStore sorted map shared by every server, so the market is global.
 -- Selling is escrowed: the item leaves the seller's wardrobe when it's listed. Buying claims the
@@ -29,7 +30,7 @@ export type Listing = {
 	id: string,
 	seller: number,
 	sellerName: string,
-	kind: string, -- "Part" | "Garment"
+	kind: string, -- "Part" | "Garment" | "Familiar"
 	item: any,
 	price: number,
 	created: number,
@@ -308,7 +309,7 @@ function AuctionService.list(player: Player, kind: any, uid: any, price: any): (
 	if not profile then
 		return false, "Still loading"
 	end
-	kind = if kind == "Garment" then "Garment" else "Part"
+	kind = WardrobeService.kindOf(kind)
 	price = math.floor(tonumber(price) or 0)
 	if price < 1 or price > E.MaxPrice then
 		return false, "Pick a price between 1 and " .. E.MaxPrice

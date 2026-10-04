@@ -9,6 +9,7 @@ local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
 local Classes = require(Shared.Classes)
 local Cosmetics = require(Shared.Cosmetics)
+local Familiars = require(Shared.Familiars)
 local Rarity = require(Shared.Rarity)
 local Consumables = require(Shared.Consumables)
 local SpellParts = require(Shared.Spells.SpellParts)
@@ -474,8 +475,8 @@ chapter("Classes", "🎓  Kits", function()
 	end
 end)
 
-chapter("Wardrobe", "👘  Robes & Coins", function()
-	heading("Robes, Hats & Coins")
+chapter("Wardrobe", "👘  Robes & Familiars", function()
+	heading("Robes, Familiars & Coins")
 	para(
 		"Every match pays out <b>Enchanted Coins</b> by finishing place: 1st gets <b>"
 			.. Config.Economy.CoinsForFirst
@@ -526,9 +527,39 @@ chapter("Wardrobe", "👘  Robes & Coins", function()
 		"Parts carry small bonuses that work in matches (rarer parts have more and bigger ones). Each stat is capped, so a full Mythic outfit is an edge, not an auto-win.\n"
 			.. table.concat(lines, "\n")
 	)
+	subheading("Familiars")
+	local chances = {}
+	for _, box in Cosmetics.Boxes do
+		table.insert(chances, box.icon .. " " .. (Familiars.ChancePerItem[box.id] or 0) .. "%")
+	end
+	para(
+		"Every item a Coffer hands out has a small chance to be a <b>familiar</b> instead: a little companion that follows you around the Plaza and into matches ("
+			.. table.concat(chances, ", ")
+			.. "). It rolls its rarity from the coffer's usual odds. Summon one from the <b>🐾 Familiars</b> tab.\n"
+			.. "<b>Common</b> and <b>Uncommon</b> familiars are just for show. From <b>Rare</b> up, each kind has one small power that grows with rarity. Rare familiars glow, Epic ones sparkle, Legendary ones carry an elemental aura and Mythic ones leave a trail. 1 in "
+			.. math.floor(100 / Familiars.ShinyChance + 0.5)
+			.. " is <b>Shiny</b>, with golden sparkles."
+	)
+	local byRarity = {}
+	for _, s in Familiars.Species do
+		byRarity[s.minRarity] = byRarity[s.minRarity] or {}
+		table.insert(byRarity[s.minRarity], s.icon .. " " .. s.name .. " (" .. Familiars.speciesPowerName(s.id) .. ")")
+	end
+	local kinds = {}
+	for _, rarity in Rarity.Order do
+		if byRarity[rarity] then
+			table.insert(kinds, "<b>From " .. rarity .. ":</b> " .. table.concat(byRarity[rarity], ", "))
+		end
+	end
+	para(table.concat(kinds, "\n"))
+	local powers = {}
+	for _, power in Familiars.Powers do
+		table.insert(powers, "<b>" .. power.name .. "</b>: " .. Familiars.powerRangeText(power, nil))
+	end
+	para("Powers, from Rare to Mythic:\n" .. table.concat(powers, "\n"))
 	subheading("Trading")
 	para(
-		"The <b>Gilded Gavel</b> (the auction house pavilion in the Plaza) lets you sell loose parts or finished robes and hats to other players for coins. The house keeps "
+		"The <b>Gilded Gavel</b> (the auction house pavilion in the Plaza) lets you sell loose parts, finished robes and hats, or familiars to other players for coins. The house keeps "
 			.. math.floor(Config.Economy.AuctionFee * 100 + 0.5)
 			.. "%. Unsold items come back after "
 			.. Config.Economy.AuctionHours

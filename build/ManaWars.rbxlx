@@ -845,6 +845,7 @@ Config.Economy = {
 	StarterCoins = 60, -- enough for a first Tattered Satchel
 	MaxParts = 250, -- wardrobe space
 	MaxGarments = 60,
+	MaxFamiliars = 60,
 	AuctionFee = 0.1, -- the auction house keeps 10% of every sale
 	AuctionHours = 48, -- unsold listings come back after this long
 	MaxListings = 10, -- per player
@@ -2027,6 +2028,749 @@ return Cosmetics
       </Item>
       <Item class="ModuleScript" referent="8">
         <Properties>
+          <string name="Name">Familiars</string>
+          <string name="Source"><![CDATA[--!strict
+-- Familiars: little companions that float or scamper after their mage, in the Plaza and in
+-- matches. They come out of Coffers: every item a Coffer hands out has a small chance to be a
+-- familiar instead of a robe or hat part, and it rolls its rarity from the Coffer's usual odds.
+--
+-- * Common and Uncommon familiars are purely for show.
+-- * From Rare up, each species has one minor power (a touch more speed, sniffing out chests,
+--   a nip at a nearby enemy...) that grows a little with rarity.
+-- * Rarer familiars also look grander: a glow from Rare, sparkles from Epic, an elemental aura
+--   from Legendary and a trail at Mythic. Any familiar can roll Shiny (golden sparkles, looks only).
+
+local Rarity = require(script.Parent.Rarity)
+local Items = require(script.Parent.Items)
+
+local Familiars = {}
+
+export type Variant = { id: string, name: string, rgb: { number }, accent: { number } }
+
+export type Species = {
+	id: string,
+	name: string,
+	icon: string,
+	body: string, -- which model FamiliarBuilder makes
+	minRarity: string,
+	minBox: number?,
+	boxes: { number }?, -- only from these Coffers
+	power: string,
+	element: string?, -- flavour of its aura particles (and of Attuned / Nip)
+	flies: boolean,
+	size: number,
+	variants: { Variant },
+	blurb: string,
+}
+
+export type Power = {
+	id: string,
+	name: string,
+	text: string, -- with %s for the value
+	percent: boolean,
+	values: { number }, -- Rare, Epic, Legendary, Mythic
+	stat: string?, -- a gear stat it adds to (see Cosmetics.Enchants); nil = a special power
+}
+
+export type Familiar = {
+	uid: string,
+	species: string,
+	rarity: string,
+	variant: string,
+	shiny: boolean,
+	box: number,
+	name: string,
+}
+
+-- Chance (in %) that each item from a Coffer is a familiar, by Coffer id.
+Familiars.ChancePerItem = { 3, 5, 8, 10, 15 }
+Familiars.ShinyChance = 2.5 -- % of familiars
+-- Powers start at this rarity rank (Rare). Below it a familiar is just for show.
+Familiars.PowerRank = 3
+-- What a familiar salvages for, by rarity rank.
+Familiars.SalvageValue = { 5, 12, 35, 90, 220, 550 }
+
+---------------------------------------------------------------------------
+-- Powers (all deliberately small)
+---------------------------------------------------------------------------
+
+Familiars.Powers = {
+	{
+		id = "speed",
+		name = "Quickpaw",
+		text = "+%s movement speed",
+		percent = true,
+		values = { 0.02, 0.03, 0.04, 0.05 },
+		stat = "speed",
+	},
+	{
+		id = "jump",
+		name = "Springheel",
+		text = "+%s jump height",
+		percent = true,
+		values = { 0.04, 0.06, 0.08, 0.1 },
+		stat = "jump",
+	},
+	{
+		id = "manaRegen",
+		name = "Mana Sip",
+		text = "+%s mana regeneration",
+		percent = true,
+		values = { 0.03, 0.04, 0.05, 0.06 },
+		stat = "manaRegen",
+	},
+	{
+		id = "fortune",
+		name = "Lucky Charm",
+		text = "+%s Enchanted Coins from matches",
+		percent = true,
+		values = { 0.04, 0.06, 0.08, 0.1 },
+		stat = "fortune",
+	},
+	{
+		id = "ward",
+		name = "Guardian",
+		text = "-%s damage taken",
+		percent = true,
+		values = { 0.02, 0.03, 0.04, 0.05 },
+		stat = "ward",
+	},
+	{
+		id = "regen",
+		name = "Mend",
+		text = "+%s health per second",
+		percent = false,
+		values = { 0.2, 0.3, 0.4, 0.5 },
+		stat = "regen",
+	},
+	{
+		id = "attuned",
+		name = "Attuned",
+		text = "+%s %s damage",
+		percent = true,
+		values = { 0.03, 0.04, 0.05, 0.06 },
+		stat = "elem", -- + the species' element
+	},
+	{
+		id = "chestSense",
+		name = "Keen Nose",
+		text = "Points out unopened chests within %s studs",
+		percent = false,
+		values = { 30, 40, 50, 60 },
+	},
+	{
+		id = "spotter",
+		name = "Night Eyes",
+		text = "Every 12s, outlines the nearest enemy within %s studs (only you see it)",
+		percent = false,
+		values = { 50, 60, 70, 80 },
+	},
+	{
+		id = "nip",
+		name = "Nip",
+		text = "Every 8s, darts at an enemy within 14 studs for %s damage",
+		percent = false,
+		values = { 2, 3, 4, 5 },
+	},
+	{
+		id = "emberWake",
+		name = "Last Ember",
+		text = "When you fall, it bursts for %s fire damage around you",
+		percent = false,
+		values = { 8, 12, 16, 20 },
+	},
+} :: { Power }
+
+Familiars.PowerById = {} :: { [string]: Power }
+for _, p in Familiars.Powers do
+	Familiars.PowerById[p.id] = p
+end
+
+Familiars.NipRange = 14
+Familiars.NipCooldown = 8
+Familiars.SpotterCooldown = 12
+Familiars.EmberWakeRadius = 10
+
+---------------------------------------------------------------------------
+-- Species
+---------------------------------------------------------------------------
+
+local function v(id: string, name: string, rgb: { number }, accent: { number }): Variant
+	return { id = id, name = name, rgb = rgb, accent = accent }
+end
+
+Familiars.Species = {
+	-- Common
+	{
+		id = "DustBunny",
+		name = "Dust Bunny",
+		icon = "🐇",
+		body = "rabbit",
+		minRarity = "Common",
+		boxes = { 1, 2 },
+		power = "speed",
+		flies = false,
+		size = 1,
+		variants = {
+			v("Snow", "Snow", { 240, 240, 245 }, { 255, 180, 200 }),
+			v("Ash", "Ash", { 130, 130, 140 }, { 220, 220, 230 }),
+			v("Cocoa", "Cocoa", { 140, 95, 65 }, { 240, 220, 200 }),
+			v("Blossom", "Blossom", { 255, 190, 215 }, { 255, 255, 255 }),
+		},
+		blurb = "Lives under library shelves. Hops after you, ears flopping.",
+	},
+	{
+		id = "PebbleToad",
+		name = "Pebble Toad",
+		icon = "🐸",
+		body = "toad",
+		minRarity = "Common",
+		power = "jump",
+		element = "Earth",
+		flies = false,
+		size = 1,
+		variants = {
+			v("Moss", "Moss", { 100, 150, 70 }, { 230, 220, 120 }),
+			v("Stone", "Stone", { 140, 135, 125 }, { 200, 190, 170 }),
+			v("Bog", "Bog", { 70, 90, 60 }, { 200, 120, 60 }),
+			v("Ruby", "Ruby", { 180, 60, 70 }, { 255, 200, 120 }),
+		},
+		blurb = "Sits very still, then jumps very far.",
+	},
+	{
+		id = "CandleMouse",
+		name = "Candle Mouse",
+		icon = "🐭",
+		body = "mouse",
+		minRarity = "Common",
+		power = "chestSense",
+		element = "Fire",
+		flies = false,
+		size = 0.85,
+		variants = {
+			v("Grey", "Grey", { 150, 150, 155 }, { 255, 200, 200 }),
+			v("Cream", "Cream", { 235, 220, 190 }, { 255, 170, 170 }),
+			v("Sable", "Sable", { 70, 55, 50 }, { 230, 150, 150 }),
+		},
+		blurb = "Carries a stub of candle on its head and a nose for treasure.",
+	},
+	{
+		id = "Wisp",
+		name = "Wisp",
+		icon = "✨",
+		body = "wisp",
+		minRarity = "Common",
+		power = "manaRegen",
+		element = "Arcane",
+		flies = true,
+		size = 0.9,
+		variants = {
+			v("Azure", "Azure", { 120, 190, 255 }, { 255, 255, 255 }),
+			v("Violet", "Violet", { 180, 120, 255 }, { 255, 220, 255 }),
+			v("Verdant", "Verdant", { 120, 255, 170 }, { 230, 255, 230 }),
+			v("Ember", "Ember", { 255, 170, 90 }, { 255, 240, 200 }),
+		},
+		blurb = "A loose spark of mana that decided it liked you.",
+	},
+	-- Uncommon
+	{
+		id = "LuckyTabby",
+		name = "Lucky Tabby",
+		icon = "🐈",
+		body = "cat",
+		minRarity = "Uncommon",
+		power = "fortune",
+		flies = false,
+		size = 1,
+		variants = {
+			v("Ginger", "Ginger", { 230, 140, 60 }, { 255, 235, 210 }),
+			v("Tuxedo", "Tuxedo", { 40, 40, 45 }, { 240, 240, 240 }),
+			v("Calico", "Calico", { 240, 230, 220 }, { 220, 120, 50 }),
+			v("Silver", "Silver", { 180, 185, 195 }, { 110, 115, 125 }),
+		},
+		blurb = "Finds coins down the back of every sofa.",
+	},
+	{
+		id = "PaperCrane",
+		name = "Paper Crane",
+		icon = "🕊️",
+		body = "crane",
+		minRarity = "Uncommon",
+		power = "attuned",
+		element = "Wind",
+		flies = true,
+		size = 1,
+		variants = {
+			v("Parchment", "Parchment", { 240, 230, 205 }, { 200, 60, 50 }),
+			v("Crimson", "Crimson", { 200, 50, 60 }, { 255, 230, 200 }),
+			v("Indigo", "Indigo", { 70, 80, 170 }, { 240, 220, 150 }),
+		},
+		blurb = "Folded from a page of a wind spell. It still remembers the words.",
+	},
+	{
+		id = "GelSlime",
+		name = "Gel Slime",
+		icon = "🟢",
+		body = "slime",
+		minRarity = "Uncommon",
+		power = "ward",
+		element = "Poison",
+		flies = false,
+		size = 1,
+		variants = {
+			v("Lime", "Lime", { 140, 230, 90 }, { 220, 255, 200 }),
+			v("Berry", "Berry", { 210, 70, 150 }, { 255, 200, 230 }),
+			v("Ocean", "Ocean", { 60, 160, 230 }, { 200, 240, 255 }),
+			v("Honey", "Honey", { 255, 190, 60 }, { 255, 240, 190 }),
+		},
+		blurb = "Wobbles. Absorbs the odd stray hit, and the odd stray sock.",
+	},
+	{
+		id = "LunaMoth",
+		name = "Luna Moth",
+		icon = "🦋",
+		body = "moth",
+		minRarity = "Uncommon",
+		power = "regen",
+		element = "Radiant",
+		flies = true,
+		size = 1,
+		variants = {
+			v("Jade", "Pale Jade", { 170, 240, 200 }, { 255, 240, 170 }),
+			v("Dusk", "Dusk", { 150, 110, 200 }, { 255, 200, 120 }),
+			v("Rosy", "Rosy", { 255, 170, 190 }, { 255, 240, 250 }),
+		},
+		blurb = "Drawn to the warm glow of a healthy mage.",
+	},
+	-- Rare
+	{
+		id = "EmberFox",
+		name = "Ember Fox",
+		icon = "🦊",
+		body = "fox",
+		minRarity = "Rare",
+		power = "nip",
+		element = "Fire",
+		flies = false,
+		size = 1.05,
+		variants = {
+			v("Flame", "Flame", { 240, 110, 40 }, { 255, 230, 140 }),
+			v("Ash", "Ashen", { 90, 80, 80 }, { 255, 120, 40 }),
+			v("BlueFlame", "Blue-flame", { 60, 120, 240 }, { 180, 230, 255 }),
+		},
+		blurb = "Its tail is actually on fire. It doesn't seem to mind.",
+	},
+	{
+		id = "FrostOwl",
+		name = "Frost Owl",
+		icon = "🦉",
+		body = "owl",
+		minRarity = "Rare",
+		power = "spotter",
+		element = "Frost",
+		flies = true,
+		size = 1,
+		variants = {
+			v("Snowy", "Snowy", { 240, 245, 255 }, { 120, 200, 255 }),
+			v("Glacier", "Glacier", { 150, 210, 240 }, { 240, 250, 255 }),
+			v("Midnight", "Midnight", { 60, 70, 110 }, { 170, 220, 255 }),
+		},
+		blurb = "Sees in the dark, and tells you about it.",
+	},
+	{
+		id = "TomeMimic",
+		name = "Tome Mimic",
+		icon = "📖",
+		body = "book",
+		minRarity = "Rare",
+		minBox = 2,
+		power = "attuned",
+		element = "Arcane",
+		flies = true,
+		size = 1,
+		variants = {
+			v("Oxblood", "Oxblood", { 120, 30, 40 }, { 220, 180, 90 }),
+			v("Forest", "Forest", { 40, 90, 60 }, { 220, 200, 120 }),
+			v("Royal", "Royal", { 60, 40, 120 }, { 240, 210, 110 }),
+		},
+		blurb = "A grimoire that grew teeth. Mostly friendly.",
+	},
+	{
+		id = "SkyEel",
+		name = "Sky Eel",
+		icon = "🐍",
+		body = "eel",
+		minRarity = "Rare",
+		minBox = 2,
+		power = "attuned",
+		element = "Lightning",
+		flies = true,
+		size = 1,
+		variants = {
+			v("Storm", "Storm", { 90, 120, 200 }, { 255, 240, 120 }),
+			v("Copper", "Copper", { 190, 110, 60 }, { 140, 240, 255 }),
+			v("Neon", "Neon", { 40, 220, 200 }, { 255, 255, 255 }),
+		},
+		blurb = "Swims through the air on static.",
+	},
+	-- Epic
+	{
+		id = "Golemling",
+		name = "Crystal Golemling",
+		icon = "💎",
+		body = "crystal",
+		minRarity = "Epic",
+		minBox = 3,
+		power = "ward",
+		element = "Earth",
+		flies = true,
+		size = 1,
+		variants = {
+			v("Amethyst", "Amethyst", { 170, 100, 240 }, { 255, 220, 255 }),
+			v("Quartz", "Quartz", { 230, 235, 245 }, { 170, 220, 255 }),
+			v("Emerald", "Emerald", { 60, 200, 120 }, { 220, 255, 230 }),
+			v("Ruby", "Ruby", { 230, 50, 80 }, { 255, 210, 220 }),
+		},
+		blurb = "A heart of crystal held together by shards that orbit it.",
+	},
+	{
+		id = "VoidJelly",
+		name = "Void Jelly",
+		icon = "🪼",
+		body = "jelly",
+		minRarity = "Epic",
+		minBox = 3,
+		power = "nip",
+		element = "Void",
+		flies = true,
+		size = 1.05,
+		variants = {
+			v("Abyss", "Abyss", { 60, 30, 110 }, { 200, 120, 255 }),
+			v("Ink", "Ink", { 25, 25, 35 }, { 120, 255, 230 }),
+			v("Nebula", "Nebula", { 120, 40, 140 }, { 255, 140, 220 }),
+		},
+		blurb = "Drifts through nothing. Its sting is a little bit of nothing too.",
+	},
+	{
+		id = "StormRaven",
+		name = "Storm Raven",
+		icon = "🐦",
+		body = "raven",
+		minRarity = "Epic",
+		minBox = 3,
+		power = "chestSense",
+		element = "Lightning",
+		flies = true,
+		size = 1,
+		variants = {
+			v("Coal", "Coal", { 35, 35, 45 }, { 150, 200, 255 }),
+			v("Thunder", "Thunderhead", { 60, 60, 90 }, { 255, 240, 120 }),
+		},
+		blurb = "Collects shiny things. Chests count.",
+	},
+	{
+		id = "HexSkull",
+		name = "Hex Skull",
+		icon = "💀",
+		body = "skull",
+		minRarity = "Epic",
+		minBox = 3,
+		power = "attuned",
+		element = "Blood",
+		flies = true,
+		size = 0.95,
+		variants = {
+			v("Bone", "Bone", { 230, 225, 205 }, { 255, 60, 60 }),
+			v("Obsidian", "Obsidian", { 40, 35, 45 }, { 170, 255, 120 }),
+			v("Gilded", "Gilded", { 220, 180, 80 }, { 255, 80, 80 }),
+		},
+		blurb = "Grins at everything. Especially blood magic.",
+	},
+	-- Legendary
+	{
+		id = "Dragonling",
+		name = "Dragonling",
+		icon = "🐉",
+		body = "dragon",
+		minRarity = "Legendary",
+		minBox = 4,
+		power = "nip",
+		element = "Fire",
+		flies = true,
+		size = 1.15,
+		variants = {
+			v("Crimson", "Crimson", { 200, 40, 40 }, { 255, 200, 80 }),
+			v("Emerald", "Emerald", { 40, 160, 80 }, { 255, 230, 120 }),
+			v("Obsidian", "Obsidian", { 40, 40, 50 }, { 255, 90, 40 }),
+			v("Frost", "Frost", { 170, 220, 255 }, { 255, 255, 255 }),
+		},
+		blurb = "Small enough to sit on a shoulder. Not small enough to be harmless.",
+	},
+	{
+		id = "PhoenixChick",
+		name = "Phoenix Chick",
+		icon = "🔥",
+		body = "phoenix",
+		minRarity = "Legendary",
+		minBox = 4,
+		power = "emberWake",
+		element = "Fire",
+		flies = true,
+		size = 1.05,
+		variants = {
+			v("Sunfire", "Sunfire", { 255, 140, 40 }, { 255, 240, 120 }),
+			v("Azure", "Azure-flame", { 60, 150, 255 }, { 200, 240, 255 }),
+		},
+		blurb = "When its mage falls, it goes up in flames. It always comes back.",
+	},
+	{
+		id = "ThunderKirin",
+		name = "Thunder Kirin",
+		icon = "🦄",
+		body = "kirin",
+		minRarity = "Legendary",
+		minBox = 4,
+		power = "speed",
+		element = "Lightning",
+		flies = false,
+		size = 1.15,
+		variants = {
+			v("Pearl", "Pearl", { 240, 240, 250 }, { 140, 200, 255 }),
+			v("Gold", "Gold", { 240, 200, 90 }, { 255, 255, 200 }),
+			v("Storm", "Storm", { 70, 80, 120 }, { 255, 240, 120 }),
+		},
+		blurb = "Gallops on the crackle before a thunderclap.",
+	},
+	-- Mythic (Celestial Reliquary only)
+	{
+		id = "StarWhale",
+		name = "Star Whale",
+		icon = "🐋",
+		body = "whale",
+		minRarity = "Mythic",
+		boxes = { 5 },
+		power = "fortune",
+		element = "Radiant",
+		flies = true,
+		size = 1.3,
+		variants = {
+			v("Nebula", "Nebula", { 40, 50, 120 }, { 255, 240, 170 }),
+			v("Aurora", "Aurora", { 40, 120, 120 }, { 200, 255, 180 }),
+		},
+		blurb = "Swims between the stars, and now between the towers of the Plaza.",
+	},
+	{
+		id = "EclipseCat",
+		name = "Eclipse Cat",
+		icon = "🐈‍⬛",
+		body = "cat",
+		minRarity = "Mythic",
+		boxes = { 5 },
+		power = "nip",
+		element = "Void",
+		flies = false,
+		size = 1.1,
+		variants = {
+			v("Eclipse", "Eclipse", { 20, 20, 28 }, { 255, 180, 60 }),
+			v("BloodMoon", "Blood Moon", { 30, 15, 20 }, { 255, 60, 60 }),
+		},
+		blurb = "Where it walks, the light bends. Its eyes are two tiny suns.",
+	},
+} :: { Species }
+
+Familiars.SpeciesById = {} :: { [string]: Species }
+for _, s in Familiars.Species do
+	Familiars.SpeciesById[s.id] = s
+end
+
+function Familiars.variantOf(f: { species: string, variant: string }): Variant
+	local s = Familiars.SpeciesById[f.species]
+	if s then
+		for _, variant in s.variants do
+			if variant.id == f.variant then
+				return variant
+			end
+		end
+		return s.variants[1]
+	end
+	return v("?", "?", { 200, 200, 200 }, { 255, 255, 255 })
+end
+
+---------------------------------------------------------------------------
+-- Rolling
+---------------------------------------------------------------------------
+
+local function rank(name: string): number
+	return Rarity.rank(name)
+end
+
+-- Can this species come out of this Coffer at this rarity?
+function Familiars.allowed(s: Species, rarity: string, box: number): boolean
+	if rank(s.minRarity) > rank(rarity) then
+		return false
+	end
+	if s.boxes then
+		return table.find(s.boxes, box) ~= nil
+	end
+	return box >= (s.minBox or 1)
+end
+
+function Familiars.familiarName(f: Familiar): string
+	local s = Familiars.SpeciesById[f.species]
+	local variant = Familiars.variantOf(f)
+	return (if f.shiny then "Shiny " else "") .. variant.name .. " " .. (if s then s.name else f.species)
+end
+
+-- Does this Coffer item turn out to be a familiar?
+function Familiars.rollIsFamiliar(rng: any, boxId: number): boolean
+	return rng:NextNumber(0, 100) < (Familiars.ChancePerItem[boxId] or 0)
+end
+
+-- A familiar of the given rarity from a Coffer. Species close to the rolled rarity are favoured,
+-- so a Legendary roll is usually a Legendary-only species rather than a fancy Dust Bunny.
+function Familiars.roll(rng: any, boxId: number, rarity: string, forcedSpecies: string?): Familiar
+	local species: Species? = if forcedSpecies then Familiars.SpeciesById[forcedSpecies] else nil
+	if not species then
+		local pool, total = {}, 0
+		local r = rank(rarity)
+		for _, s in Familiars.Species do
+			if Familiars.allowed(s, rarity, boxId) then
+				local w = 1 + 3 * rank(s.minRarity) / r
+				if s.boxes then
+					w *= 1.5
+				end
+				table.insert(pool, { s = s, w = w })
+				total += w
+			end
+		end
+		local pick = rng:NextNumber(0, total)
+		for _, p in pool do
+			pick -= p.w
+			if pick <= 0 then
+				species = p.s
+				break
+			end
+		end
+		species = species or pool[#pool].s
+	end
+	local s = species :: Species
+	local f: Familiar = {
+		uid = Items.newUid("f"),
+		species = s.id,
+		rarity = rarity,
+		variant = s.variants[rng:NextInteger(1, #s.variants)].id,
+		shiny = rng:NextNumber(0, 100) < Familiars.ShinyChance,
+		box = boxId,
+		name = "",
+	}
+	f.name = Familiars.familiarName(f)
+	return f
+end
+
+---------------------------------------------------------------------------
+-- Powers
+---------------------------------------------------------------------------
+
+-- The familiar's power and its strength, or nil for a Common / Uncommon (just for show).
+function Familiars.powerOf(f: { species: string, rarity: string }): (Power?, number)
+	local s = Familiars.SpeciesById[f.species]
+	local r = rank(f.rarity)
+	if not s or r < Familiars.PowerRank then
+		return nil, 0
+	end
+	local power = Familiars.PowerById[s.power]
+	if not power then
+		return nil, 0
+	end
+	return power, power.values[math.clamp(r - Familiars.PowerRank + 1, 1, #power.values)]
+end
+
+-- The gear stat a familiar adds to (e.g. "speed", "elem:Fire"), and how much.
+function Familiars.statOf(f: { species: string, rarity: string }): (string?, number)
+	local power, value = Familiars.powerOf(f)
+	if not power or not power.stat then
+		return nil, 0
+	end
+	if power.stat == "elem" then
+		local s = Familiars.SpeciesById[f.species]
+		return "elem:" .. (s.element or "Arcane"), value
+	end
+	return power.stat, value
+end
+
+local function valueText(power: Power, value: number): string
+	if power.percent then
+		return tostring(math.floor(value * 1000 + 0.5) / 10) .. "%"
+	end
+	return tostring(value)
+end
+
+-- "Nip: Every 8s, darts at an enemy within 14 studs for 4 damage", or nil if it has no power.
+function Familiars.powerText(f: { species: string, rarity: string }): string?
+	local power, value = Familiars.powerOf(f)
+	if not power then
+		return nil
+	end
+	local s = Familiars.SpeciesById[f.species]
+	local text = if power.id == "attuned"
+		then string.format(power.text, valueText(power, value), s.element or "Arcane")
+		else string.format(power.text, valueText(power, value))
+	return power.name .. ": " .. text
+end
+
+-- "+2% to 5% movement speed": a power's range from Rare to Mythic (for the Grimoire and docs).
+function Familiars.powerRangeText(power: Power, element: string?): string
+	local range = valueText(power, power.values[1]) .. " to " .. valueText(power, power.values[#power.values])
+	if power.id == "attuned" then
+		return string.format(power.text, range, element or "its element's")
+	end
+	return string.format(power.text, range)
+end
+
+-- What the species' power will be once it's Rare (for the tooltip of a Common / Uncommon one).
+function Familiars.speciesPowerName(speciesId: string): string
+	local s = Familiars.SpeciesById[speciesId]
+	local power = s and Familiars.PowerById[s.power]
+	return if power then power.name else "?"
+end
+
+---------------------------------------------------------------------------
+-- Sending a familiar's look to clients (a character attribute)
+---------------------------------------------------------------------------
+
+function Familiars.encode(f: Familiar): string
+	return table.concat({ f.species, f.rarity, f.variant, if f.shiny then "1" else "0" }, "|")
+end
+
+export type Look = { species: string, rarity: string, variant: string, shiny: boolean }
+
+function Familiars.decode(text: any): Look?
+	if type(text) ~= "string" then
+		return nil
+	end
+	local species, rarity, variant, shiny = string.match(text, "^([^|]+)|([^|]+)|([^|]+)|([01])$")
+	if not species or not rarity or not variant or not Familiars.SpeciesById[species] or not Rarity.Info[rarity] then
+		return nil
+	end
+	return { species = species, rarity = rarity, variant = variant, shiny = shiny == "1" }
+end
+
+-- Distinct familiars that can exist: species x colour x rarity x shiny.
+function Familiars.varietyCount(): number
+	local total = 0
+	for _, s in Familiars.Species do
+		local rarities = #Rarity.Order - rank(s.minRarity) + 1
+		total += #s.variants * rarities * 2
+	end
+	return total
+end
+
+return Familiars
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="9">
+        <Properties>
           <string name="Name">Items</string>
           <string name="Source"><![CDATA[--!strict
 -- Plain-data item shapes shared by server and client. Everything here survives RemoteEvents.
@@ -2188,7 +2932,7 @@ return Items
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="9">
+      <Item class="ModuleScript" referent="10">
         <Properties>
           <string name="Name">LootTables</string>
           <string name="Source"><![CDATA[--!strict
@@ -2419,7 +3163,7 @@ return LootTables
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="10">
+      <Item class="ModuleScript" referent="11">
         <Properties>
           <string name="Name">OutfitBuilder</string>
           <string name="Source"><![CDATA[--!strict
@@ -3421,7 +4165,7 @@ return OutfitBuilder
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="11">
+      <Item class="ModuleScript" referent="12">
         <Properties>
           <string name="Name">ProjectileSim</string>
           <string name="Source"><![CDATA[--!strict
@@ -3565,7 +4309,7 @@ return ProjectileSim
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="12">
+      <Item class="ModuleScript" referent="13">
         <Properties>
           <string name="Name">Rarity</string>
           <string name="Source"><![CDATA[--!strict
@@ -3635,7 +4379,7 @@ return Rarity
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="13">
+      <Item class="ModuleScript" referent="14">
         <Properties>
           <string name="Name">Remotes</string>
           <string name="Source"><![CDATA[-- Creates (server) or waits for (client) every RemoteEvent / RemoteFunction the game uses.
@@ -3721,11 +4465,11 @@ return Remotes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="Folder" referent="14">
+      <Item class="Folder" referent="15">
         <Properties>
           <string name="Name">Spells</string>
         </Properties>
-        <Item class="ModuleScript" referent="15">
+        <Item class="ModuleScript" referent="16">
           <Properties>
             <string name="Name">PremadeSpells</string>
             <string name="Source"><![CDATA[--!strict
@@ -4320,7 +5064,7 @@ return PremadeSpells
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="16">
+        <Item class="ModuleScript" referent="17">
           <Properties>
             <string name="Name">SpellBuilder</string>
             <string name="Source"><![CDATA[--!strict
@@ -4825,7 +5569,7 @@ return SpellBuilder
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="17">
+        <Item class="ModuleScript" referent="18">
           <Properties>
             <string name="Name">SpellNames</string>
             <string name="Source"><![CDATA[--!strict
@@ -4884,7 +5628,7 @@ return SpellNames
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="18">
+        <Item class="ModuleScript" referent="19">
           <Properties>
             <string name="Name">SpellParts</string>
             <string name="Source"><![CDATA[--!strict
@@ -6024,7 +6768,7 @@ return SpellParts
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="19">
+        <Item class="ModuleScript" referent="20">
           <Properties>
             <string name="Name">SpellTypes</string>
             <string name="Source"><![CDATA[--!strict
@@ -6167,11 +6911,11 @@ return {}
           </Properties>
         </Item>
       </Item>
-      <Item class="Folder" referent="20">
+      <Item class="Folder" referent="21">
         <Properties>
           <string name="Name">Util</string>
         </Properties>
-        <Item class="ModuleScript" referent="21">
+        <Item class="ModuleScript" referent="22">
           <Properties>
             <string name="Name">Geometry</string>
             <string name="Source"><![CDATA[--!strict
@@ -6261,7 +7005,7 @@ return Geometry
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="22">
+        <Item class="ModuleScript" referent="23">
           <Properties>
             <string name="Name">Signal</string>
             <string name="Source"><![CDATA[--!strict
@@ -6306,7 +7050,7 @@ return Signal
           </Properties>
         </Item>
       </Item>
-      <Item class="ModuleScript" referent="23">
+      <Item class="ModuleScript" referent="24">
         <Properties>
           <string name="Name">WandGenerator</string>
           <string name="Source"><![CDATA[--!strict
@@ -6695,11 +7439,11 @@ return WandGenerator
       </Item>
     </Item>
   </Item>
-  <Item class="ServerScriptService" referent="24">
+  <Item class="ServerScriptService" referent="25">
     <Properties>
       <string name="Name">ServerScriptService</string>
     </Properties>
-    <Item class="Script" referent="25">
+    <Item class="Script" referent="26">
       <Properties>
         <string name="Name">Server</string>
         <token name="RunContext">0</token>
@@ -6728,6 +7472,7 @@ local order = {
 	"VoteService",
 	"QueueService",
 	"WardrobeService",
+	"FamiliarService",
 	"AuctionService",
 	"BotService",
 	"MatchService",
@@ -6746,11 +7491,11 @@ loaded.MatchService.start()
 print("[Mana Wars] server ready")
 ]]></string>
       </Properties>
-      <Item class="Folder" referent="26">
+      <Item class="Folder" referent="27">
         <Properties>
           <string name="Name">Map</string>
         </Properties>
-        <Item class="ModuleScript" referent="27">
+        <Item class="ModuleScript" referent="28">
           <Properties>
             <string name="Name">Build</string>
             <string name="Source"><![CDATA[-- Tiny helpers for building anchored geometry from code.
@@ -6834,7 +7579,7 @@ return Build
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="28">
+        <Item class="ModuleScript" referent="29">
           <Properties>
             <string name="Name">Hub</string>
             <string name="Source"><![CDATA[-- Arcanum Plaza: the hub every player spawns in. Hang out, practise as long as you like, and walk
@@ -7717,7 +8462,7 @@ return Hub
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="29">
+        <Item class="ModuleScript" referent="30">
           <Properties>
             <string name="Name">Lobby</string>
             <string name="Source"><![CDATA[-- The Arcane Athenaeum: a floating library where players wait between matches.
@@ -8449,7 +9194,7 @@ return Lobby
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="30">
+        <Item class="ModuleScript" referent="31">
           <Properties>
             <string name="Name">MapDefs</string>
             <string name="Source"><![CDATA[-- Every arena players can vote for. Each entry controls the island's size, terrain shape,
@@ -8899,7 +9644,7 @@ return MapDefs
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="31">
+        <Item class="ModuleScript" referent="32">
           <Properties>
             <string name="Name">Props</string>
             <string name="Source"><![CDATA[-- Building blocks shared by the hub (Arcanum Plaza) and the library (Arcane Athenaeum):
@@ -9213,7 +9958,7 @@ return Props
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="32">
+        <Item class="ModuleScript" referent="33">
           <Properties>
             <string name="Name">Structures</string>
             <string name="Source"><![CDATA[-- Everything built out of parts: blocky trees, rocks, ruins, the cornucopia, chests,
@@ -10131,7 +10876,7 @@ return Structures
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="33">
+        <Item class="ModuleScript" referent="34">
           <Properties>
             <string name="Name">TerrainGen</string>
             <string name="Source"><![CDATA[-- Generates a fresh island arena with Roblox smooth terrain: hills, lakes (water, ice or lava),
@@ -10303,14 +11048,15 @@ return TerrainGen
           </Properties>
         </Item>
       </Item>
-      <Item class="Folder" referent="34">
+      <Item class="Folder" referent="35">
         <Properties>
           <string name="Name">Services</string>
         </Properties>
-        <Item class="ModuleScript" referent="35">
+        <Item class="ModuleScript" referent="36">
           <Properties>
             <string name="Name">AuctionService</string>
-            <string name="Source"><![CDATA[-- The auction house: players sell cosmetic parts and finished robes / hats for Enchanted Coins.
+            <string name="Source"><![CDATA[-- The auction house: players sell cosmetic parts, finished robes / hats and familiars for
+-- Enchanted Coins.
 --
 -- Listings live in a MemoryStore sorted map shared by every server, so the market is global.
 -- Selling is escrowed: the item leaves the seller's wardrobe when it's listed. Buying claims the
@@ -10341,7 +11087,7 @@ export type Listing = {
 	id: string,
 	seller: number,
 	sellerName: string,
-	kind: string, -- "Part" | "Garment"
+	kind: string, -- "Part" | "Garment" | "Familiar"
 	item: any,
 	price: number,
 	created: number,
@@ -10620,7 +11366,7 @@ function AuctionService.list(player: Player, kind: any, uid: any, price: any): (
 	if not profile then
 		return false, "Still loading"
 	end
-	kind = if kind == "Garment" then "Garment" else "Part"
+	kind = WardrobeService.kindOf(kind)
 	price = math.floor(tonumber(price) or 0)
 	if price < 1 or price > E.MaxPrice then
 		return false, "Pick a price between 1 and " .. E.MaxPrice
@@ -10861,7 +11607,7 @@ return AuctionService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="36">
+        <Item class="ModuleScript" referent="37">
           <Properties>
             <string name="Name">BotService</string>
             <string name="Source"><![CDATA[-- AI mages that fill empty slots. They loot chests, slot spells into their wands,
@@ -11282,7 +12028,7 @@ return BotService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="37">
+        <Item class="ModuleScript" referent="38">
           <Properties>
             <string name="Name">CastingService</string>
             <string name="Source"><![CDATA[-- Wand casting rules, Noita style: each wand is a deck of spells that it cycles
@@ -11605,7 +12351,7 @@ return CastingService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="38">
+        <Item class="ModuleScript" referent="39">
           <Properties>
             <string name="Name">ChestService</string>
             <string name="Source"><![CDATA[-- Chests and loot satchels: spawning, rolling loot, opening, taking items,
@@ -11686,6 +12432,8 @@ local function broadcast(chest: Chest)
 end
 
 local function swingLid(chest: Chest, open: boolean)
+	-- (familiars with Keen Nose only point at chests nobody has opened yet)
+	chest.model:SetAttribute("Opened", open)
 	local lid, closed = chest.lid, chest.lidClosed
 	if not lid or not closed then
 		return
@@ -11941,7 +12689,7 @@ return ChestService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="39">
+        <Item class="ModuleScript" referent="40">
           <Properties>
             <string name="Name">ClassService</string>
             <string name="Source"><![CDATA[-- Kit (class) selection and ownership. Every paid kit is its own game pass (Config.Kits);
@@ -12096,7 +12844,7 @@ return ClassService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="40">
+        <Item class="ModuleScript" referent="41">
           <Properties>
             <string name="Name">Combatants</string>
             <string name="Source"><![CDATA[-- Registry of everything that can fight: real players and bots share one shape,
@@ -12144,6 +12892,7 @@ export type Combatant = {
 	lastSwap: number,
 	gear: { [string]: number }, -- stat bonuses from the robe and hat being worn (see Cosmetics)
 	place: number?, -- finishing place in the current match (1 = winner)
+	familiar: any?, -- the familiar following them (see Familiars), for its power
 	bot: { [string]: any }?,
 }
 
@@ -12192,6 +12941,7 @@ function Combatants.create(name: string, player: Player?): Combatant
 		lastSwap = 0,
 		gear = {},
 		place = nil,
+		familiar = nil,
 		bot = nil,
 	}
 	byId[c.id] = c
@@ -12371,7 +13121,7 @@ return Combatants
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="41">
+        <Item class="ModuleScript" referent="42">
           <Properties>
             <string name="Name">DamageService</string>
             <string name="Source"><![CDATA[-- The single place damage is dealt: grace period, self-damage, crits, marks, shields,
@@ -12578,12 +13328,12 @@ return DamageService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="42">
+        <Item class="ModuleScript" referent="43">
           <Properties>
             <string name="Name">DataService</string>
             <string name="Source"><![CDATA[-- Player profiles saved with DataStores: lifetime stats (wins / kills / matches, shown on the
--- leaderboard), Enchanted Coins, and the wardrobe (cosmetic parts, crafted garments, what's worn,
--- and items currently up for auction).
+-- leaderboard), Enchanted Coins, and the wardrobe (cosmetic parts, crafted garments, familiars,
+-- what's worn, and items currently up for auction).
 -- * Session lock: a profile is claimed by one server at a time (stops duplicating items by
 --   joining two servers at once). A claim older than 90s is considered abandoned.
 -- * Saved on leave, on shutdown, after matches, and every minute while anything changed.
@@ -12601,7 +13351,8 @@ local DataService = {}
 export type Wardrobe = {
 	parts: { any },
 	garments: { any },
-	equipped: { [string]: string }, -- "Robe" / "Hat" -> garment uid
+	familiars: { any },
+	equipped: { [string]: string }, -- "Robe" / "Hat" -> garment uid, "Familiar" -> familiar uid
 	listings: { [string]: any }, -- auction listing id -> { item, kind, price, expires }
 }
 
@@ -12642,7 +13393,7 @@ local function newProfile(): Profile
 		tutorial = false,
 		coins = 0,
 		starter = false,
-		wardrobe = { parts = {}, garments = {}, equipped = {}, listings = {} },
+		wardrobe = { parts = {}, garments = {}, familiars = {}, equipped = {}, listings = {} },
 	}
 end
 
@@ -12661,6 +13412,7 @@ local function fromSaved(data: any): Profile
 	if type(w) == "table" then
 		p.wardrobe.parts = if type(w.parts) == "table" then w.parts else {}
 		p.wardrobe.garments = if type(w.garments) == "table" then w.garments else {}
+		p.wardrobe.familiars = if type(w.familiars) == "table" then w.familiars else {}
 		p.wardrobe.equipped = if type(w.equipped) == "table" then w.equipped else {}
 		p.wardrobe.listings = if type(w.listings) == "table" then w.listings else {}
 	end
@@ -12861,7 +13613,7 @@ return DataService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="43">
+        <Item class="ModuleScript" referent="44">
           <Properties>
             <string name="Name">FX</string>
             <string name="Source"><![CDATA[-- Thin wrapper over the FX remote so services can say FX.all("Boom", ...) without
@@ -12901,7 +13653,137 @@ return FX
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="44">
+        <Item class="ModuleScript" referent="45">
+          <Properties>
+            <string name="Name">FamiliarService</string>
+            <string name="Source"><![CDATA[-- Familiar powers that need the server:
+--   Nip        - every few seconds the familiar darts at the nearest enemy in reach for a little damage
+--   Last Ember - when its mage falls, the familiar bursts into flame around them
+-- Stat powers (speed, ward, coins...) are folded into the combatant's gear by WardrobeService, and
+-- Keen Nose / Night Eyes only show things to their owner, so the client handles those.
+-- Familiars follow the normal damage rules: nothing during the grace period, and in the Spell Lab
+-- they only nip training dummies.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage.Shared
+local Familiars = require(Shared.Familiars)
+local SpellParts = require(Shared.Spells.SpellParts)
+local Combatants = require(script.Parent.Combatants)
+local DamageService = require(script.Parent.DamageService)
+local FX = require(script.Parent.FX)
+
+type Combatant = Combatants.Combatant
+
+local FamiliarService = {}
+
+local nextNip: { [Combatant]: number } = setmetatable({}, { __mode = "k" }) :: any
+local TICK = 0.25
+
+local function colorsOf(element: string): ({ number }, { number })
+	local part = SpellParts.get(element) :: any
+	if part then
+		local base = part.base or {}
+		return part.color, base.color2 or part.color
+	end
+	return { 235, 235, 255 }, { 170, 190, 255 }
+end
+
+local function powerOf(c: Combatant): (string?, number, string)
+	local f = c.familiar
+	if not f then
+		return nil, 0, "Arcane"
+	end
+	local power, value = Familiars.powerOf(f)
+	local species = Familiars.SpeciesById[f.species]
+	return if power then power.id else nil, value, (species and species.element) or "Arcane"
+end
+
+-- The nearest combatant this one is allowed to hurt, within `range` of `center`.
+local function nearestFoe(c: Combatant, center: Vector3, range: number): Combatant?
+	local best, bestDist = nil, range
+	for _, other in Combatants.active() do
+		if other ~= c and DamageService.canHurt(other, c) then
+			local d = (Combatants.centerOf(other) - center).Magnitude
+			if d < bestDist then
+				best, bestDist = other, d
+			end
+		end
+	end
+	return best
+end
+
+function FamiliarService.tryNip(c: Combatant, now: number): boolean
+	local power, value, element = powerOf(c)
+	if power ~= "nip" or not Combatants.canAct(c) or (nextNip[c] or 0) > now then
+		return false
+	end
+	local target = nearestFoe(c, Combatants.centerOf(c), Familiars.NipRange)
+	if not target then
+		return false
+	end
+	nextNip[c] = now + Familiars.NipCooldown
+	local color = colorsOf(element)
+	local hitPos = Combatants.centerOf(target)
+	FX.all("FamiliarNip", c.model, hitPos, color, element)
+	DamageService.apply(target, value, {
+		attacker = c,
+		element = element,
+		noCrit = true,
+		spellName = (c.familiar and c.familiar.name) or "Familiar",
+		hitPos = hitPos,
+	})
+	return true
+end
+
+-- Called by MatchService when a combatant falls (before they're cleaned up).
+function FamiliarService.onDeath(c: Combatant, position: Vector3?)
+	local power, value = powerOf(c)
+	if power ~= "emberWake" or not position then
+		return
+	end
+	local color, color2 = colorsOf("Fire")
+	FX.all("Boom", position, Familiars.EmberWakeRadius, color, color2, "Fire")
+	for _, other in Combatants.withinRadius(position, Familiars.EmberWakeRadius, c) do
+		if DamageService.canHurt(other, c) then
+			local center = Combatants.centerOf(other)
+			DamageService.apply(other, value, {
+				attacker = c,
+				element = "Fire",
+				noCrit = true,
+				knockDir = (center - position + Vector3.new(0, 1, 0)).Unit,
+				knockback = 20,
+				lift = 14,
+				spellName = (c.familiar and c.familiar.name) or "Last Ember",
+				hitPos = center,
+			})
+		end
+	end
+end
+
+function FamiliarService.init()
+	local acc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		acc += dt
+		if acc < TICK then
+			return
+		end
+		acc = 0
+		local now = os.clock()
+		for _, c in Combatants.all() do
+			if c.familiar then
+				FamiliarService.tryNip(c, now)
+			end
+		end
+	end)
+end
+
+return FamiliarService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="46">
           <Properties>
             <string name="Name">GameState</string>
             <string name="Source"><![CDATA[-- Server-wide match state that several services read. MatchService is the only writer.
@@ -12939,7 +13821,7 @@ return GameState
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="45">
+        <Item class="ModuleScript" referent="47">
           <Properties>
             <string name="Name">InventoryService</string>
             <string name="Source"><![CDATA[-- Owns every combatant's inventory: wands (with their slotted spells), the spell bag,
@@ -13731,7 +14613,7 @@ return InventoryService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="46">
+        <Item class="ModuleScript" referent="48">
           <Properties>
             <string name="Name">MapService</string>
             <string name="Source"><![CDATA[-- Builds the hub (Arcanum Plaza) and the library lobby once, and a brand new arena for every
@@ -13992,7 +14874,7 @@ return MapService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="47">
+        <Item class="ModuleScript" referent="49">
           <Properties>
             <string name="Name">MatchService</string>
             <string name="Source"><![CDATA[-- The survival-games loop:
@@ -14025,6 +14907,7 @@ local BotService = require(script.Parent.BotService)
 local VoteService = require(script.Parent.VoteService)
 local QueueService = require(script.Parent.QueueService)
 local WardrobeService = require(script.Parent.WardrobeService)
+local FamiliarService = require(script.Parent.FamiliarService)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -14169,6 +15052,7 @@ onDied = function(c: Combatant)
 		end
 	end
 	local pos = if c.root then (c.root :: BasePart).Position else nil
+	FamiliarService.onDeath(c, pos)
 	local killer: Combatant? = nil
 	if c.lastAttacker and c.lastAttacker ~= c and now() - c.lastAttackTime < 20 then
 		killer = c.lastAttacker
@@ -14688,7 +15572,7 @@ return MatchService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="48">
+        <Item class="ModuleScript" referent="50">
           <Properties>
             <string name="Name">PracticeService</string>
             <string name="Source"><![CDATA[-- Training dummies on the hub's Practice Range and the library's Practice Terrace. They take
@@ -14859,7 +15743,7 @@ return PracticeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="49">
+        <Item class="ModuleScript" referent="51">
           <Properties>
             <string name="Name">ProjectileService</string>
             <string name="Source"><![CDATA[-- Authoritative projectile simulation. Every frame each projectile moves (ProjectileSim),
@@ -15409,7 +16293,7 @@ return ProjectileService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="50">
+        <Item class="ModuleScript" referent="52">
           <Properties>
             <string name="Name">QueueService</string>
             <string name="Source"><![CDATA[-- The queue between the hub and a match.
@@ -15624,7 +16508,7 @@ return QueueService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="51">
+        <Item class="ModuleScript" referent="53">
           <Properties>
             <string name="Name">SpellExecutor</string>
             <string name="Source"><![CDATA[-- Executes compiled spells: spawns projectiles, fires beams, novas, chains, meteors,
@@ -16460,7 +17344,7 @@ return SpellExecutor
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="52">
+        <Item class="ModuleScript" referent="54">
           <Properties>
             <string name="Name">StatusService</string>
             <string name="Source"><![CDATA[-- Burning, venom, chill/freeze, radiant marks, shields, haste and regeneration.
@@ -16849,7 +17733,7 @@ return StatusService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="53">
+        <Item class="ModuleScript" referent="55">
           <Properties>
             <string name="Name">VoteService</string>
             <string name="Source"><![CDATA[-- The map vote held in the library before every match. Only players in the queue can vote.
@@ -16998,11 +17882,12 @@ return VoteService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="54">
+        <Item class="ModuleScript" referent="56">
           <Properties>
             <string name="Name">WardrobeService</string>
             <string name="Source"><![CDATA[-- Enchanted Coins and the wardrobe: opening Coffers, stitching parts into robes and hats,
--- wearing them, salvaging junk, and dressing characters (plus the stats their enchantments give).
+-- wearing them, summoning familiars, salvaging junk, and dressing characters (plus the stats
+-- their enchantments and familiars give).
 -- The data lives in the player's profile (DataService); the auction house moves items and coins
 -- through the helpers at the bottom.
 
@@ -17014,6 +17899,7 @@ local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local Rarity = require(Shared.Rarity)
 local Cosmetics = require(Shared.Cosmetics)
+local Familiars = require(Shared.Familiars)
 local OutfitBuilder = require(Shared.OutfitBuilder)
 local Combatants = require(script.Parent.Combatants)
 local DataService = require(script.Parent.DataService)
@@ -17054,6 +17940,7 @@ function WardrobeService.sync(player: Player)
 		coins = profile.coins,
 		parts = profile.wardrobe.parts,
 		garments = profile.wardrobe.garments,
+		familiars = profile.wardrobe.familiars,
 		equipped = profile.wardrobe.equipped,
 		listings = profile.wardrobe.listings,
 	})
@@ -17126,15 +18013,28 @@ end
 -- Items (also used by the auction house)
 ---------------------------------------------------------------------------
 
+-- Item kinds: "Part" (robe / hat part), "Garment" (a stitched robe or hat) or "Familiar".
+local function kindOf(kind: any): string
+	return if kind == "Garment" or kind == "Familiar" then kind else "Part"
+end
+WardrobeService.kindOf = kindOf
+
+local function listOf(w: DataService.Wardrobe, kind: string): { any }
+	if kind == "Garment" then
+		return w.garments
+	elseif kind == "Familiar" then
+		return w.familiars
+	end
+	return w.parts
+end
+
 function WardrobeService.hasRoom(player: Player, kind: string, count: number?): boolean
 	local w = wardrobeOf(player)
 	if not w then
 		return false
 	end
-	if kind == "Garment" then
-		return #w.garments + (count or 1) <= E.MaxGarments
-	end
-	return #w.parts + (count or 1) <= E.MaxParts
+	local limit = if kind == "Garment" then E.MaxGarments elseif kind == "Familiar" then E.MaxFamiliars else E.MaxParts
+	return #listOf(w, kindOf(kind)) + (count or 1) <= limit
 end
 
 local function isWorn(w: DataService.Wardrobe, uid: string): boolean
@@ -17146,15 +18046,16 @@ local function isWorn(w: DataService.Wardrobe, uid: string): boolean
 	return false
 end
 
--- Removes and returns an item ("Part" or "Garment"). Worn garments can't be taken.
+-- Removes and returns an item ("Part", "Garment" or "Familiar"). Worn garments and the
+-- summoned familiar can't be taken.
 function WardrobeService.takeItem(player: Player, kind: string, uid: string): any
 	local w = wardrobeOf(player)
 	if not w or type(uid) ~= "string" then
 		return nil
 	end
-	local list = if kind == "Garment" then w.garments else w.parts
+	local list = listOf(w, kindOf(kind))
 	local i = findIndex(list, uid)
-	if not i or (kind == "Garment" and isWorn(w, uid)) then
+	if not i or isWorn(w, uid) then
 		return nil
 	end
 	local item = table.remove(list, i)
@@ -17167,7 +18068,7 @@ function WardrobeService.giveItem(player: Player, kind: string, item: any)
 	if not w then
 		return
 	end
-	table.insert(if kind == "Garment" then w.garments else w.parts, item)
+	table.insert(listOf(w, kindOf(kind)), item)
 	changed(player)
 end
 
@@ -17175,12 +18076,12 @@ end
 -- Dressing characters
 ---------------------------------------------------------------------------
 
-local function wornGarments(player: Player): (Garment?, Garment?)
+local function wornGarments(player: Player): (Garment?, Garment?, Familiars.Familiar?)
 	local w = wardrobeOf(player)
 	if not w then
-		return nil, nil
+		return nil, nil, nil
 	end
-	local robe, hat
+	local robe, hat, familiar
 	for _, g in w.garments do
 		if g.uid == w.equipped.Robe then
 			robe = g
@@ -17188,7 +18089,12 @@ local function wornGarments(player: Player): (Garment?, Garment?)
 			hat = g
 		end
 	end
-	return robe, hat
+	for _, f in w.familiars do
+		if f.uid == w.equipped.Familiar then
+			familiar = f
+		end
+	end
+	return robe, hat, familiar
 end
 
 -- Hides the avatar's own hats while a crafted hat is worn.
@@ -17206,8 +18112,9 @@ local function setAccessoryHats(character: Model, visible: boolean)
 	end
 end
 
--- Builds a combatant's outfit on their body and works out the stats it gives.
-function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?)
+-- Builds a combatant's outfit on their body, sends for their familiar, and works out the
+-- stats they give.
+function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?, familiar: Familiars.Familiar?)
 	local garments = {}
 	if robe then
 		table.insert(garments, robe)
@@ -17215,11 +18122,23 @@ function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?)
 	if hat then
 		table.insert(garments, hat)
 	end
-	c.gear = Cosmetics.gear(garments)
+	local gear = Cosmetics.gear(garments)
+	-- a Rare+ familiar's small bonus goes on top of the outfit's
+	local stat, amount = nil, 0
+	if familiar then
+		stat, amount = Familiars.statOf(familiar)
+	end
+	if stat then
+		gear[stat] = (gear[stat] or 0) + amount
+	end
+	c.gear = gear
+	c.familiar = familiar
 	local model = c.model
 	if not model then
 		return
 	end
+	-- clients build and animate the familiar themselves (FamiliarController)
+	model:SetAttribute("Familiar", if familiar then Familiars.encode(familiar) else nil)
 	OutfitBuilder.strip(model)
 	local rig = OutfitBuilder.rigOf(model)
 	if rig and (robe or hat) then
@@ -17245,8 +18164,8 @@ function WardrobeService.dress(c: Combatant)
 	if not c.player then
 		return
 	end
-	local robe, hat = wornGarments(c.player)
-	WardrobeService.dressWith(c, robe, hat)
+	local robe, hat, familiar = wornGarments(c.player)
+	WardrobeService.dressWith(c, robe, hat, familiar)
 end
 
 -- A random outfit for a bot: cheap gear, so they look different without being strong.
@@ -17259,7 +18178,13 @@ function WardrobeService.dressBot(c: Combatant, botRng: Random)
 		end
 		return Cosmetics.craft(kind, parts)
 	end
-	WardrobeService.dressWith(c, garment("Robe"), if botRng:NextNumber() < 0.8 then garment("Hat") else nil)
+	-- about a third of bots bring a (humble) familiar along
+	local familiar = nil
+	if botRng:NextNumber() < 0.35 then
+		local box = botRng:NextInteger(1, 3)
+		familiar = Familiars.roll(botRng, box, Rarity.fromRank(botRng:NextInteger(1, 3)), nil)
+	end
+	WardrobeService.dressWith(c, garment("Robe"), if botRng:NextNumber() < 0.8 then garment("Hat") else nil, familiar)
 end
 
 local function redress(player: Player)
@@ -17281,14 +18206,24 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 	if not WardrobeService.hasRoom(player, "Part", box.parts) then
 		return false, "Your wardrobe is full: salvage or sell some parts first"
 	end
+	if not WardrobeService.hasRoom(player, "Familiar", box.parts) then
+		return false, "Your familiar roost is full: salvage or sell some familiars first"
+	end
 	if not WardrobeService.spendCoins(player, box.price) then
 		return false, "You need " .. box.price .. " Enchanted Coins"
 	end
 	local got = {}
 	for _ = 1, box.parts do
-		local part = Cosmetics.rollPart(rng, box.id)
-		WardrobeService.giveItem(player, "Part", part)
-		table.insert(got, part)
+		-- each item has a small chance to be a familiar instead of a part (same rarity odds)
+		if Familiars.rollIsFamiliar(rng, box.id) then
+			local familiar = Familiars.roll(rng, box.id, Cosmetics.rollRarity(rng, box), nil)
+			WardrobeService.giveItem(player, "Familiar", familiar)
+			table.insert(got, familiar)
+		else
+			local part = Cosmetics.rollPart(rng, box.id)
+			WardrobeService.giveItem(player, "Part", part)
+			table.insert(got, part)
+		end
 	end
 	return true, "Opened " .. box.name, got
 end
@@ -17360,7 +18295,15 @@ local function equip(player: Player, uid: any): (boolean, string)
 	end
 	local i = findIndex(w.garments, uid)
 	if not i then
-		return false, "Unknown garment"
+		local f = findIndex(w.familiars, uid)
+		if not f then
+			return false, "Unknown item"
+		end
+		local familiar = w.familiars[f]
+		w.equipped.Familiar = familiar.uid
+		changed(player)
+		redress(player)
+		return true, familiar.name .. " is following you"
 	end
 	local g = w.garments[i]
 	w.equipped[g.kind] = g.uid
@@ -17371,17 +18314,18 @@ end
 
 local function unequip(player: Player, kind: any): (boolean, string)
 	local w = wardrobeOf(player)
-	if not w or type(kind) ~= "string" or not Cosmetics.Garments[kind] then
+	if not w or type(kind) ~= "string" or not (Cosmetics.Garments[kind] or kind == "Familiar") then
 		return false, "Bad request"
 	end
 	w.equipped[kind] = nil
 	changed(player)
 	redress(player)
-	return true, "Took off your " .. kind:lower()
+	return true, if kind == "Familiar" then "Your familiar is resting" else "Took off your " .. kind:lower()
 end
 
 local function salvage(player: Player, kind: any, uid: any): (boolean, string)
-	local item = WardrobeService.takeItem(player, if kind == "Garment" then "Garment" else "Part", uid)
+	kind = kindOf(kind)
+	local item = WardrobeService.takeItem(player, kind, uid)
 	if not item then
 		return false, "You can't salvage that (is it worn?)"
 	end
@@ -17390,6 +18334,8 @@ local function salvage(player: Player, kind: any, uid: any): (boolean, string)
 		for _, part in item.parts do
 			value += Cosmetics.SalvageValue[Rarity.rank(part.rarity)] or 1
 		end
+	elseif kind == "Familiar" then
+		value = Familiars.SalvageValue[Rarity.rank(item.rarity)] or 1
 	else
 		value = Cosmetics.SalvageValue[Rarity.rank(item.rarity)] or 1
 	end
@@ -17459,7 +18405,7 @@ return WardrobeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="55">
+        <Item class="ModuleScript" referent="57">
           <Properties>
             <string name="Name">WorldQuery</string>
             <string name="Source"><![CDATA[-- Raycasts against the world (never characters) and sweeps against combatant capsules.
@@ -17536,7 +18482,7 @@ return WorldQuery
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="56">
+        <Item class="ModuleScript" referent="58">
           <Properties>
             <string name="Name">ZoneService</string>
             <string name="Source"><![CDATA[-- Lingering ground effects left by Cloud spells and the Lingering modifier, and the solid
@@ -17717,17 +18663,17 @@ return ZoneService
       </Item>
     </Item>
   </Item>
-  <Item class="StarterPlayer" referent="57">
+  <Item class="StarterPlayer" referent="59">
     <Properties>
       <string name="Name">StarterPlayer</string>
       <float name="CameraMaxZoomDistance">60</float>
       <float name="CharacterWalkSpeed">16</float>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="58">
+    <Item class="StarterPlayerScripts" referent="60">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="59">
+      <Item class="LocalScript" referent="61">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[-- Mana Wars client entry point.
@@ -17751,6 +18697,7 @@ local GrimoireController = require(Controllers.GrimoireController)
 local TutorialController = require(Controllers.TutorialController)
 local AmbienceController = require(Controllers.AmbienceController)
 local WardrobeController = require(Controllers.WardrobeController)
+local FamiliarController = require(Controllers.FamiliarController)
 local AuctionController = require(Controllers.AuctionController)
 
 State.init()
@@ -17766,6 +18713,7 @@ GrimoireController.init()
 TutorialController.init()
 AmbienceController.init()
 WardrobeController.init()
+FamiliarController.init()
 AuctionController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
@@ -17790,11 +18738,11 @@ GrimoireController.onReplayTutorial = TutorialController.start
 print("[Mana Wars] client ready")
 ]]></string>
         </Properties>
-        <Item class="Folder" referent="60">
+        <Item class="Folder" referent="62">
           <Properties>
             <string name="Name">Controllers</string>
           </Properties>
-          <Item class="ModuleScript" referent="61">
+          <Item class="ModuleScript" referent="63">
             <Properties>
               <string name="Name">AmbienceController</string>
               <string name="Source"><![CDATA[-- Per-map weather drawn around the camera while you're on the island:
@@ -17900,12 +18848,13 @@ return AmbienceController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="62">
+          <Item class="ModuleScript" referent="64">
             <Properties>
               <string name="Name">AuctionController</string>
               <string name="Source"><![CDATA[-- The Gilded Gavel: the auction house. Opened from the pavilion in the Plaza or the hub button.
---   Browse      - everything for sale (filter by parts / robes / hats and rarity), buy with coins
---   Sell        - put a loose part or an unworn robe / hat up for a price (the house keeps 10%)
+--   Browse      - everything for sale (filter by parts / robes / hats / familiars and rarity)
+--   Sell        - put a loose part, an unworn robe / hat or a resting familiar up for a price
+--                 (the house keeps 10%)
 --   My listings - what you have on the market; take unsold items back
 -- The market is shared by every server when MemoryStore is available.
 
@@ -17918,6 +18867,7 @@ local Remotes = require(Shared.Remotes)
 local Config = require(Shared.Config)
 local Rarity = require(Shared.Rarity)
 local Cosmetics = require(Shared.Cosmetics)
+local Familiars = require(Shared.Familiars)
 local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
@@ -17990,21 +18940,14 @@ end
 -- Item helpers
 ---------------------------------------------------------------------------
 
-local function itemInfo(kind: string, item: any)
-	return if kind == "Garment" then CosmeticInfo.garment(item) else CosmeticInfo.part(item)
-end
-
-local function itemIcon(kind: string, item: any): (string, Color3)
-	if kind == "Garment" then
-		local def = Cosmetics.Garments[item.kind]
-		return def.icon, CosmeticInfo.color(item.parts[def.slots[1]])
-	end
-	return CosmeticInfo.icon(item), CosmeticInfo.color(item)
-end
+local itemInfo = CosmeticInfo.item
+local itemIcon = CosmeticInfo.itemIcon
 
 local function typeLabel(kind: string, item: any): string
 	if kind == "Garment" then
 		return item.rarity .. " " .. item.kind:lower()
+	elseif kind == "Familiar" then
+		return item.rarity .. " familiar" .. (if item.shiny then " ✨" else "")
 	end
 	local slot = Cosmetics.Slots[item.slot]
 	return item.rarity .. " " .. (if slot then slot.label:lower() else tostring(item.slot))
@@ -18025,7 +18968,9 @@ local function proceeds(price: number): number
 end
 
 local function salvageValue(kind: string, item: any): number
-	if kind == "Garment" then
+	if kind == "Familiar" then
+		return Familiars.SalvageValue[Rarity.rank(item.rarity)] or 1
+	elseif kind == "Garment" then
 		local v = 0
 		for _, p in item.parts do
 			v += Cosmetics.SalvageValue[Rarity.rank(p.rarity)] or 1
@@ -18143,13 +19088,13 @@ end
 -- Browse
 ---------------------------------------------------------------------------
 
-local FILTER_KINDS: { [string]: string } = { Parts = "Part", Robes = "Robe", Hats = "Hat" }
+local FILTER_KINDS: { [string]: string } = { Parts = "Part", Robes = "Robe", Hats = "Hat", Familiars = "Familiar" }
 
 local function matches(l: any): boolean
 	if type(l.item) ~= "table" then
 		return false
 	end
-	local kind: string = if l.kind == "Garment" then l.item.kind else "Part"
+	local kind: string = if l.kind == "Garment" then l.item.kind elseif l.kind == "Familiar" then "Familiar" else "Part"
 	local want = FILTER_KINDS[filter]
 	if want and kind ~= want then
 		return false
@@ -18274,7 +19219,7 @@ local function buildBrowse(page: Frame)
 		Size = UDim2.new(1, 0, 0, 34),
 		Parent = page,
 	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, name in { "All", "Parts", "Robes", "Hats" } do
+	for i, name in { "All", "Parts", "Robes", "Hats", "Familiars" } do
 		local b = Widgets.button(name, {
 			size = UDim2.fromOffset(96, 32),
 			color = C.Panel3,
@@ -18337,7 +19282,10 @@ local function sellItem(): (string?, any)
 	if not sel then
 		return nil, nil
 	end
-	local list = if sel.kind == "Garment" then State.wardrobe.garments else State.wardrobe.parts
+	local list = if sel.kind == "Garment"
+		then State.wardrobe.garments
+		elseif sel.kind == "Familiar" then State.wardrobe.familiars or {}
+		else State.wardrobe.parts
 	for _, item in list do
 		if item.uid == sel.uid then
 			return sel.kind, item
@@ -18402,7 +19350,7 @@ local function refreshSell()
 			iconColor = color,
 			border = Theme.rarity(item.rarity),
 			selected = sellSelected ~= nil and sellSelected.uid == item.uid,
-			label = if kind == "Garment" then item.kind else nil,
+			label = if kind == "Garment" then item.kind elseif kind == "Familiar" then "Familiar" else nil,
 			layoutOrder = order,
 			info = function()
 				return itemInfo(kind, item)
@@ -18431,6 +19379,11 @@ local function refreshSell()
 			add("Garment", g)
 		end
 	end
+	for _, f in byRarity(w.familiars or {}) do
+		if not wornUids[f.uid] then
+			add("Familiar", f)
+		end
+	end
 	for _, p in byRarity(w.parts) do
 		add("Part", p)
 	end
@@ -18441,7 +19394,7 @@ local function refreshSell()
 	Widgets.fillInfo(sellInfo, if kind then itemInfo(kind, item) else nil)
 	if not kind then
 		Widgets.label({
-			Text = "Pick something to sell. Worn robes and hats can't be sold: take them off first.",
+			Text = "Pick something to sell. Worn robes and hats, and the familiar following you, can't be sold: take them off (or dismiss it) first.",
 			TextSize = 14,
 			TextColor3 = C.Dim,
 			TextWrapped = true,
@@ -18454,7 +19407,7 @@ end
 
 local function buildSell(page: Frame)
 	Widgets.label({
-		Text = "YOUR UNWORN ROBES, HATS AND PARTS",
+		Text = "YOUR UNWORN ROBES, HATS, PARTS AND FAMILIARS",
 		Font = Theme.Black,
 		TextSize = 13,
 		TextColor3 = C.Gold,
@@ -18810,7 +19763,7 @@ return AuctionController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="63">
+          <Item class="ModuleScript" referent="65">
             <Properties>
               <string name="Name">ChestController</string>
               <string name="Source"><![CDATA[-- The loot window shown when you open a chest or a dead mage's satchel.
@@ -19071,7 +20024,7 @@ return ChestController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="64">
+          <Item class="ModuleScript" referent="66">
             <Properties>
               <string name="Name">FXController</string>
               <string name="Source"><![CDATA[-- Draws every spell. The server only sends compact events; all parts here are local
@@ -19577,6 +20530,11 @@ end
 ---------------------------------------------------------------------------
 
 local handlers: { [string]: (...any) -> () } = {}
+
+-- Lets other controllers draw their own FX events (e.g. FamiliarController's "FamiliarNip").
+function FXController.on(kind: string, handler: (...any) -> ())
+	handlers[kind] = handler
+end
 
 handlers["P+"] = function(id: number, pos: Vector3, vel: Vector3, seed: number, orbitAngle: number, caster: Model?, vis)
 	local speed = vel.Magnitude
@@ -20192,7 +21150,1245 @@ return FXController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="65">
+          <Item class="ModuleScript" referent="67">
+            <Properties>
+              <string name="Name">FamiliarBuilder</string>
+              <string name="Source"><![CDATA[-- Builds familiar models out of parts (no meshes needed) and poses them every frame: flapping
+-- wings, wagging tails, swaying tentacles, slithering eels, orbiting crystal shards.
+-- Rarer familiars get grander effects: a glow from Rare, sparkles from Epic, an elemental aura
+-- from Legendary and a trail at Mythic. Shiny ones shed golden sparkles.
+-- Used by FamiliarController (familiars following characters) and the Wardrobe preview.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage.Shared
+local Familiars = require(Shared.Familiars)
+local Rarity = require(Shared.Rarity)
+local VFX = require(script.Parent.VFX)
+
+local FamiliarBuilder = {}
+
+export type Piece = {
+	part: BasePart,
+	pivot: CFrame, -- joint, relative to the familiar's origin (its feet / centre)
+	offset: CFrame, -- the part, relative to its joint
+	anim: string?,
+	phase: number,
+	speed: number,
+}
+
+export type Rig = {
+	model: Model,
+	pieces: { Piece },
+	core: BasePart, -- the main body part (effects hang off it)
+	flies: boolean,
+	height: number, -- roughly how tall it is
+	look: Familiars.Look,
+}
+
+local M = Enum.Material
+
+local function rgb(c: { number }): Color3
+	return Color3.fromRGB(c[1], c[2], c[3])
+end
+
+---------------------------------------------------------------------------
+-- Construction helpers
+---------------------------------------------------------------------------
+
+type Ctx = {
+	rig: Rig,
+	s: number, -- scale
+	main: Color3,
+	accent: Color3,
+	eye: Color3,
+	glowEyes: boolean,
+}
+
+type PieceOptions = {
+	shape: string?, -- "Ball" | "Block" | "Cylinder" | "Wedge"
+	material: Enum.Material?,
+	transparency: number?,
+	anim: string?,
+	phase: number?,
+	speed: number?,
+	pivot: Vector3?, -- joint position (default: at the part)
+	rot: Vector3?, -- extra rotation of the part, in degrees
+}
+
+local function piece(ctx: Ctx, name: string, size: Vector3, pos: Vector3, color: Color3, o: PieceOptions?): BasePart
+	local opts: PieceOptions = o or {}
+	local s = ctx.s
+	local part: BasePart
+	if opts.shape == "Wedge" then
+		part = Instance.new("WedgePart")
+	else
+		local p = Instance.new("Part")
+		if opts.shape == "Ball" then
+			p.Shape = Enum.PartType.Ball
+		elseif opts.shape == "Cylinder" then
+			p.Shape = Enum.PartType.Cylinder
+		end
+		part = p
+	end
+	part.Name = name
+	part.Size = size * s
+	part.Color = color
+	part.Material = opts.material or M.SmoothPlastic
+	part.Transparency = opts.transparency or 0
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Parent = ctx.rig.model
+	local pivotPos = (opts.pivot or pos) * s
+	local rot = opts.rot or Vector3.zero
+	table.insert(ctx.rig.pieces, {
+		part = part,
+		pivot = CFrame.new(pivotPos),
+		offset = CFrame.new(pos * s - pivotPos) * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z)),
+		anim = opts.anim,
+		phase = opts.phase or 0,
+		speed = opts.speed or 1,
+	})
+	return part
+end
+
+local function ball(ctx: Ctx, name: string, size: Vector3, pos: Vector3, color: Color3, o: PieceOptions?): BasePart
+	local opts: PieceOptions = o or {}
+	opts.shape = "Ball"
+	return piece(ctx, name, size, pos, color, opts)
+end
+
+-- A pair of eyes, mirrored on X. Glowing (neon) for fancy familiars.
+local function eyes(ctx: Ctx, pos: Vector3, size: number)
+	for side = -1, 1, 2 do
+		ball(ctx, "Eye", Vector3.one * size, Vector3.new(pos.X * side, pos.Y, pos.Z), ctx.eye, {
+			material = if ctx.glowEyes then M.Neon else M.SmoothPlastic,
+		})
+	end
+end
+
+local function wings(
+	ctx: Ctx,
+	size: Vector3,
+	joint: Vector3,
+	reach: number,
+	color: Color3,
+	speed: number,
+	o: { shape: string?, material: Enum.Material?, transparency: number?, back: number? }?
+)
+	local opts = o or {}
+	for side = -1, 1, 2 do
+		piece(ctx, "Wing", size, Vector3.new((joint.X + reach) * side, joint.Y, joint.Z + (opts.back or 0)), color, {
+			shape = opts.shape or "Ball",
+			material = opts.material,
+			transparency = opts.transparency,
+			pivot = Vector3.new(joint.X * side, joint.Y, joint.Z),
+			anim = if side < 0 then "flapL" else "flapR",
+			speed = speed,
+		})
+	end
+end
+
+local function legs(ctx: Ctx, size: Vector3, xs: number, zs: { number }, y: number, color: Color3)
+	for i, z in zs do
+		for side = -1, 1, 2 do
+			piece(ctx, "Leg", size, Vector3.new(xs * side, y, z), color, {
+				pivot = Vector3.new(xs * side, y + size.Y / 2, z),
+				anim = "walk",
+				phase = (if side < 0 then 0 else math.pi) + i * math.pi,
+			})
+		end
+	end
+end
+
+local function emitterOn(ctx: Ctx, part: BasePart, opts: VFX.EmitterOptions): ParticleEmitter
+	local scaled = table.clone(opts)
+	scaled.size *= ctx.s
+	if scaled.sizeEnd then
+		scaled.sizeEnd *= ctx.s
+	end
+	return VFX.emitter(part, scaled)
+end
+
+local function flame(ctx: Ctx, part: BasePart, color: Color3, size: number)
+	emitterOn(ctx, part, {
+		texture = "fire",
+		color = Color3.new(1, 1, 1):Lerp(color, 0.4),
+		color2 = color,
+		size = size,
+		lifetime = 0.4,
+		speed = 1.5,
+		accel = Vector3.new(0, 6, 0),
+		rate = 22,
+		rot = 60,
+		transparency = 0.1,
+	})
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Range = 6
+	light.Brightness = 1.2
+	light.Shadows = false
+	light.Parent = part
+end
+
+---------------------------------------------------------------------------
+-- Bodies. Origin = between the feet (walkers) or the centre (fliers); facing -Z.
+---------------------------------------------------------------------------
+
+local Bodies: { [string]: (ctx: Ctx) -> BasePart } = {}
+
+Bodies.rabbit = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(1, 0.8, 1.2), Vector3.new(0, 0.5, 0.05), ctx.main)
+	ball(ctx, "Head", Vector3.one * 0.75, Vector3.new(0, 0.95, -0.5), ctx.main)
+	for side = -1, 1, 2 do
+		piece(ctx, "Ear", Vector3.new(0.17, 0.62, 0.1), Vector3.new(0.16 * side, 1.55, -0.42), ctx.main, {
+			pivot = Vector3.new(0.14 * side, 1.25, -0.45),
+			anim = "ear",
+			phase = side,
+			rot = Vector3.new(-10, 0, -12 * side),
+		})
+		piece(ctx, "EarInner", Vector3.new(0.09, 0.45, 0.04), Vector3.new(0.16 * side, 1.55, -0.48), ctx.accent, {
+			pivot = Vector3.new(0.14 * side, 1.25, -0.45),
+			anim = "ear",
+			phase = side,
+			rot = Vector3.new(-10, 0, -12 * side),
+		})
+	end
+	eyes(ctx, Vector3.new(0.17, 1.02, -0.84), 0.13)
+	ball(ctx, "Nose", Vector3.one * 0.09, Vector3.new(0, 0.92, -0.88), ctx.accent)
+	ball(ctx, "Tail", Vector3.one * 0.32, Vector3.new(0, 0.6, 0.66), Color3.new(1, 1, 1), { anim = "wag" })
+	legs(ctx, Vector3.new(0.22, 0.25, 0.32), 0.25, { -0.3, 0.35 }, 0.12, ctx.main)
+	return core
+end
+
+Bodies.toad = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(1.3, 0.8, 1.1), Vector3.new(0, 0.42, 0), ctx.main)
+	ball(ctx, "Belly", Vector3.new(1, 0.5, 0.8), Vector3.new(0, 0.3, -0.18), ctx.accent)
+	for side = -1, 1, 2 do
+		ball(ctx, "EyeBump", Vector3.one * 0.36, Vector3.new(0.3 * side, 0.82, -0.32), ctx.main)
+		ball(ctx, "Leg", Vector3.new(0.42, 0.3, 0.62), Vector3.new(0.58 * side, 0.16, 0.18), ctx.main, {
+			anim = "walk",
+			phase = side,
+		})
+	end
+	eyes(ctx, Vector3.new(0.3, 0.88, -0.46), 0.17)
+	piece(ctx, "Mouth", Vector3.new(0.62, 0.04, 0.05), Vector3.new(0, 0.5, -0.54), Color3.fromRGB(40, 30, 30))
+	return core
+end
+
+Bodies.mouse = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(0.8, 0.65, 1.1), Vector3.new(0, 0.36, 0), ctx.main)
+	ball(ctx, "Head", Vector3.one * 0.56, Vector3.new(0, 0.52, -0.56), ctx.main)
+	for side = -1, 1, 2 do
+		piece(ctx, "Ear", Vector3.new(0.05, 0.36, 0.36), Vector3.new(0.22 * side, 0.82, -0.5), ctx.accent, {
+			shape = "Cylinder",
+			rot = Vector3.new(0, 90, 0),
+			anim = "ear",
+			phase = side,
+		})
+	end
+	eyes(ctx, Vector3.new(0.13, 0.58, -0.8), 0.1)
+	ball(ctx, "Nose", Vector3.one * 0.09, Vector3.new(0, 0.5, -0.86), ctx.accent)
+	piece(ctx, "Tail", Vector3.new(0.06, 0.06, 0.9), Vector3.new(0, 0.3, 0.95), ctx.accent, {
+		pivot = Vector3.new(0, 0.3, 0.5),
+		anim = "wag",
+	})
+	piece(ctx, "Candle", Vector3.new(0.38, 0.2, 0.2), Vector3.new(0, 0.98, -0.5), Color3.fromRGB(250, 240, 215), {
+		shape = "Cylinder",
+		rot = Vector3.new(0, 0, 90),
+	})
+	local wick =
+		ball(ctx, "Flame", Vector3.new(0.14, 0.22, 0.14), Vector3.new(0, 1.28, -0.5), Color3.fromRGB(255, 190, 80), {
+			material = M.Neon,
+		})
+	flame(ctx, wick, Color3.fromRGB(255, 150, 50), 0.25)
+	legs(ctx, Vector3.new(0.14, 0.18, 0.18), 0.22, { -0.25, 0.3 }, 0.08, ctx.accent)
+	return core
+end
+
+Bodies.wisp = function(ctx)
+	local core = ball(ctx, "Core", Vector3.one * 0.6, Vector3.zero, ctx.main:Lerp(Color3.new(1, 1, 1), 0.4), {
+		material = M.Neon,
+	})
+	ball(ctx, "Shell", Vector3.one * 1.05, Vector3.zero, ctx.main, { material = M.ForceField, transparency = 0.1 })
+	eyes(ctx, Vector3.new(0.12, 0.06, -0.28), 0.1)
+	for i = 1, 3 do
+		ball(ctx, "Mote", Vector3.one * 0.14, Vector3.new(0.7, 0, 0), ctx.accent, {
+			material = M.Neon,
+			pivot = Vector3.zero,
+			anim = "orbit",
+			phase = i * math.pi * 2 / 3,
+			speed = 1.6,
+		})
+	end
+	local light = Instance.new("PointLight")
+	light.Color = ctx.main
+	light.Range = 7
+	light.Brightness = 1
+	light.Shadows = false
+	light.Parent = core
+	return core
+end
+
+local function catLike(ctx: Ctx, snout: boolean, fireTail: boolean): BasePart
+	local core = ball(ctx, "Body", Vector3.new(0.8, 0.75, 1.3), Vector3.new(0, 0.62, 0.05), ctx.main)
+	ball(ctx, "Belly", Vector3.new(0.6, 0.5, 0.95), Vector3.new(0, 0.5, -0.05), ctx.accent)
+	ball(ctx, "Head", Vector3.one * 0.7, Vector3.new(0, 1.05, -0.62), ctx.main)
+	for side = -1, 1, 2 do
+		piece(ctx, "Ear", Vector3.new(0.12, 0.32, 0.24), Vector3.new(0.21 * side, 1.46, -0.6), ctx.main, {
+			shape = "Wedge",
+			rot = Vector3.new(0, if side < 0 then 90 else -90, 0),
+			anim = "ear",
+			phase = side,
+		})
+	end
+	eyes(ctx, Vector3.new(0.15, 1.1, -0.93), 0.12)
+	if snout then
+		piece(ctx, "Snout", Vector3.new(0.3, 0.22, 0.38), Vector3.new(0, 0.95, -1.02), ctx.accent)
+		ball(ctx, "Nose", Vector3.one * 0.1, Vector3.new(0, 1.02, -1.2), Color3.fromRGB(30, 25, 25))
+	else
+		ball(ctx, "Nose", Vector3.one * 0.08, Vector3.new(0, 1, -0.97), ctx.accent)
+	end
+	if fireTail then
+		ball(ctx, "Tail", Vector3.new(0.42, 0.42, 0.95), Vector3.new(0, 0.85, 0.95), ctx.main, {
+			pivot = Vector3.new(0, 0.7, 0.55),
+			anim = "wag",
+			rot = Vector3.new(25, 0, 0),
+		})
+		local tip = ball(ctx, "TailTip", Vector3.one * 0.3, Vector3.new(0, 1.05, 1.35), ctx.accent, {
+			material = M.Neon,
+			pivot = Vector3.new(0, 0.7, 0.55),
+			anim = "wag",
+		})
+		flame(ctx, tip, ctx.main, 0.4)
+	else
+		piece(ctx, "Tail", Vector3.new(0.13, 0.13, 0.8), Vector3.new(0, 1.02, 0.85), ctx.main, {
+			pivot = Vector3.new(0, 0.75, 0.55),
+			anim = "wag",
+			rot = Vector3.new(40, 0, 0),
+		})
+	end
+	legs(ctx, Vector3.new(0.17, 0.42, 0.17), 0.25, { -0.4, 0.42 }, 0.21, ctx.main)
+	return core
+end
+
+Bodies.cat = function(ctx)
+	return catLike(ctx, false, false)
+end
+
+Bodies.fox = function(ctx)
+	return catLike(ctx, true, true)
+end
+
+Bodies.crane = function(ctx)
+	local core = piece(ctx, "Body", Vector3.new(0.45, 0.4, 1), Vector3.zero, ctx.main, { shape = "Wedge" })
+	piece(ctx, "Neck", Vector3.new(0.14, 0.55, 0.3), Vector3.new(0, 0.38, -0.55), ctx.main, {
+		shape = "Wedge",
+		rot = Vector3.new(0, 180, 0),
+	})
+	piece(ctx, "Head", Vector3.new(0.14, 0.18, 0.35), Vector3.new(0, 0.7, -0.75), ctx.accent, {
+		shape = "Wedge",
+		rot = Vector3.new(0, 180, 0),
+	})
+	piece(ctx, "Tail", Vector3.new(0.14, 0.35, 0.5), Vector3.new(0, 0.2, 0.65), ctx.main, { shape = "Wedge" })
+	wings(ctx, Vector3.new(0.9, 0.05, 0.62), Vector3.new(0.18, 0.12, 0), 0.45, ctx.main, 1.4, { shape = "Block" })
+	return core
+end
+
+Bodies.slime = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(1.2, 0.9, 1.2), Vector3.new(0, 0.45, 0), ctx.main, {
+		material = M.Glass,
+		transparency = 0.25,
+	})
+	ball(ctx, "Core", Vector3.one * 0.4, Vector3.new(0, 0.45, 0.05), ctx.accent, { material = M.Neon })
+	eyes(ctx, Vector3.new(0.2, 0.58, -0.52), 0.14)
+	ball(ctx, "Shine", Vector3.new(0.18, 0.12, 0.1), Vector3.new(-0.3, 0.75, -0.42), Color3.new(1, 1, 1), {
+		material = M.Neon,
+	})
+	return core
+end
+
+Bodies.moth = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(0.3, 0.3, 0.85), Vector3.zero, ctx.main)
+	ball(ctx, "Head", Vector3.one * 0.3, Vector3.new(0, 0.05, -0.48), Color3.new(1, 1, 1))
+	eyes(ctx, Vector3.new(0.09, 0.08, -0.6), 0.09)
+	for side = -1, 1, 2 do
+		piece(ctx, "Antenna", Vector3.new(0.04, 0.04, 0.4), Vector3.new(0.1 * side, 0.25, -0.7), ctx.accent, {
+			rot = Vector3.new(35, 20 * side, 0),
+		})
+	end
+	wings(ctx, Vector3.new(0.95, 0.04, 0.75), Vector3.new(0.12, 0.05, -0.1), 0.45, ctx.main, 0.8, {
+		transparency = 0.05,
+	})
+	wings(ctx, Vector3.new(0.6, 0.04, 0.5), Vector3.new(0.1, 0.03, 0.25), 0.3, ctx.main, 0.8, { back = 0.15 })
+	wings(ctx, Vector3.new(0.28, 0.06, 0.28), Vector3.new(0.12, 0.07, -0.1), 0.55, ctx.accent, 0.8, {
+		material = M.Neon,
+	})
+	return core
+end
+
+Bodies.owl = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(0.9, 1.1, 0.85), Vector3.zero, ctx.main)
+	ball(ctx, "Face", Vector3.new(0.72, 0.6, 0.2), Vector3.new(0, 0.2, -0.36), ctx.main:Lerp(Color3.new(1, 1, 1), 0.5))
+	for side = -1, 1, 2 do
+		ball(ctx, "EyeRing", Vector3.new(0.3, 0.3, 0.08), Vector3.new(0.17 * side, 0.25, -0.46), ctx.accent, {
+			material = M.Neon,
+		})
+		piece(ctx, "Tuft", Vector3.new(0.1, 0.28, 0.2), Vector3.new(0.27 * side, 0.6, -0.2), ctx.main, {
+			shape = "Wedge",
+			rot = Vector3.new(0, 180, -15 * side),
+		})
+	end
+	eyes(ctx, Vector3.new(0.17, 0.25, -0.5), 0.13)
+	piece(ctx, "Beak", Vector3.new(0.1, 0.16, 0.12), Vector3.new(0, 0.08, -0.5), Color3.fromRGB(230, 180, 90), {
+		shape = "Wedge",
+		rot = Vector3.new(180, 0, 0),
+	})
+	wings(ctx, Vector3.new(0.85, 0.07, 0.55), Vector3.new(0.4, 0.05, 0.05), 0.4, ctx.main, 1.1)
+	return core
+end
+
+Bodies.book = function(ctx)
+	local core = piece(ctx, "Spine", Vector3.new(0.18, 0.18, 1.15), Vector3.zero, ctx.accent, { material = M.Metal })
+	for side = -1, 1, 2 do
+		local anim = if side < 0 then "pagesL" else "pagesR"
+		piece(ctx, "Cover", Vector3.new(0.75, 0.07, 1.15), Vector3.new(0.38 * side, 0, 0), ctx.main, {
+			pivot = Vector3.zero,
+			anim = anim,
+		})
+		piece(
+			ctx,
+			"Pages",
+			Vector3.new(0.65, 0.12, 1.02),
+			Vector3.new(0.34 * side, 0.08, 0),
+			Color3.fromRGB(245, 235, 210),
+			{
+				pivot = Vector3.zero,
+				anim = anim,
+			}
+		)
+		piece(ctx, "Corner", Vector3.new(0.14, 0.08, 0.14), Vector3.new(0.68 * side, -0.01, -0.52), ctx.accent, {
+			pivot = Vector3.zero,
+			anim = anim,
+			material = M.Metal,
+		})
+	end
+	ball(ctx, "Eye", Vector3.one * 0.26, Vector3.new(0, 0.12, -0.45), ctx.accent, { material = M.Neon })
+	ball(ctx, "Pupil", Vector3.one * 0.12, Vector3.new(0, 0.14, -0.56), Color3.fromRGB(20, 15, 20))
+	return core
+end
+
+Bodies.eel = function(ctx)
+	local head = ball(ctx, "Head", Vector3.new(0.45, 0.42, 0.6), Vector3.new(0, 0, -0.35), ctx.main, {
+		anim = "slither",
+		phase = 0,
+	})
+	eyes(ctx, Vector3.new(0.14, 0.1, -0.6), 0.1)
+	for i = 1, 6 do
+		local size = 0.42 - i * 0.04
+		ball(ctx, "Segment", Vector3.one * size, Vector3.new(0, 0, i * 0.32), ctx.main, {
+			anim = "slither",
+			phase = i * 0.8,
+		})
+		if i % 2 == 0 then
+			piece(ctx, "Fin", Vector3.new(0.05, 0.22, 0.25), Vector3.new(0, size * 0.55, i * 0.32), ctx.accent, {
+				shape = "Wedge",
+				anim = "slither",
+				phase = i * 0.8,
+				material = M.Neon,
+			})
+		end
+	end
+	piece(ctx, "TailFin", Vector3.new(0.05, 0.35, 0.3), Vector3.new(0, 0, 2.2), ctx.accent, {
+		shape = "Wedge",
+		anim = "slither",
+		phase = 7 * 0.8,
+		material = M.Neon,
+	})
+	return head
+end
+
+Bodies.crystal = function(ctx)
+	local core = piece(ctx, "Heart", Vector3.new(0.5, 0.75, 0.5), Vector3.zero, ctx.main, {
+		material = M.Glass,
+		transparency = 0.15,
+		rot = Vector3.new(0, 45, 0),
+		anim = "spin",
+		speed = 0.5,
+		pivot = Vector3.zero,
+	})
+	ball(ctx, "Glow", Vector3.one * 0.28, Vector3.zero, ctx.accent, { material = M.Neon })
+	eyes(ctx, Vector3.new(0.09, 0.1, -0.24), 0.08)
+	for i = 1, 4 do
+		piece(ctx, "Shard", Vector3.new(0.18, 0.42, 0.18), Vector3.new(0.75, math.sin(i) * 0.15, 0), ctx.main, {
+			material = M.Glass,
+			transparency = 0.1,
+			pivot = Vector3.zero,
+			anim = "orbit",
+			phase = i * math.pi / 2,
+			speed = 1.2,
+			rot = Vector3.new(0, 45, 15),
+		})
+	end
+	return core
+end
+
+Bodies.jelly = function(ctx)
+	local core = ball(ctx, "Bell", Vector3.new(1.1, 0.75, 1.1), Vector3.new(0, 0.3, 0), ctx.main, {
+		material = M.Glass,
+		transparency = 0.3,
+		anim = "pulse",
+	})
+	ball(ctx, "Glow", Vector3.one * 0.4, Vector3.new(0, 0.3, 0), ctx.accent, { material = M.Neon, anim = "pulse" })
+	eyes(ctx, Vector3.new(0.18, 0.32, -0.48), 0.1)
+	for i = 1, 6 do
+		local a = i / 6 * math.pi * 2
+		local x, z = math.cos(a) * 0.32, math.sin(a) * 0.32
+		piece(ctx, "Tentacle", Vector3.new(0.07, 0.95, 0.07), Vector3.new(x, -0.45, z), ctx.accent, {
+			pivot = Vector3.new(x, 0.02, z),
+			anim = "sway",
+			phase = i,
+			transparency = 0.15,
+		})
+	end
+	return core
+end
+
+Bodies.raven = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(0.6, 0.6, 1), Vector3.zero, ctx.main)
+	ball(ctx, "Head", Vector3.one * 0.45, Vector3.new(0, 0.25, -0.55), ctx.main)
+	piece(ctx, "Beak", Vector3.new(0.12, 0.12, 0.3), Vector3.new(0, 0.22, -0.85), Color3.fromRGB(50, 50, 55), {
+		shape = "Wedge",
+		rot = Vector3.new(0, 180, 0),
+	})
+	eyes(ctx, Vector3.new(0.13, 0.32, -0.7), 0.09)
+	piece(ctx, "Tail", Vector3.new(0.4, 0.07, 0.55), Vector3.new(0, 0, 0.7), ctx.main, { anim = "wag" })
+	wings(ctx, Vector3.new(1.05, 0.07, 0.55), Vector3.new(0.25, 0.1, 0), 0.5, ctx.main, 1.3)
+	return core
+end
+
+Bodies.skull = function(ctx)
+	local core = ball(ctx, "Cranium", Vector3.new(0.85, 0.8, 0.85), Vector3.new(0, 0.1, 0), ctx.main)
+	piece(ctx, "Jaw", Vector3.new(0.55, 0.2, 0.45), Vector3.new(0, -0.32, -0.12), ctx.main, { anim = "chatter" })
+	for side = -1, 1, 2 do
+		ball(ctx, "Socket", Vector3.one * 0.26, Vector3.new(0.18 * side, 0.1, -0.33), Color3.fromRGB(15, 10, 15))
+	end
+	ball(ctx, "Glint", Vector3.one * 0.1, Vector3.new(0.18, 0.1, -0.44), ctx.accent, { material = M.Neon })
+	ball(ctx, "Glint", Vector3.one * 0.1, Vector3.new(-0.18, 0.1, -0.44), ctx.accent, { material = M.Neon })
+	piece(ctx, "Nose", Vector3.new(0.12, 0.14, 0.08), Vector3.new(0, -0.08, -0.4), Color3.fromRGB(15, 10, 15), {
+		shape = "Wedge",
+	})
+	return core
+end
+
+Bodies.dragon = function(ctx)
+	local head = ball(ctx, "Head", Vector3.new(0.55, 0.45, 0.7), Vector3.new(0, 0.15, -0.55), ctx.main, {
+		anim = "slither",
+		phase = 0,
+		speed = 0.6,
+	})
+	piece(ctx, "Snout", Vector3.new(0.35, 0.25, 0.35), Vector3.new(0, 0.08, -0.95), ctx.main, {
+		anim = "slither",
+		phase = 0,
+		speed = 0.6,
+	})
+	for side = -1, 1, 2 do
+		piece(ctx, "Horn", Vector3.new(0.08, 0.3, 0.25), Vector3.new(0.16 * side, 0.45, -0.4), ctx.accent, {
+			shape = "Wedge",
+			rot = Vector3.new(-30, 0, 0),
+			anim = "slither",
+			phase = 0,
+			speed = 0.6,
+		})
+	end
+	eyes(ctx, Vector3.new(0.17, 0.24, -0.82), 0.1)
+	for i = 1, 4 do
+		local size = 0.58 - i * 0.08
+		ball(ctx, "Segment", Vector3.one * size, Vector3.new(0, 0, i * 0.4), ctx.main, {
+			anim = "slither",
+			phase = i * 0.8,
+			speed = 0.6,
+		})
+		ball(
+			ctx,
+			"Belly",
+			Vector3.new(size * 0.7, size * 0.5, size * 0.8),
+			Vector3.new(0, -size * 0.25, i * 0.4),
+			ctx.accent,
+			{
+				anim = "slither",
+				phase = i * 0.8,
+				speed = 0.6,
+			}
+		)
+	end
+	piece(ctx, "TailTip", Vector3.new(0.06, 0.3, 0.35), Vector3.new(0, 0, 2), ctx.accent, {
+		shape = "Wedge",
+		anim = "slither",
+		phase = 5 * 0.8,
+		speed = 0.6,
+	})
+	wings(
+		ctx,
+		Vector3.new(1.2, 0.06, 0.8),
+		Vector3.new(0.25, 0.25, 0.3),
+		0.6,
+		ctx.main:Lerp(Color3.new(0, 0, 0), 0.2),
+		0.55,
+		{
+			shape = "Wedge",
+		}
+	)
+	return head
+end
+
+Bodies.phoenix = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(0.6, 0.6, 0.9), Vector3.zero, ctx.main, { material = M.Neon })
+	ball(ctx, "Head", Vector3.one * 0.42, Vector3.new(0, 0.28, -0.5), ctx.main, { material = M.Neon })
+	piece(ctx, "Beak", Vector3.new(0.1, 0.1, 0.22), Vector3.new(0, 0.25, -0.75), ctx.accent, {
+		shape = "Wedge",
+		rot = Vector3.new(0, 180, 0),
+	})
+	eyes(ctx, Vector3.new(0.12, 0.34, -0.66), 0.08)
+	for i = -1, 1 do
+		piece(
+			ctx,
+			"Crest",
+			Vector3.new(0.06, 0.3, 0.18),
+			Vector3.new(i * 0.07, 0.55, -0.42 + math.abs(i) * 0.06),
+			ctx.accent,
+			{
+				shape = "Wedge",
+				material = M.Neon,
+				rot = Vector3.new(-20, 0, i * 15),
+			}
+		)
+		piece(ctx, "TailFeather", Vector3.new(0.12, 0.05, 1), Vector3.new(i * 0.2, -0.05, 0.9), ctx.accent, {
+			material = M.Neon,
+			pivot = Vector3.new(0, 0, 0.4),
+			anim = "wag",
+			rot = Vector3.new(0, i * 18, 0),
+		})
+	end
+	wings(ctx, Vector3.new(1, 0.06, 0.55), Vector3.new(0.25, 0.1, 0), 0.5, ctx.main, 1.2, { material = M.Neon })
+	flame(ctx, core, ctx.main, 0.5)
+	return core
+end
+
+Bodies.kirin = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(0.8, 0.75, 1.4), Vector3.new(0, 0.95, 0.05), ctx.main)
+	piece(
+		ctx,
+		"Neck",
+		Vector3.new(0.35, 0.6, 0.35),
+		Vector3.new(0, 1.35, -0.55),
+		ctx.main,
+		{ rot = Vector3.new(-25, 0, 0) }
+	)
+	ball(ctx, "Head", Vector3.new(0.42, 0.42, 0.65), Vector3.new(0, 1.65, -0.8), ctx.main)
+	piece(ctx, "Horn", Vector3.new(0.4, 0.09, 0.09), Vector3.new(0, 2, -0.85), ctx.accent, {
+		shape = "Cylinder",
+		material = M.Neon,
+		rot = Vector3.new(0, 0, 75),
+	})
+	eyes(ctx, Vector3.new(0.15, 1.72, -0.98), 0.08)
+	for i = 0, 3 do
+		piece(ctx, "Mane", Vector3.new(0.08, 0.28, 0.2), Vector3.new(0, 1.62 - i * 0.18, -0.5 + i * 0.12), ctx.accent, {
+			shape = "Wedge",
+			material = M.Neon,
+			rot = Vector3.new(0, 180, 0),
+		})
+	end
+	piece(ctx, "Tail", Vector3.new(0.12, 0.12, 0.75), Vector3.new(0, 1.05, 0.95), ctx.accent, {
+		material = M.Neon,
+		pivot = Vector3.new(0, 1.1, 0.7),
+		anim = "wag",
+		rot = Vector3.new(-30, 0, 0),
+	})
+	legs(ctx, Vector3.new(0.15, 0.65, 0.15), 0.25, { -0.45, 0.5 }, 0.33, ctx.main)
+	for i, z in { -0.45, 0.5 } do
+		for side = -1, 1, 2 do
+			piece(ctx, "Hoof", Vector3.new(0.18, 0.08, 0.18), Vector3.new(0.25 * side, 0.04, z), ctx.accent, {
+				pivot = Vector3.new(0.25 * side, 0.66, z),
+				anim = "walk",
+				phase = (if side < 0 then 0 else math.pi) + i * math.pi,
+				material = M.Neon,
+			})
+		end
+	end
+	return core
+end
+
+Bodies.whale = function(ctx)
+	local core = ball(ctx, "Body", Vector3.new(1.5, 1, 2.3), Vector3.zero, ctx.main, { anim = "swim" })
+	ball(
+		ctx,
+		"Belly",
+		Vector3.new(1.15, 0.6, 1.9),
+		Vector3.new(0, -0.25, -0.1),
+		ctx.main:Lerp(Color3.new(1, 1, 1), 0.35),
+		{
+			anim = "swim",
+		}
+	)
+	eyes(ctx, Vector3.new(0.55, 0.05, -0.8), 0.12)
+	for side = -1, 1, 2 do
+		piece(ctx, "Fin", Vector3.new(0.6, 0.06, 0.35), Vector3.new(0.85 * side, -0.25, -0.2), ctx.main, {
+			shape = "Ball",
+			pivot = Vector3.new(0.6 * side, -0.2, -0.2),
+			anim = if side < 0 then "flapL" else "flapR",
+			speed = 0.35,
+		})
+		piece(ctx, "Fluke", Vector3.new(0.6, 0.07, 0.45), Vector3.new(0.3 * side, 0.1, 1.45), ctx.main, {
+			shape = "Ball",
+			pivot = Vector3.new(0, 0.05, 1.1),
+			anim = "fluke",
+			rot = Vector3.new(0, -20 * side, 0),
+		})
+	end
+	-- a constellation on its back
+	for i = 1, 7 do
+		local z = -0.8 + i * 0.25
+		ball(
+			ctx,
+			"Star",
+			Vector3.one * 0.09,
+			Vector3.new(math.sin(i * 2.1) * 0.35, 0.46 - math.abs(z) * 0.12, z),
+			ctx.accent,
+			{
+				material = M.Neon,
+				anim = "swim",
+			}
+		)
+	end
+	return core
+end
+
+---------------------------------------------------------------------------
+-- Rarity and shiny effects
+---------------------------------------------------------------------------
+
+local function addEffects(ctx: Ctx, core: BasePart, look: Familiars.Look, species: Familiars.Species)
+	local r = Rarity.rank(look.rarity)
+	local main, accent = ctx.main, ctx.accent
+	local style = VFX.style(species.element)
+	if r >= 3 then
+		local light = Instance.new("PointLight")
+		light.Name = "RarityGlow"
+		light.Color = accent:Lerp(main, 0.5)
+		light.Range = 5 + r * 1.5
+		light.Brightness = 0.4 + (r - 3) * 0.35
+		light.Shadows = false
+		light.Parent = core
+	end
+	if r >= 4 then
+		emitterOn(ctx, core, {
+			color = Color3.new(1, 1, 1),
+			color2 = accent,
+			size = 0.22,
+			lifetime = 1,
+			speed = 0.8,
+			rate = 3 + (r - 4) * 3,
+			rot = 120,
+		})
+	end
+	if r >= 5 then
+		local smoke = style.texture == "smoke"
+		emitterOn(ctx, core, {
+			texture = style.texture,
+			color = main,
+			color2 = accent,
+			size = if smoke then 0.5 else 0.35,
+			sizeEnd = if smoke then 0.9 else 0,
+			transparency = if smoke then 0.5 else 0.1,
+			lifetime = 0.9,
+			speed = 0.8,
+			accel = Vector3.new(0, style.rise * 0.3, 0),
+			drag = 2,
+			rate = if r >= 6 then 16 else 8,
+			light = if smoke then 0.2 else 1,
+			rot = style.spin,
+		})
+	end
+	if r >= 6 then
+		local a0 = Instance.new("Attachment")
+		a0.Position = Vector3.new(0, 0.25 * ctx.s, 0)
+		a0.Parent = core
+		local a1 = Instance.new("Attachment")
+		a1.Position = Vector3.new(0, -0.25 * ctx.s, 0)
+		a1.Parent = core
+		local trail = Instance.new("Trail")
+		trail.Name = "MythicTrail"
+		trail.Attachment0 = a0
+		trail.Attachment1 = a1
+		trail.Color = ColorSequence.new(accent, main)
+		trail.Transparency = NumberSequence.new(0.3, 1)
+		trail.LightEmission = 1
+		trail.FaceCamera = true
+		trail.Lifetime = 0.5
+		trail.Parent = core
+	end
+	if look.shiny then
+		emitterOn(ctx, core, {
+			color = Color3.fromRGB(255, 225, 120),
+			color2 = Color3.new(1, 1, 1),
+			size = 0.3,
+			lifetime = 0.8,
+			speed = 1.2,
+			rate = 7,
+			rot = 200,
+		}).Name =
+			"ShinySparkles"
+	end
+end
+
+---------------------------------------------------------------------------
+-- API
+---------------------------------------------------------------------------
+
+-- Builds a familiar (a Model of anchored parts) under `parent`. `effects` adds particles and
+-- lights (leave them off for previews in a ViewportFrame, which can't show them).
+function FamiliarBuilder.build(look: Familiars.Look, parent: Instance, effects: boolean): Rig?
+	local species = Familiars.SpeciesById[look.species]
+	local body = species and Bodies[species.body]
+	if not species or not body then
+		return nil
+	end
+	local variant = Familiars.variantOf(look)
+	local r = Rarity.rank(look.rarity)
+	local model = Instance.new("Model")
+	model.Name = "Familiar_" .. species.id
+	local rig: Rig = {
+		model = model,
+		pieces = {},
+		core = nil :: any,
+		flies = species.flies,
+		height = 1.4 * species.size,
+		look = look,
+	}
+	local main = rgb(variant.rgb)
+	if look.shiny then
+		main = main:Lerp(Color3.fromRGB(255, 215, 110), 0.25)
+	end
+	local ctx: Ctx = {
+		rig = rig,
+		s = species.size * (0.85 + r * 0.04),
+		main = main,
+		accent = rgb(variant.accent),
+		eye = if r >= 4 then rgb(variant.accent) else Color3.fromRGB(25, 20, 25),
+		glowEyes = r >= 4,
+	}
+	rig.core = body(ctx)
+	if effects then
+		addEffects(ctx, rig.core, look, species)
+	end
+	model.PrimaryPart = rig.core
+	model.Parent = parent
+	return rig
+end
+
+local function animCF(p: Piece, t: number, moving: number): CFrame
+	local a = p.anim
+	if not a then
+		return CFrame.identity
+	end
+	local tt = t * p.speed + p.phase
+	if a == "flapL" then
+		return CFrame.Angles(0, 0, -0.15 + math.sin(tt * 11) * 0.65)
+	elseif a == "flapR" then
+		return CFrame.Angles(0, 0, 0.15 - math.sin(tt * 11) * 0.65)
+	elseif a == "wag" then
+		return CFrame.Angles(0, math.sin(tt * 6) * (0.35 + moving * 0.2), 0)
+	elseif a == "ear" then
+		return CFrame.Angles(math.sin(tt * 2.2) * 0.12, 0, 0)
+	elseif a == "walk" then
+		return CFrame.Angles(math.sin(t * 11 + p.phase) * 0.7 * moving, 0, 0)
+	elseif a == "sway" then
+		return CFrame.Angles(math.sin(tt * 2.4) * 0.35, 0, math.cos(tt * 1.9) * 0.25)
+	elseif a == "orbit" then
+		return CFrame.Angles(0, tt, 0)
+	elseif a == "spin" then
+		return CFrame.Angles(0, tt, 0)
+	elseif a == "slither" then
+		return CFrame.new(math.sin(t * 4 * p.speed - p.phase) * 0.22, math.sin(t * 3 * p.speed - p.phase) * 0.1, 0)
+	elseif a == "pagesL" then
+		return CFrame.Angles(0, 0, 0.35 + math.sin(tt * 5) * 0.35)
+	elseif a == "pagesR" then
+		return CFrame.Angles(0, 0, -0.35 - math.sin(tt * 5) * 0.35)
+	elseif a == "pulse" then
+		return CFrame.new(0, math.sin(tt * 2.6) * 0.08, 0)
+	elseif a == "chatter" then
+		return CFrame.new(0, -math.abs(math.sin(tt * 3)) * 0.08, 0)
+	elseif a == "fluke" then
+		return CFrame.Angles(math.sin(tt * 1.6) * 0.35, 0, 0)
+	elseif a == "swim" then
+		return CFrame.Angles(math.sin(tt * 1.6) * 0.05, 0, 0)
+	end
+	return CFrame.identity
+end
+
+-- Places every part of the familiar for time `t`. `cf` is where its origin is and which way it
+-- faces; `moving` (0..1) drives walk cycles.
+function FamiliarBuilder.pose(rig: Rig, cf: CFrame, t: number, moving: number)
+	for _, p in rig.pieces do
+		p.part.CFrame = cf * p.pivot * animCF(p, t, moving) * p.offset
+	end
+end
+
+function FamiliarBuilder.destroy(rig: Rig)
+	rig.model:Destroy()
+end
+
+-- Every body type, for tests.
+function FamiliarBuilder.bodies(): { string }
+	local list = {}
+	for name in Bodies do
+		table.insert(list, name)
+	end
+	table.sort(list)
+	return list
+end
+
+return FamiliarBuilder
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="68">
+            <Properties>
+              <string name="Name">FamiliarController</string>
+              <string name="Source"><![CDATA[-- Familiars following their mages. The server puts a "Familiar" attribute on each character
+-- (species|rarity|colour|shiny); every client builds and animates the familiars itself, so they
+-- move smoothly and cost no network traffic. Fliers hover by your shoulder, walkers trot at
+-- your heels.
+-- Your own familiar also shows its power on your screen:
+--   Keen Nose  - outlines the nearest unopened chest in range (and looks at it)
+--   Night Eyes - every 12s, outlines the nearest enemy in range for a moment
+-- and the server's "FamiliarNip" effect makes a familiar dart at whoever it nipped.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Familiars = require(ReplicatedStorage.Shared.Familiars)
+local FamiliarBuilder = require(script.Parent.FamiliarBuilder)
+local FXController = require(script.Parent.FXController)
+local VFX = require(script.Parent.VFX)
+local Sounds = require(script.Parent.Sounds)
+local State = require(script.Parent.State)
+
+local FamiliarController = {}
+
+type Entry = {
+	code: string,
+	rig: FamiliarBuilder.Rig,
+	pos: Vector3,
+	facing: Vector3,
+	seed: number,
+	dart: { target: Vector3, t0: number }?,
+	lookAt: Vector3?, -- something to stare at while idle (Keen Nose)
+}
+
+local player = Players.LocalPlayer
+local entries: { [Model]: Entry } = {}
+local folder: Folder
+local rng = Random.new()
+local clock = 0
+local chestHighlight: Highlight
+local spotHighlight: Highlight
+local spotUntil = 0
+local nextSpot = 0
+
+-- Every model that might have a familiar: player characters and bots.
+local function owners(): { Model }
+	local list = {}
+	for _, p in Players:GetPlayers() do
+		if p.Character then
+			table.insert(list, p.Character)
+		end
+	end
+	local bots = workspace:FindFirstChild("Bots")
+	if bots then
+		for _, m in bots:GetChildren() do
+			if m:IsA("Model") then
+				table.insert(list, m)
+			end
+		end
+	end
+	return list
+end
+
+-- Builds familiars for new owners, rebuilds changed ones and removes the ones whose owner left.
+function FamiliarController.refresh()
+	local seen: { [Model]: boolean } = {}
+	for _, model in owners() do
+		local code = model:GetAttribute("Familiar")
+		local look = Familiars.decode(code)
+		local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if look and root then
+			seen[model] = true
+			local e = entries[model]
+			if e and e.code ~= code then
+				FamiliarBuilder.destroy(e.rig)
+				entries[model] = nil
+				e = nil
+			end
+			if not e then
+				local rig = FamiliarBuilder.build(look, folder, true)
+				if rig then
+					entries[model] = {
+						code = code :: string,
+						rig = rig,
+						pos = root.Position + root.CFrame.RightVector * 2,
+						facing = root.CFrame.LookVector,
+						seed = rng:NextNumber(0, 10),
+						dart = nil,
+						lookAt = nil,
+					}
+				end
+			end
+		end
+	end
+	for model, e in entries do
+		if not seen[model] then
+			FamiliarBuilder.destroy(e.rig)
+			entries[model] = nil
+		end
+	end
+end
+
+function FamiliarController.count(): number
+	local n = 0
+	for _ in entries do
+		n += 1
+	end
+	return n
+end
+
+local function groundY(model: Model, root: BasePart): number
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if hum and hum.RigType == Enum.HumanoidRigType.R15 then
+		return root.Position.Y - hum.HipHeight - root.Size.Y / 2
+	end
+	return root.Position.Y - 3
+end
+
+local function flat(v: Vector3, fallback: Vector3): Vector3
+	local f = Vector3.new(v.X, 0, v.Z)
+	return if f.Magnitude > 1e-3 then f.Unit else fallback
+end
+
+local function step(dt: number)
+	clock += dt
+	local camera = workspace.CurrentCamera
+	local camPos = if camera then camera.CFrame.Position else nil
+	for model, e in entries do
+		local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not root then
+			continue
+		end
+		local rig = e.rig
+		local ownerCF = root.CFrame
+		local side, back = ownerCF.RightVector, -ownerCF.LookVector
+		local target: Vector3
+		if rig.flies then
+			target = root.Position
+				+ side * 2.3
+				+ back * 1.6
+				+ Vector3.new(0, 1.3 + math.sin(clock * 2 + e.seed) * 0.25, 0)
+		else
+			local p = root.Position + side * 1.9 + back * 2.2
+			target = Vector3.new(p.X, groundY(model, root), p.Z)
+		end
+		if camPos and (target - camPos).Magnitude > 260 then
+			continue -- too far away to see: don't spend time animating it
+		end
+		local gap = target - e.pos
+		if gap.Magnitude > 40 then
+			e.pos = target -- the owner teleported
+		else
+			e.pos = e.pos:Lerp(target, 1 - math.exp(-dt * 6))
+		end
+		local pos = e.pos
+		local face = flat(gap, flat(ownerCF.LookVector, Vector3.new(0, 0, -1)))
+		local moving = math.clamp(gap.Magnitude / 2.5, 0, 1)
+		if moving < 0.3 and e.lookAt then
+			face = flat(e.lookAt - pos, face)
+		end
+		local dart = e.dart
+		if dart then
+			-- a quick lunge at whoever it nipped, and back
+			local k = (clock - dart.t0) / 0.45
+			if k >= 1 then
+				e.dart = nil
+			else
+				local out = if k < 0.35 then k / 0.35 else 1 - (k - 0.35) / 0.65
+				pos = pos:Lerp(dart.target, out * 0.85)
+				face = flat(dart.target - e.pos, face)
+			end
+		end
+		e.facing = e.facing:Lerp(face, 1 - math.exp(-dt * 8))
+		if e.facing.Magnitude < 0.05 then
+			e.facing = face
+		end
+		local hop = if rig.flies then 0 else math.abs(math.sin(clock * 9 + e.seed)) * 0.22 * moving
+		local at = pos + Vector3.new(0, hop, 0)
+		FamiliarBuilder.pose(rig, CFrame.lookAt(at, at + e.facing), clock, moving)
+	end
+end
+
+---------------------------------------------------------------------------
+-- Your own familiar's power, shown on your screen
+---------------------------------------------------------------------------
+
+local function myPower(): (string?, number)
+	local character = player.Character
+	local look = character and Familiars.decode(character:GetAttribute("Familiar"))
+	if not look then
+		return nil, 0
+	end
+	local power, value = Familiars.powerOf(look)
+	return if power then power.id else nil, value
+end
+
+local function nearestChest(from: Vector3, range: number): Model?
+	local arena = workspace:FindFirstChild("Arena")
+	local chests = arena and arena:FindFirstChild("Chests")
+	if not chests then
+		return nil
+	end
+	local best, bestDist = nil, range
+	for _, m in chests:GetChildren() do
+		if m:IsA("Model") and m:GetAttribute("ChestId") and not m:GetAttribute("Opened") then
+			local d = (m:GetPivot().Position - from).Magnitude
+			if d < bestDist then
+				best, bestDist = m, d
+			end
+		end
+	end
+	return best
+end
+
+local function nearestEnemy(from: Vector3, range: number): Model?
+	local best, bestDist = nil, range
+	local function consider(model: Model?)
+		local root = model and model:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local hum = model and model:FindFirstChildOfClass("Humanoid")
+		if model and root and hum and hum.Health > 0 then
+			local d = (root.Position - from).Magnitude
+			if d < bestDist then
+				best, bestDist = model, d
+			end
+		end
+	end
+	for _, p in Players:GetPlayers() do
+		if p ~= player and p:GetAttribute("Alive") == true then
+			consider(p.Character)
+		end
+	end
+	local bots = workspace:FindFirstChild("Bots")
+	if bots then
+		for _, m in bots:GetChildren() do
+			if m:IsA("Model") and m:GetAttribute("InMatch") then
+				consider(m)
+			end
+		end
+	end
+	return best
+end
+
+local function updatePowers()
+	local power, value = myPower()
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local mine = character and entries[character]
+	local inMatch = State.alive()
+	-- Keen Nose
+	local chest = if power == "chestSense" and root and inMatch then nearestChest(root.Position, value) else nil
+	chestHighlight.Adornee = chest
+	chestHighlight.Enabled = chest ~= nil
+	if mine then
+		mine.lookAt = if chest then chest:GetPivot().Position else nil
+	end
+	-- Night Eyes
+	if clock > spotUntil then
+		spotHighlight.Enabled = false
+		spotHighlight.Adornee = nil
+	end
+	if power == "spotter" and root and inMatch and clock >= nextSpot then
+		local enemy = nearestEnemy(root.Position, value)
+		if enemy then
+			spotHighlight.Adornee = enemy
+			spotHighlight.Enabled = true
+			spotUntil = clock + 2.5
+			nextSpot = clock + Familiars.SpotterCooldown
+		else
+			nextSpot = clock + 1
+		end
+	end
+end
+
+local function highlight(name: string, fill: Color3, outline: Color3): Highlight
+	local h = Instance.new("Highlight")
+	h.Name = name
+	h.FillColor = fill
+	h.FillTransparency = 0.8
+	h.OutlineColor = outline
+	h.OutlineTransparency = 0
+	h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	h.Enabled = false
+	h.Parent = folder
+	return h
+end
+
+function FamiliarController.init()
+	local existing = workspace:FindFirstChild("Familiars")
+	if existing then
+		existing:Destroy()
+	end
+	local f = Instance.new("Folder")
+	f.Name = "Familiars"
+	f.Parent = workspace
+	folder = f
+	chestHighlight = highlight("KeenNose", Color3.fromRGB(255, 220, 120), Color3.fromRGB(255, 235, 160))
+	spotHighlight = highlight("NightEyes", Color3.fromRGB(255, 60, 60), Color3.fromRGB(255, 120, 120))
+
+	FXController.on("FamiliarNip", function(owner: Model?, target: Vector3, color, element: string?)
+		local e = owner and entries[owner]
+		if e then
+			e.dart = { target = target, t0 = clock }
+		end
+		local c = if type(color) == "table" then Color3.fromRGB(color[1], color[2], color[3]) else Color3.new(1, 1, 1)
+		task.delay(0.15, function()
+			VFX.elementBurst(target, element, c, Color3.new(1, 1, 1), 2.5)
+			VFX.sparks(target, c, 3, 6)
+		end)
+		Sounds.at("Hitmarker", target, 0.5)
+	end)
+
+	local sinceRefresh, sincePowers = 0, 0
+	RunService.RenderStepped:Connect(function(dt)
+		sinceRefresh += dt
+		sincePowers += dt
+		if sinceRefresh > 0.5 then
+			sinceRefresh = 0
+			FamiliarController.refresh()
+		end
+		if sincePowers > 0.5 then
+			sincePowers = 0
+			updatePowers()
+		end
+		step(dt)
+	end)
+end
+
+return FamiliarController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="69">
             <Properties>
               <string name="Name">GrimoireController</string>
               <string name="Source"><![CDATA[-- The Grimoire: an in-game encyclopedia that explains how to play and how to craft spells,
@@ -20206,6 +22402,7 @@ local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
 local Classes = require(Shared.Classes)
 local Cosmetics = require(Shared.Cosmetics)
+local Familiars = require(Shared.Familiars)
 local Rarity = require(Shared.Rarity)
 local Consumables = require(Shared.Consumables)
 local SpellParts = require(Shared.Spells.SpellParts)
@@ -20671,8 +22868,8 @@ chapter("Classes", "🎓  Kits", function()
 	end
 end)
 
-chapter("Wardrobe", "👘  Robes & Coins", function()
-	heading("Robes, Hats & Coins")
+chapter("Wardrobe", "👘  Robes & Familiars", function()
+	heading("Robes, Familiars & Coins")
 	para(
 		"Every match pays out <b>Enchanted Coins</b> by finishing place: 1st gets <b>"
 			.. Config.Economy.CoinsForFirst
@@ -20723,9 +22920,39 @@ chapter("Wardrobe", "👘  Robes & Coins", function()
 		"Parts carry small bonuses that work in matches (rarer parts have more and bigger ones). Each stat is capped, so a full Mythic outfit is an edge, not an auto-win.\n"
 			.. table.concat(lines, "\n")
 	)
+	subheading("Familiars")
+	local chances = {}
+	for _, box in Cosmetics.Boxes do
+		table.insert(chances, box.icon .. " " .. (Familiars.ChancePerItem[box.id] or 0) .. "%")
+	end
+	para(
+		"Every item a Coffer hands out has a small chance to be a <b>familiar</b> instead: a little companion that follows you around the Plaza and into matches ("
+			.. table.concat(chances, ", ")
+			.. "). It rolls its rarity from the coffer's usual odds. Summon one from the <b>🐾 Familiars</b> tab.\n"
+			.. "<b>Common</b> and <b>Uncommon</b> familiars are just for show. From <b>Rare</b> up, each kind has one small power that grows with rarity. Rare familiars glow, Epic ones sparkle, Legendary ones carry an elemental aura and Mythic ones leave a trail. 1 in "
+			.. math.floor(100 / Familiars.ShinyChance + 0.5)
+			.. " is <b>Shiny</b>, with golden sparkles."
+	)
+	local byRarity = {}
+	for _, s in Familiars.Species do
+		byRarity[s.minRarity] = byRarity[s.minRarity] or {}
+		table.insert(byRarity[s.minRarity], s.icon .. " " .. s.name .. " (" .. Familiars.speciesPowerName(s.id) .. ")")
+	end
+	local kinds = {}
+	for _, rarity in Rarity.Order do
+		if byRarity[rarity] then
+			table.insert(kinds, "<b>From " .. rarity .. ":</b> " .. table.concat(byRarity[rarity], ", "))
+		end
+	end
+	para(table.concat(kinds, "\n"))
+	local powers = {}
+	for _, power in Familiars.Powers do
+		table.insert(powers, "<b>" .. power.name .. "</b>: " .. Familiars.powerRangeText(power, nil))
+	end
+	para("Powers, from Rare to Mythic:\n" .. table.concat(powers, "\n"))
 	subheading("Trading")
 	para(
-		"The <b>Gilded Gavel</b> (the auction house pavilion in the Plaza) lets you sell loose parts or finished robes and hats to other players for coins. The house keeps "
+		"The <b>Gilded Gavel</b> (the auction house pavilion in the Plaza) lets you sell loose parts, finished robes and hats, or familiars to other players for coins. The house keeps "
 			.. math.floor(Config.Economy.AuctionFee * 100 + 0.5)
 			.. "%. Unsold items come back after "
 			.. Config.Economy.AuctionHours
@@ -20927,7 +23154,7 @@ return GrimoireController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="66">
+          <Item class="ModuleScript" referent="70">
             <Properties>
               <string name="Name">HUDController</string>
               <string name="Source"><![CDATA[-- In-match HUD: health/shield, mana, wand hotbar with the spell deck, potions,
@@ -21701,7 +23928,7 @@ return HUDController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="67">
+          <Item class="ModuleScript" referent="71">
             <Properties>
               <string name="Name">InputController</string>
               <string name="Source"><![CDATA[-- Casting and hotkeys.
@@ -21945,7 +24172,7 @@ return InputController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="68">
+          <Item class="ModuleScript" referent="72">
             <Properties>
               <string name="Name">InventoryController</string>
               <string name="Source"><![CDATA[-- The Spellbook: manage wands, slot spells into them, and craft new spells in the Spellforge.
@@ -23076,7 +25303,7 @@ return InventoryController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="69">
+          <Item class="ModuleScript" referent="73">
             <Properties>
               <string name="Name">LobbyController</string>
               <string name="Source"><![CDATA[-- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
@@ -23862,7 +26089,7 @@ return LobbyController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="70">
+          <Item class="ModuleScript" referent="74">
             <Properties>
               <string name="Name">Sounds</string>
               <string name="Source"><![CDATA[-- Sound effects. These use sounds that ship with every Roblox client so the game works
@@ -23947,7 +26174,7 @@ return Sounds
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="71">
+          <Item class="ModuleScript" referent="75">
             <Properties>
               <string name="Name">State</string>
               <string name="Source"><![CDATA[-- Client-side cache of everything the UI shows: inventory, equipped wand state,
@@ -23981,7 +26208,9 @@ State.inventory = nil :: Items.Inventory?
 State.wand = nil :: WandState?
 State.menus = {} :: { [string]: boolean }
 -- coins, cosmetic parts, garments, what's worn and auction listings (see WardrobeService.sync)
-State.wardrobe = { coins = 0, parts = {}, garments = {}, equipped = {}, listings = {} } :: { [string]: any }
+State.wardrobe = { coins = 0, parts = {}, garments = {}, familiars = {}, equipped = {}, listings = {} } :: {
+	[string]: any,
+}
 
 State.InventoryChanged = Signal.new()
 State.WandChanged = Signal.new()
@@ -24080,6 +26309,7 @@ function State.init()
 	end)
 	Remotes.event("WardrobeUpdated").OnClientEvent:Connect(function(snapshot)
 		if type(snapshot) == "table" then
+			snapshot.familiars = snapshot.familiars or {}
 			State.wardrobe = snapshot
 			State.WardrobeChanged:Fire()
 		end
@@ -24095,7 +26325,7 @@ return State
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="72">
+          <Item class="ModuleScript" referent="76">
             <Properties>
               <string name="Name">StormController</string>
               <string name="Source"><![CDATA[-- Draws the shrinking Mana Storm wall locally from replicated attributes,
@@ -24206,7 +26436,7 @@ return StormController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="73">
+          <Item class="ModuleScript" referent="77">
             <Properties>
               <string name="Name">TutorialController</string>
               <string name="Source"><![CDATA[-- A hands-on tutorial in the Spell Lab (the hub on your first visit): open the Spellbook, forge a spell from parts,
@@ -24591,7 +26821,7 @@ return TutorialController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="74">
+          <Item class="ModuleScript" referent="78">
             <Properties>
               <string name="Name">VFX</string>
               <string name="Source"><![CDATA[-- Building blocks for spell effects, and how each element looks.
@@ -25215,7 +27445,7 @@ return VFX
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="75">
+          <Item class="ModuleScript" referent="79">
             <Properties>
               <string name="Name">WardrobeController</string>
               <string name="Source"><![CDATA[-- The Tailor's Loom: open Coffers with Enchanted Coins, stitch parts into robes and hats, and
@@ -25223,6 +27453,7 @@ return VFX
 --   Coffers  - five loot boxes, 50 to 1000 coins, with their odds
 --   Tailor   - pick a Cloth + Trim + Sigil (robe) or Shape + Band + Gem (hat) and stitch it
 --   Wardrobe - wear / take off / unpick / salvage garments and loose parts
+--   Familiars - summon / dismiss / salvage the companions that come out of Coffers
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25234,6 +27465,7 @@ local Remotes = require(Shared.Remotes)
 local Rarity = require(Shared.Rarity)
 local Cosmetics = require(Shared.Cosmetics)
 local OutfitBuilder = require(Shared.OutfitBuilder)
+local Familiars = require(Shared.Familiars)
 local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
@@ -25241,6 +27473,7 @@ local Widgets = require(UI.Widgets)
 local CosmeticInfo = require(UI.CosmeticInfo)
 local State = require(script.Parent.State)
 local Sounds = require(script.Parent.Sounds)
+local FamiliarBuilder = require(script.Parent.FamiliarBuilder)
 
 local WardrobeController = {}
 
@@ -25273,6 +27506,13 @@ local partGrid: ScrollingFrame
 local wardrobePreview: any
 local detailsInfo: Frame
 local detailButtons: Frame
+
+-- Familiars state
+local familiarSelected: string? = nil
+local familiarGrid: ScrollingFrame
+local familiarPreview: any
+local familiarInfo: Frame
+local familiarButtons: Frame
 local gearLabel: TextLabel
 
 local function invoke(name: string, args: { [string]: any }): (boolean, string?, any)
@@ -25315,6 +27555,22 @@ end
 
 local function worn(kind: string): any
 	return findGarment(State.wardrobe.equipped[kind])
+end
+
+local function findFamiliar(uid: string?): any
+	if not uid then
+		return nil
+	end
+	for _, f in State.wardrobe.familiars or {} do
+		if f.uid == uid then
+			return f
+		end
+	end
+	return nil
+end
+
+local function wornFamiliar(): any
+	return findFamiliar(State.wardrobe.equipped.Familiar)
 end
 
 local function sortByRarity(list: { any }): { any }
@@ -25380,19 +27636,42 @@ local function makePreview(parent: Instance, size: UDim2, position: UDim2)
 		parent = model,
 	}
 	local angle = 0
+	local t = 0
+	local pet: FamiliarBuilder.Rig? = nil
+	local petCode: string? = nil
 	RunService.RenderStepped:Connect(function(dt)
 		if not gui or not gui.Enabled or not viewport.Visible then
 			return
 		end
 		angle += dt * 0.6
-		local eye = Vector3.new(math.sin(angle) * 8.5, 4.4, -math.cos(angle) * 8.5)
-		camera.CFrame = CFrame.lookAt(eye, Vector3.new(0, 3.1, 0))
+		t += dt
+		local eye = Vector3.new(math.sin(angle) * 9.5, 4.4, -math.cos(angle) * 9.5)
+		camera.CFrame = CFrame.lookAt(eye, Vector3.new(0.6, 3, 0))
+		if pet then
+			-- the familiar keeps you company: hovering by your shoulder, or sitting at your feet
+			local at = if pet.flies
+				then Vector3.new(2.5, 4.3 + math.sin(t * 2) * 0.2, 0.6)
+				else Vector3.new(2.3, 0, 0.9)
+			FamiliarBuilder.pose(pet, CFrame.lookAt(at, at + Vector3.new(-0.3, 0, -1)), t, 0)
+		end
 	end)
 	return {
 		viewport = viewport,
-		show = function(robe: any, hat: any)
+		show = function(robe: any, hat: any, familiar: any)
 			OutfitBuilder.strip(model)
 			pcall(OutfitBuilder.build, rig, robe, hat, false)
+			local code = if familiar then Familiars.encode(familiar) else nil
+			if code ~= petCode then
+				if pet then
+					FamiliarBuilder.destroy(pet)
+					pet = nil
+				end
+				petCode = code
+				local look = Familiars.decode(code)
+				if look then
+					pet = FamiliarBuilder.build(look, viewport, false)
+				end
+			end
 		end,
 	}
 end
@@ -25410,14 +27689,17 @@ local function reveal(parts: { any })
 			LayoutOrder = i,
 			Parent = revealRow,
 		})
+		local isFamiliar = part.species ~= nil
+		local kind = if isFamiliar then "Familiar" else "Part"
+		local icon, iconColor = CosmeticInfo.itemIcon(kind, part)
 		local tile = Widgets.tile({
 			name = "Got_" .. part.uid,
 			size = 96,
-			icon = CosmeticInfo.icon(part),
-			iconColor = CosmeticInfo.color(part),
+			icon = icon,
+			iconColor = iconColor,
 			border = Theme.rarity(part.rarity),
 			info = function()
-				return CosmeticInfo.part(part)
+				return CosmeticInfo.item(kind, part)
 			end,
 			parent = holder,
 		})
@@ -25432,7 +27714,9 @@ local function reveal(parts: { any })
 			Parent = holder,
 		})
 		Widgets.label({
-			Text = part.rarity .. " " .. Cosmetics.Slots[part.slot].label,
+			Text = if isFamiliar
+				then "🐾 " .. part.rarity .. " familiar!" .. (if part.shiny then " ✨ Shiny!" else "")
+				else part.rarity .. " " .. Cosmetics.Slots[part.slot].label,
 			TextSize = 12,
 			TextColor3 = C.Dim,
 			Size = UDim2.new(1, -106, 0, 16),
@@ -25533,6 +27817,17 @@ local function buildCoffers(page: Frame)
 				})
 			end
 		end
+		Widgets.label({
+			Name = "FamiliarChance",
+			Text = "🐾 " .. (Familiars.ChancePerItem[box.id] or 0) .. "% familiar per item",
+			Font = Theme.Bold,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextColor3 = C.Gold,
+			Size = UDim2.new(1, 0, 0, 15),
+			LayoutOrder = 20,
+			Parent = odds,
+		})
 		local open = Widgets.button("Open  ·  🪙 " .. box.price, {
 			size = UDim2.new(1, -16, 0, 38),
 			position = UDim2.new(0, 8, 1, -46),
@@ -25549,7 +27844,9 @@ local function buildCoffers(page: Frame)
 		open.Name = "Open_" .. box.id
 	end
 	Widgets.label({
-		Text = "Earn Enchanted Coins by playing: 1st place gets 12, 2nd gets 11 ... 12th gets 1.",
+		Text = "Earn Enchanted Coins by playing: 1st place gets 12 ... 12th gets 1. Any item can be a familiar (same rarity odds), and 1 in "
+			.. math.floor(100 / Familiars.ShinyChance + 0.5)
+			.. " familiars is Shiny.",
 		TextSize = 13,
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -25631,9 +27928,9 @@ local function refreshTailor()
 	local otherKind = if mode == "Robe" then "Hat" else "Robe"
 	local preview = if complete then Cosmetics.craft(mode, parts) else nil
 	if mode == "Robe" then
-		tailorPreview.show(preview, worn(otherKind))
+		tailorPreview.show(preview, worn(otherKind), wornFamiliar())
 	else
-		tailorPreview.show(worn(otherKind), preview)
+		tailorPreview.show(worn(otherKind), preview, wornFamiliar())
 	end
 	if preview then
 		local level = Cosmetics.auraLevel(preview)
@@ -25815,7 +28112,7 @@ local function refreshWardrobe()
 			hat = item
 		end
 	end
-	wardrobePreview.show(robe, hat)
+	wardrobePreview.show(robe, hat, wornFamiliar())
 	local wornList = {}
 	for _, kind in Cosmetics.GarmentOrder do
 		local g = worn(kind)
@@ -25948,6 +28245,141 @@ local function buildWardrobe(page: Frame)
 end
 
 ---------------------------------------------------------------------------
+-- Familiars
+---------------------------------------------------------------------------
+
+local function familiarButton(text: string, color: Color3?, onClick: () -> (), name: string)
+	local b = Widgets.button(text, {
+		size = UDim2.fromOffset(158, 32),
+		color = color or C.Panel3,
+		textSize = 13,
+		onClick = onClick,
+		parent = familiarButtons,
+	})
+	b.Name = name
+end
+
+local function refreshFamiliars()
+	local w = State.wardrobe
+	Widgets.clear(familiarGrid, true)
+	local list = sortByRarity(w.familiars or {})
+	for i, f in list do
+		Widgets.tile({
+			name = "Familiar_" .. f.uid,
+			size = 58,
+			icon = CosmeticInfo.familiarIcon(f),
+			iconColor = CosmeticInfo.familiarColor(f),
+			border = Theme.rarity(f.rarity),
+			selected = familiarSelected == f.uid,
+			corner = if w.equipped.Familiar == f.uid then "🐾" elseif f.shiny then "✨" else nil,
+			layoutOrder = i,
+			info = function()
+				return CosmeticInfo.familiar(f)
+			end,
+			onClick = function()
+				Sounds.play("Click")
+				familiarSelected = f.uid
+				refreshFamiliars()
+			end,
+			parent = familiarGrid,
+		})
+	end
+	if #list == 0 then
+		Widgets.label({
+			Text = "No familiars yet. Every item from a Coffer has a small chance to be one!",
+			TextSize = 13,
+			TextWrapped = true,
+			TextColor3 = C.Dim,
+			Size = UDim2.new(1, -8, 0, 40),
+			Parent = familiarGrid,
+		})
+	end
+	local selected = findFamiliar(familiarSelected)
+	if not selected then
+		familiarSelected = nil
+	end
+	familiarPreview.show(worn("Robe"), worn("Hat"), selected or wornFamiliar())
+	Widgets.clear(familiarButtons, true)
+	Widgets.fillInfo(familiarInfo, if selected then CosmeticInfo.familiar(selected) else nil)
+	if not selected then
+		return
+	end
+	local f = selected
+	if w.equipped.Familiar == f.uid then
+		familiarButton("Dismiss", nil, function()
+			invoke("Unequip", { kind = "Familiar" })
+		end, "DismissButton")
+	else
+		familiarButton("Summon", C.Accent, function()
+			Sounds.play("Pickup")
+			invoke("Equip", { uid = f.uid })
+		end, "SummonButton")
+		familiarButton(
+			"Salvage (+" .. (Familiars.SalvageValue[Rarity.rank(f.rarity)] or 1) .. " 🪙)",
+			C.Bad,
+			function()
+				invoke("Salvage", { kind = "Familiar", uid = f.uid })
+				familiarSelected = nil
+			end,
+			"SalvageButton"
+		)
+	end
+end
+
+local function buildFamiliars(page: Frame)
+	Widgets.label({
+		Text = "YOUR FAMILIARS",
+		Font = Theme.Black,
+		TextSize = 13,
+		TextColor3 = C.Gold,
+		Size = UDim2.fromOffset(300, 18),
+		Parent = page,
+	})
+	familiarGrid = Create("ScrollingFrame", {
+		Name = "FamiliarGrid",
+		BackgroundColor3 = C.Panel,
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(420, 482),
+		Position = UDim2.fromOffset(0, 20),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		Parent = page,
+	}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+	familiarPreview = makePreview(page, UDim2.fromOffset(250, 300), UDim2.fromOffset(432, 0))
+	Widgets.label({
+		Name = "FamiliarNote",
+		Text = "<b>Familiars</b> follow you around the Plaza and into matches.\n"
+			.. "Common and Uncommon ones are just for show. From <b>Rare</b> up, each kind has one small power that grows with rarity.\n"
+			.. "Rare familiars glow, Epic ones sparkle, Legendary ones carry an elemental aura and Mythic ones leave a trail. Shiny ones shed gold.",
+		RichText = true,
+		TextSize = 12,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Size = UDim2.fromOffset(250, 196),
+		Position = UDim2.fromOffset(432, 308),
+		Parent = page,
+	})
+	familiarInfo = Create("Frame", {
+		Name = "FamiliarDetails",
+		BackgroundColor3 = C.Panel,
+		Size = UDim2.fromOffset(320, 330),
+		Position = UDim2.fromOffset(692, 0),
+		Parent = page,
+	}, { Create.corner(8), Create.padding(10, 8) })
+	familiarButtons = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(320, 160),
+		Position = UDim2.fromOffset(692, 340),
+		Parent = page,
+	}, { Create.grid(158, 4) })
+	local layout = familiarButtons:FindFirstChildOfClass("UIGridLayout")
+	if layout then
+		layout.CellSize = UDim2.fromOffset(158, 34)
+	end
+end
+
+---------------------------------------------------------------------------
 -- Window
 ---------------------------------------------------------------------------
 
@@ -25969,6 +28401,8 @@ local function refresh()
 		refreshTailor()
 	elseif currentTab == "Wardrobe" then
 		refreshWardrobe()
+	elseif currentTab == "Familiars" then
+		refreshFamiliars()
 	end
 end
 
@@ -26040,7 +28474,14 @@ local function build()
 		Position = UDim2.fromOffset(18, 48),
 		Parent = panel,
 	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, def in { { "Coffers", "🎁  Coffers" }, { "Tailor", "🧵  Tailor" }, { "Wardrobe", "👘  Wardrobe" } } do
+	for i, def in
+		{
+			{ "Coffers", "🎁  Coffers" },
+			{ "Tailor", "🧵  Tailor" },
+			{ "Wardrobe", "👘  Wardrobe" },
+			{ "Familiars", "🐾  Familiars" },
+		}
+	do
 		local b = Widgets.button(def[2], {
 			size = UDim2.fromOffset(160, 32),
 			color = C.Panel3,
@@ -26067,6 +28508,7 @@ local function build()
 	buildCoffers(pages.Coffers)
 	buildTailor(pages.Tailor)
 	buildWardrobe(pages.Wardrobe)
+	buildFamiliars(pages.Familiars)
 end
 
 function WardrobeController.init()
@@ -26086,18 +28528,19 @@ return WardrobeController
             </Properties>
           </Item>
         </Item>
-        <Item class="Folder" referent="76">
+        <Item class="Folder" referent="80">
           <Properties>
             <string name="Name">UI</string>
           </Properties>
-          <Item class="ModuleScript" referent="77">
+          <Item class="ModuleScript" referent="81">
             <Properties>
               <string name="Name">CosmeticInfo</string>
-              <string name="Source"><![CDATA[-- Tooltip / detail text for robe and hat parts and finished garments.
+              <string name="Source"><![CDATA[-- Tooltip / detail text for robe and hat parts, finished garments and familiars.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Cosmetics = require(ReplicatedStorage.Shared.Cosmetics)
+local Familiars = require(ReplicatedStorage.Shared.Familiars)
 local Rarity = require(ReplicatedStorage.Shared.Rarity)
 local Theme = require(script.Parent.Theme)
 local ItemInfo = require(script.Parent.ItemInfo)
@@ -26195,6 +28638,77 @@ function CosmeticInfo.garment(g: any): ItemInfo.Info
 	}
 end
 
+function CosmeticInfo.familiarColor(f: any): Color3
+	local variant = Familiars.variantOf(f)
+	return Theme.rgb(variant.rgb)
+end
+
+function CosmeticInfo.familiarIcon(f: any): string
+	local s = Familiars.SpeciesById[f.species]
+	return if s then s.icon else "🐾"
+end
+
+function CosmeticInfo.familiar(f: any): ItemInfo.Info
+	local s = Familiars.SpeciesById[f.species]
+	local variant = Familiars.variantOf(f)
+	local power = Familiars.powerOf(f)
+	local lines = {
+		{ "Species", if s then s.name else tostring(f.species) },
+		{ "Colour", variant.name },
+		{ "Power", if power then power.name else "none (just for show)" },
+	}
+	if f.shiny then
+		table.insert(lines, { "Shiny", "✨ yes" })
+	end
+	local body = {}
+	local text = Familiars.powerText(f)
+	if text then
+		table.insert(body, "✦ " .. text)
+	elseif s then
+		table.insert(
+			body,
+			"Just for show. Rare and rarer "
+				.. s.name
+				.. "s have a small power: "
+				.. Familiars.speciesPowerName(s.id)
+				.. "."
+		)
+	end
+	if s then
+		table.insert(body, "\n" .. s.blurb)
+	end
+	local box = Cosmetics.Boxes[f.box]
+	return {
+		title = f.name,
+		color = Theme.rarity(f.rarity),
+		subtitle = f.rarity .. " familiar" .. (if box then "  ·  from the " .. box.name else ""),
+		lines = lines,
+		body = table.concat(body, "\n"),
+		icon = CosmeticInfo.familiarIcon(f),
+		iconColor = CosmeticInfo.familiarColor(f),
+	}
+end
+
+-- Info / icon / colour for any wardrobe item ("Part", "Garment" or "Familiar").
+function CosmeticInfo.item(kind: string, item: any): ItemInfo.Info
+	if kind == "Garment" then
+		return CosmeticInfo.garment(item)
+	elseif kind == "Familiar" then
+		return CosmeticInfo.familiar(item)
+	end
+	return CosmeticInfo.part(item)
+end
+
+function CosmeticInfo.itemIcon(kind: string, item: any): (string, Color3)
+	if kind == "Garment" then
+		local def = Cosmetics.Garments[item.kind]
+		return def.icon, CosmeticInfo.color(item.parts[def.slots[1]])
+	elseif kind == "Familiar" then
+		return CosmeticInfo.familiarIcon(item), CosmeticInfo.familiarColor(item)
+	end
+	return CosmeticInfo.icon(item), CosmeticInfo.color(item)
+end
+
 -- Total stats of a worn outfit, as text lines.
 function CosmeticInfo.gearText(gear: { [string]: number }): string
 	local lines = {}
@@ -26215,7 +28729,7 @@ return CosmeticInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="78">
+          <Item class="ModuleScript" referent="82">
             <Properties>
               <string name="Name">Create</string>
               <string name="Source"><![CDATA[-- Declarative-ish instance builder:
@@ -26308,7 +28822,7 @@ return Create
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="79">
+          <Item class="ModuleScript" referent="83">
             <Properties>
               <string name="Name">ItemInfo</string>
               <string name="Source"><![CDATA[-- Builds tooltip / details content for every kind of item.
@@ -26476,7 +28990,7 @@ return ItemInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="80">
+          <Item class="ModuleScript" referent="84">
             <Properties>
               <string name="Name">Theme</string>
               <string name="Source"><![CDATA[-- Colours and fonts for every screen. Tweak here to re-skin the whole UI.
@@ -26536,7 +29050,7 @@ return Theme
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="81">
+          <Item class="ModuleScript" referent="85">
             <Properties>
               <string name="Name">Widgets</string>
               <string name="Source"><![CDATA[-- Reusable UI pieces: item tiles, buttons, bars, info cards, the hover tooltip,
@@ -27039,7 +29553,7 @@ return Widgets
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="82">
+  <Item class="Workspace" referent="86">
     <Properties>
       <string name="Name">Workspace</string>
       <float name="FallenPartsDestroyHeight">-150</float>

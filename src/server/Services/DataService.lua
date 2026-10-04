@@ -1,6 +1,6 @@
 -- Player profiles saved with DataStores: lifetime stats (wins / kills / matches, shown on the
--- leaderboard), Enchanted Coins, and the wardrobe (cosmetic parts, crafted garments, what's worn,
--- and items currently up for auction).
+-- leaderboard), Enchanted Coins, and the wardrobe (cosmetic parts, crafted garments, familiars,
+-- what's worn, and items currently up for auction).
 -- * Session lock: a profile is claimed by one server at a time (stops duplicating items by
 --   joining two servers at once). A claim older than 90s is considered abandoned.
 -- * Saved on leave, on shutdown, after matches, and every minute while anything changed.
@@ -18,7 +18,8 @@ local DataService = {}
 export type Wardrobe = {
 	parts: { any },
 	garments: { any },
-	equipped: { [string]: string }, -- "Robe" / "Hat" -> garment uid
+	familiars: { any },
+	equipped: { [string]: string }, -- "Robe" / "Hat" -> garment uid, "Familiar" -> familiar uid
 	listings: { [string]: any }, -- auction listing id -> { item, kind, price, expires }
 }
 
@@ -59,7 +60,7 @@ local function newProfile(): Profile
 		tutorial = false,
 		coins = 0,
 		starter = false,
-		wardrobe = { parts = {}, garments = {}, equipped = {}, listings = {} },
+		wardrobe = { parts = {}, garments = {}, familiars = {}, equipped = {}, listings = {} },
 	}
 end
 
@@ -78,6 +79,7 @@ local function fromSaved(data: any): Profile
 	if type(w) == "table" then
 		p.wardrobe.parts = if type(w.parts) == "table" then w.parts else {}
 		p.wardrobe.garments = if type(w.garments) == "table" then w.garments else {}
+		p.wardrobe.familiars = if type(w.familiars) == "table" then w.familiars else {}
 		p.wardrobe.equipped = if type(w.equipped) == "table" then w.equipped else {}
 		p.wardrobe.listings = if type(w.listings) == "table" then w.listings else {}
 	end

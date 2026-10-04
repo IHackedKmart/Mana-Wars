@@ -244,6 +244,8 @@ if math.abs(rootZ()) > 100 then
 	fail("joining should move the player to the library, got z=" .. rootZ())
 end
 
+local Familiars = server.load("Shared/Familiars")
+local botFamiliars: { [string]: string } = {}
 local maxBots = 0
 local maxChests = 0
 local boardDuringMatch = ""
@@ -266,6 +268,17 @@ while seconds < LIMIT do
 	maxChests = math.max(maxChests, chests)
 	if phase == "Battle" and board then
 		boardDuringMatch = board.Text
+	end
+	if phase == "Battle" and bots then
+		for _, bot in bots:GetChildren() do
+			local code = bot:GetAttribute("Familiar")
+			if code ~= nil then
+				if not Familiars.decode(code) then
+					fail("a bot has a broken familiar: " .. tostring(code))
+				end
+				botFamiliars[bot.Name] = code
+			end
+		end
 	end
 	if winners >= 2 and (phase == "Waiting" or phase == "Voting") then
 		break
@@ -364,6 +377,11 @@ local stats = savedStats["u1"]
 if not stats or (stats.matches or 0) < 1 then
 	fail("match stats should be saved")
 end
+local familiarCount = 0
+for _ in botFamiliars do
+	familiarCount += 1
+end
+print(string.format("bot familiars seen: %d", familiarCount))
 if placementsChecked < 2 then
 	fail("expected placements for two matches, checked " .. placementsChecked)
 end

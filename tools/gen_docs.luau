@@ -17,6 +17,7 @@ local Rarity = shared.load("Shared/Rarity")
 local Config = shared.load("Shared/Config")
 local MapDefs = shared.load("Server/Map/MapDefs")
 local Cosmetics = shared.load("Shared/Cosmetics")
+local Familiars = shared.load("Shared/Familiars")
 
 local out = {}
 local function line(s: string?)
@@ -321,6 +322,76 @@ for _, def in Cosmetics.Enchants do
 			string.format(def.text, "N"),
 			table.concat(values, " / "),
 			Cosmetics.enchantText({ stat = def.id, amount = def.cap })
+		)
+	)
+end
+line()
+
+line("### Familiars")
+line()
+local chances = {}
+for _, box in Cosmetics.Boxes do
+	table.insert(chances, string.format("%s %d%%", box.name, Familiars.ChancePerItem[box.id] or 0))
+end
+line(
+	string.format(
+		"Every item a coffer hands out can turn out to be a **familiar** instead (%s per item). A familiar rolls its rarity from the coffer's usual odds, and %s%% of familiars are **Shiny** (golden sparkles, looks only). Common and Uncommon familiars are purely cosmetic; from Rare up each species has one minor power that grows with rarity. Rare familiars glow, Epic ones sparkle, Legendary ones carry an elemental aura and Mythic ones leave a trail. **%d** species, **%d** distinct familiars to collect (species × colour × rarity × shiny).",
+		table.concat(chances, ", "),
+		tostring(Familiars.ShinyChance),
+		#Familiars.Species,
+		Familiars.varietyCount()
+	)
+)
+line()
+line("| | Familiar | From rarity | Coffers | Power (Rare+) | Colours |")
+line("|---|---|---|---|---|---|")
+for _, sp in Familiars.Species do
+	local boxes
+	if sp.boxes then
+		local names = {}
+		for _, id in sp.boxes do
+			table.insert(names, Cosmetics.Boxes[id].name)
+		end
+		boxes = table.concat(names, ", ") .. " only"
+	elseif (sp.minBox or 1) > 1 then
+		boxes = Cosmetics.Boxes[sp.minBox].name .. " and up"
+	else
+		boxes = "any"
+	end
+	local colours = {}
+	for _, v in sp.variants do
+		table.insert(colours, v.name)
+	end
+	line(
+		string.format(
+			"| %s | **%s** | %s | %s | %s | %s |",
+			sp.icon,
+			sp.name,
+			sp.minRarity,
+			boxes,
+			Familiars.PowerById[sp.power].name
+				.. (if sp.power == "attuned" then " (" .. tostring(sp.element) .. ")" else ""),
+			table.concat(colours, ", ")
+		)
+	)
+end
+line()
+line("| Power | Effect (Rare to Mythic) | Rare / Epic / Legendary / Mythic |")
+line("|---|---|---|")
+for _, power in Familiars.Powers do
+	local values = {}
+	for _, value in power.values do
+		table.insert(
+			values,
+			if power.percent then tostring(math.floor(value * 1000 + 0.5) / 10) .. "%" else tostring(value)
+		)
+	end
+	line(
+		string.format(
+			"| **%s** | %s | %s |",
+			power.name,
+			Familiars.powerRangeText(power, nil),
+			table.concat(values, " / ")
 		)
 	)
 end

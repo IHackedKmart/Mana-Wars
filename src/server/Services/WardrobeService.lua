@@ -1,5 +1,6 @@
 -- Enchanted Coins and the wardrobe: opening Coffers, stitching parts into robes and hats,
--- wearing them, salvaging junk, and dressing characters (plus the stats their enchantments give).
+-- wearing them, summoning familiars, salvaging junk, and dressing characters (plus the stats
+-- their enchantments and familiars give).
 -- The data lives in the player's profile (DataService); the auction house moves items and coins
 -- through the helpers at the bottom.
 
@@ -11,6 +12,7 @@ local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local Rarity = require(Shared.Rarity)
 local Cosmetics = require(Shared.Cosmetics)
+local Familiars = require(Shared.Familiars)
 local OutfitBuilder = require(Shared.OutfitBuilder)
 local Combatants = require(script.Parent.Combatants)
 local DataService = require(script.Parent.DataService)
@@ -51,6 +53,7 @@ function WardrobeService.sync(player: Player)
 		coins = profile.coins,
 		parts = profile.wardrobe.parts,
 		garments = profile.wardrobe.garments,
+		familiars = profile.wardrobe.familiars,
 		equipped = profile.wardrobe.equipped,
 		listings = profile.wardrobe.listings,
 	})
@@ -123,15 +126,28 @@ end
 -- Items (also used by the auction house)
 ---------------------------------------------------------------------------
 
+-- Item kinds: "Part" (robe / hat part), "Garment" (a stitched robe or hat) or "Familiar".
+local function kindOf(kind: any): string
+	return if kind == "Garment" or kind == "Familiar" then kind else "Part"
+end
+WardrobeService.kindOf = kindOf
+
+local function listOf(w: DataService.Wardrobe, kind: string): { any }
+	if kind == "Garment" then
+		return w.garments
+	elseif kind == "Familiar" then
+		return w.familiars
+	end
+	return w.parts
+end
+
 function WardrobeService.hasRoom(player: Player, kind: string, count: number?): boolean
 	local w = wardrobeOf(player)
 	if not w then
 		return false
 	end
-	if kind == "Garment" then
-		return #w.garments + (count or 1) <= E.MaxGarments
-	end
-	return #w.parts + (count or 1) <= E.MaxParts
+	local limit = if kind == "Garment" then E.MaxGarments elseif kind == "Familiar" then E.MaxFamiliars else E.MaxParts
+	return #listOf(w, kindOf(kind)) + (count or 1) <= limit
 end
 
 local function isWorn(w: DataService.Wardrobe, uid: string): boolean
@@ -143,15 +159,16 @@ local function isWorn(w: DataService.Wardrobe, uid: string): boolean
 	return false
 end
 
--- Removes and returns an item ("Part" or "Garment"). Worn garments can't be taken.
+-- Removes and returns an item ("Part", "Garment" or "Familiar"). Worn garments and the
+-- summoned familiar can't be taken.
 function WardrobeService.takeItem(player: Player, kind: string, uid: string): any
 	local w = wardrobeOf(player)
 	if not w or type(uid) ~= "string" then
 		return nil
 	end
-	local list = if kind == "Garment" then w.garments else w.parts
+	local list = listOf(w, kindOf(kind))
 	local i = findIndex(list, uid)
-	if not i or (kind == "Garment" and isWorn(w, uid)) then
+	if not i or isWorn(w, uid) then
 		return nil
 	end
 	local item = table.remove(list, i)
@@ -164,7 +181,7 @@ function WardrobeService.giveItem(player: Player, kind: string, item: any)
 	if not w then
 		return
 	end
-	table.insert(if kind == "Garment" then w.garments else w.parts, item)
+	table.insert(listOf(w, kindOf(kind)), item)
 	changed(player)
 end
 
@@ -172,12 +189,12 @@ end
 -- Dressing characters
 ---------------------------------------------------------------------------
 
-local function wornGarments(player: Player): (Garment?, Garment?)
+local function wornGarments(player: Player): (Garment?, Garment?, Familiars.Familiar?)
 	local w = wardrobeOf(player)
 	if not w then
-		return nil, nil
+		return nil, nil, nil
 	end
-	local robe, hat
+	local robe, hat, familiar
 	for _, g in w.garments do
 		if g.uid == w.equipped.Robe then
 			robe = g
@@ -185,7 +202,12 @@ local function wornGarments(player: Player): (Garment?, Garment?)
 			hat = g
 		end
 	end
-	return robe, hat
+	for _, f in w.familiars do
+		if f.uid == w.equipped.Familiar then
+			familiar = f
+		end
+	end
+	return robe, hat, familiar
 end
 
 -- Hides the avatar's own hats while a crafted hat is worn.
@@ -203,8 +225,9 @@ local function setAccessoryHats(character: Model, visible: boolean)
 	end
 end
 
--- Builds a combatant's outfit on their body and works out the stats it gives.
-function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?)
+-- Builds a combatant's outfit on their body, sends for their familiar, and works out the
+-- stats they give.
+function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?, familiar: Familiars.Familiar?)
 	local garments = {}
 	if robe then
 		table.insert(garments, robe)
@@ -212,11 +235,23 @@ function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?)
 	if hat then
 		table.insert(garments, hat)
 	end
-	c.gear = Cosmetics.gear(garments)
+	local gear = Cosmetics.gear(garments)
+	-- a Rare+ familiar's small bonus goes on top of the outfit's
+	local stat, amount = nil, 0
+	if familiar then
+		stat, amount = Familiars.statOf(familiar)
+	end
+	if stat then
+		gear[stat] = (gear[stat] or 0) + amount
+	end
+	c.gear = gear
+	c.familiar = familiar
 	local model = c.model
 	if not model then
 		return
 	end
+	-- clients build and animate the familiar themselves (FamiliarController)
+	model:SetAttribute("Familiar", if familiar then Familiars.encode(familiar) else nil)
 	OutfitBuilder.strip(model)
 	local rig = OutfitBuilder.rigOf(model)
 	if rig and (robe or hat) then
@@ -242,8 +277,8 @@ function WardrobeService.dress(c: Combatant)
 	if not c.player then
 		return
 	end
-	local robe, hat = wornGarments(c.player)
-	WardrobeService.dressWith(c, robe, hat)
+	local robe, hat, familiar = wornGarments(c.player)
+	WardrobeService.dressWith(c, robe, hat, familiar)
 end
 
 -- A random outfit for a bot: cheap gear, so they look different without being strong.
@@ -256,7 +291,13 @@ function WardrobeService.dressBot(c: Combatant, botRng: Random)
 		end
 		return Cosmetics.craft(kind, parts)
 	end
-	WardrobeService.dressWith(c, garment("Robe"), if botRng:NextNumber() < 0.8 then garment("Hat") else nil)
+	-- about a third of bots bring a (humble) familiar along
+	local familiar = nil
+	if botRng:NextNumber() < 0.35 then
+		local box = botRng:NextInteger(1, 3)
+		familiar = Familiars.roll(botRng, box, Rarity.fromRank(botRng:NextInteger(1, 3)), nil)
+	end
+	WardrobeService.dressWith(c, garment("Robe"), if botRng:NextNumber() < 0.8 then garment("Hat") else nil, familiar)
 end
 
 local function redress(player: Player)
@@ -278,14 +319,24 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 	if not WardrobeService.hasRoom(player, "Part", box.parts) then
 		return false, "Your wardrobe is full: salvage or sell some parts first"
 	end
+	if not WardrobeService.hasRoom(player, "Familiar", box.parts) then
+		return false, "Your familiar roost is full: salvage or sell some familiars first"
+	end
 	if not WardrobeService.spendCoins(player, box.price) then
 		return false, "You need " .. box.price .. " Enchanted Coins"
 	end
 	local got = {}
 	for _ = 1, box.parts do
-		local part = Cosmetics.rollPart(rng, box.id)
-		WardrobeService.giveItem(player, "Part", part)
-		table.insert(got, part)
+		-- each item has a small chance to be a familiar instead of a part (same rarity odds)
+		if Familiars.rollIsFamiliar(rng, box.id) then
+			local familiar = Familiars.roll(rng, box.id, Cosmetics.rollRarity(rng, box), nil)
+			WardrobeService.giveItem(player, "Familiar", familiar)
+			table.insert(got, familiar)
+		else
+			local part = Cosmetics.rollPart(rng, box.id)
+			WardrobeService.giveItem(player, "Part", part)
+			table.insert(got, part)
+		end
 	end
 	return true, "Opened " .. box.name, got
 end
@@ -357,7 +408,15 @@ local function equip(player: Player, uid: any): (boolean, string)
 	end
 	local i = findIndex(w.garments, uid)
 	if not i then
-		return false, "Unknown garment"
+		local f = findIndex(w.familiars, uid)
+		if not f then
+			return false, "Unknown item"
+		end
+		local familiar = w.familiars[f]
+		w.equipped.Familiar = familiar.uid
+		changed(player)
+		redress(player)
+		return true, familiar.name .. " is following you"
 	end
 	local g = w.garments[i]
 	w.equipped[g.kind] = g.uid
@@ -368,17 +427,18 @@ end
 
 local function unequip(player: Player, kind: any): (boolean, string)
 	local w = wardrobeOf(player)
-	if not w or type(kind) ~= "string" or not Cosmetics.Garments[kind] then
+	if not w or type(kind) ~= "string" or not (Cosmetics.Garments[kind] or kind == "Familiar") then
 		return false, "Bad request"
 	end
 	w.equipped[kind] = nil
 	changed(player)
 	redress(player)
-	return true, "Took off your " .. kind:lower()
+	return true, if kind == "Familiar" then "Your familiar is resting" else "Took off your " .. kind:lower()
 end
 
 local function salvage(player: Player, kind: any, uid: any): (boolean, string)
-	local item = WardrobeService.takeItem(player, if kind == "Garment" then "Garment" else "Part", uid)
+	kind = kindOf(kind)
+	local item = WardrobeService.takeItem(player, kind, uid)
 	if not item then
 		return false, "You can't salvage that (is it worn?)"
 	end
@@ -387,6 +447,8 @@ local function salvage(player: Player, kind: any, uid: any): (boolean, string)
 		for _, part in item.parts do
 			value += Cosmetics.SalvageValue[Rarity.rank(part.rarity)] or 1
 		end
+	elseif kind == "Familiar" then
+		value = Familiars.SalvageValue[Rarity.rank(item.rarity)] or 1
 	else
 		value = Cosmetics.SalvageValue[Rarity.rank(item.rarity)] or 1
 	end

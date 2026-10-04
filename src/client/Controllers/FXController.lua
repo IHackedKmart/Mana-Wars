@@ -502,6 +502,11 @@ end
 
 local handlers: { [string]: (...any) -> () } = {}
 
+-- Lets other controllers draw their own FX events (e.g. FamiliarController's "FamiliarNip").
+function FXController.on(kind: string, handler: (...any) -> ())
+	handlers[kind] = handler
+end
+
 handlers["P+"] = function(id: number, pos: Vector3, vel: Vector3, seed: number, orbitAngle: number, caster: Model?, vis)
 	local speed = vel.Magnitude
 	local state = ProjectileSim.new({

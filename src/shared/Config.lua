@@ -147,6 +147,7 @@ Config.Economy = {
 	StarterCoins = 60, -- enough for a first Tattered Satchel
 	MaxParts = 250, -- wardrobe space
 	MaxGarments = 60,
+	MaxFamiliars = 60,
 	AuctionFee = 0.1, -- the auction house keeps 10% of every sale
 	AuctionHours = 48, -- unsold listings come back after this long
 	MaxListings = 10, -- per player

@@ -76,6 +76,8 @@ local function broadcast(chest: Chest)
 end
 
 local function swingLid(chest: Chest, open: boolean)
+	-- (familiars with Keen Nose only point at chests nobody has opened yet)
+	chest.model:SetAttribute("Opened", open)
 	local lid, closed = chest.lid, chest.lidClosed
 	if not lid or not closed then
 		return

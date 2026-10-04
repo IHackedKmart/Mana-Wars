@@ -3,6 +3,7 @@
 --   Coffers  - five loot boxes, 50 to 1000 coins, with their odds
 --   Tailor   - pick a Cloth + Trim + Sigil (robe) or Shape + Band + Gem (hat) and stitch it
 --   Wardrobe - wear / take off / unpick / salvage garments and loose parts
+--   Familiars - summon / dismiss / salvage the companions that come out of Coffers
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,6 +15,7 @@ local Remotes = require(Shared.Remotes)
 local Rarity = require(Shared.Rarity)
 local Cosmetics = require(Shared.Cosmetics)
 local OutfitBuilder = require(Shared.OutfitBuilder)
+local Familiars = require(Shared.Familiars)
 local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
@@ -21,6 +23,7 @@ local Widgets = require(UI.Widgets)
 local CosmeticInfo = require(UI.CosmeticInfo)
 local State = require(script.Parent.State)
 local Sounds = require(script.Parent.Sounds)
+local FamiliarBuilder = require(script.Parent.FamiliarBuilder)
 
 local WardrobeController = {}
 
@@ -53,6 +56,13 @@ local partGrid: ScrollingFrame
 local wardrobePreview: any
 local detailsInfo: Frame
 local detailButtons: Frame
+
+-- Familiars state
+local familiarSelected: string? = nil
+local familiarGrid: ScrollingFrame
+local familiarPreview: any
+local familiarInfo: Frame
+local familiarButtons: Frame
 local gearLabel: TextLabel
 
 local function invoke(name: string, args: { [string]: any }): (boolean, string?, any)
@@ -95,6 +105,22 @@ end
 
 local function worn(kind: string): any
 	return findGarment(State.wardrobe.equipped[kind])
+end
+
+local function findFamiliar(uid: string?): any
+	if not uid then
+		return nil
+	end
+	for _, f in State.wardrobe.familiars or {} do
+		if f.uid == uid then
+			return f
+		end
+	end
+	return nil
+end
+
+local function wornFamiliar(): any
+	return findFamiliar(State.wardrobe.equipped.Familiar)
 end
 
 local function sortByRarity(list: { any }): { any }
@@ -160,19 +186,42 @@ local function makePreview(parent: Instance, size: UDim2, position: UDim2)
 		parent = model,
 	}
 	local angle = 0
+	local t = 0
+	local pet: FamiliarBuilder.Rig? = nil
+	local petCode: string? = nil
 	RunService.RenderStepped:Connect(function(dt)
 		if not gui or not gui.Enabled or not viewport.Visible then
 			return
 		end
 		angle += dt * 0.6
-		local eye = Vector3.new(math.sin(angle) * 8.5, 4.4, -math.cos(angle) * 8.5)
-		camera.CFrame = CFrame.lookAt(eye, Vector3.new(0, 3.1, 0))
+		t += dt
+		local eye = Vector3.new(math.sin(angle) * 9.5, 4.4, -math.cos(angle) * 9.5)
+		camera.CFrame = CFrame.lookAt(eye, Vector3.new(0.6, 3, 0))
+		if pet then
+			-- the familiar keeps you company: hovering by your shoulder, or sitting at your feet
+			local at = if pet.flies
+				then Vector3.new(2.5, 4.3 + math.sin(t * 2) * 0.2, 0.6)
+				else Vector3.new(2.3, 0, 0.9)
+			FamiliarBuilder.pose(pet, CFrame.lookAt(at, at + Vector3.new(-0.3, 0, -1)), t, 0)
+		end
 	end)
 	return {
 		viewport = viewport,
-		show = function(robe: any, hat: any)
+		show = function(robe: any, hat: any, familiar: any)
 			OutfitBuilder.strip(model)
 			pcall(OutfitBuilder.build, rig, robe, hat, false)
+			local code = if familiar then Familiars.encode(familiar) else nil
+			if code ~= petCode then
+				if pet then
+					FamiliarBuilder.destroy(pet)
+					pet = nil
+				end
+				petCode = code
+				local look = Familiars.decode(code)
+				if look then
+					pet = FamiliarBuilder.build(look, viewport, false)
+				end
+			end
 		end,
 	}
 end
@@ -190,14 +239,17 @@ local function reveal(parts: { any })
 			LayoutOrder = i,
 			Parent = revealRow,
 		})
+		local isFamiliar = part.species ~= nil
+		local kind = if isFamiliar then "Familiar" else "Part"
+		local icon, iconColor = CosmeticInfo.itemIcon(kind, part)
 		local tile = Widgets.tile({
 			name = "Got_" .. part.uid,
 			size = 96,
-			icon = CosmeticInfo.icon(part),
-			iconColor = CosmeticInfo.color(part),
+			icon = icon,
+			iconColor = iconColor,
 			border = Theme.rarity(part.rarity),
 			info = function()
-				return CosmeticInfo.part(part)
+				return CosmeticInfo.item(kind, part)
 			end,
 			parent = holder,
 		})
@@ -212,7 +264,9 @@ local function reveal(parts: { any })
 			Parent = holder,
 		})
 		Widgets.label({
-			Text = part.rarity .. " " .. Cosmetics.Slots[part.slot].label,
+			Text = if isFamiliar
+				then "🐾 " .. part.rarity .. " familiar!" .. (if part.shiny then " ✨ Shiny!" else "")
+				else part.rarity .. " " .. Cosmetics.Slots[part.slot].label,
 			TextSize = 12,
 			TextColor3 = C.Dim,
 			Size = UDim2.new(1, -106, 0, 16),
@@ -313,6 +367,17 @@ local function buildCoffers(page: Frame)
 				})
 			end
 		end
+		Widgets.label({
+			Name = "FamiliarChance",
+			Text = "🐾 " .. (Familiars.ChancePerItem[box.id] or 0) .. "% familiar per item",
+			Font = Theme.Bold,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextColor3 = C.Gold,
+			Size = UDim2.new(1, 0, 0, 15),
+			LayoutOrder = 20,
+			Parent = odds,
+		})
 		local open = Widgets.button("Open  ·  🪙 " .. box.price, {
 			size = UDim2.new(1, -16, 0, 38),
 			position = UDim2.new(0, 8, 1, -46),
@@ -329,7 +394,9 @@ local function buildCoffers(page: Frame)
 		open.Name = "Open_" .. box.id
 	end
 	Widgets.label({
-		Text = "Earn Enchanted Coins by playing: 1st place gets 12, 2nd gets 11 ... 12th gets 1.",
+		Text = "Earn Enchanted Coins by playing: 1st place gets 12 ... 12th gets 1. Any item can be a familiar (same rarity odds), and 1 in "
+			.. math.floor(100 / Familiars.ShinyChance + 0.5)
+			.. " familiars is Shiny.",
 		TextSize = 13,
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -411,9 +478,9 @@ local function refreshTailor()
 	local otherKind = if mode == "Robe" then "Hat" else "Robe"
 	local preview = if complete then Cosmetics.craft(mode, parts) else nil
 	if mode == "Robe" then
-		tailorPreview.show(preview, worn(otherKind))
+		tailorPreview.show(preview, worn(otherKind), wornFamiliar())
 	else
-		tailorPreview.show(worn(otherKind), preview)
+		tailorPreview.show(worn(otherKind), preview, wornFamiliar())
 	end
 	if preview then
 		local level = Cosmetics.auraLevel(preview)
@@ -595,7 +662,7 @@ local function refreshWardrobe()
 			hat = item
 		end
 	end
-	wardrobePreview.show(robe, hat)
+	wardrobePreview.show(robe, hat, wornFamiliar())
 	local wornList = {}
 	for _, kind in Cosmetics.GarmentOrder do
 		local g = worn(kind)
@@ -728,6 +795,141 @@ local function buildWardrobe(page: Frame)
 end
 
 ---------------------------------------------------------------------------
+-- Familiars
+---------------------------------------------------------------------------
+
+local function familiarButton(text: string, color: Color3?, onClick: () -> (), name: string)
+	local b = Widgets.button(text, {
+		size = UDim2.fromOffset(158, 32),
+		color = color or C.Panel3,
+		textSize = 13,
+		onClick = onClick,
+		parent = familiarButtons,
+	})
+	b.Name = name
+end
+
+local function refreshFamiliars()
+	local w = State.wardrobe
+	Widgets.clear(familiarGrid, true)
+	local list = sortByRarity(w.familiars or {})
+	for i, f in list do
+		Widgets.tile({
+			name = "Familiar_" .. f.uid,
+			size = 58,
+			icon = CosmeticInfo.familiarIcon(f),
+			iconColor = CosmeticInfo.familiarColor(f),
+			border = Theme.rarity(f.rarity),
+			selected = familiarSelected == f.uid,
+			corner = if w.equipped.Familiar == f.uid then "🐾" elseif f.shiny then "✨" else nil,
+			layoutOrder = i,
+			info = function()
+				return CosmeticInfo.familiar(f)
+			end,
+			onClick = function()
+				Sounds.play("Click")
+				familiarSelected = f.uid
+				refreshFamiliars()
+			end,
+			parent = familiarGrid,
+		})
+	end
+	if #list == 0 then
+		Widgets.label({
+			Text = "No familiars yet. Every item from a Coffer has a small chance to be one!",
+			TextSize = 13,
+			TextWrapped = true,
+			TextColor3 = C.Dim,
+			Size = UDim2.new(1, -8, 0, 40),
+			Parent = familiarGrid,
+		})
+	end
+	local selected = findFamiliar(familiarSelected)
+	if not selected then
+		familiarSelected = nil
+	end
+	familiarPreview.show(worn("Robe"), worn("Hat"), selected or wornFamiliar())
+	Widgets.clear(familiarButtons, true)
+	Widgets.fillInfo(familiarInfo, if selected then CosmeticInfo.familiar(selected) else nil)
+	if not selected then
+		return
+	end
+	local f = selected
+	if w.equipped.Familiar == f.uid then
+		familiarButton("Dismiss", nil, function()
+			invoke("Unequip", { kind = "Familiar" })
+		end, "DismissButton")
+	else
+		familiarButton("Summon", C.Accent, function()
+			Sounds.play("Pickup")
+			invoke("Equip", { uid = f.uid })
+		end, "SummonButton")
+		familiarButton(
+			"Salvage (+" .. (Familiars.SalvageValue[Rarity.rank(f.rarity)] or 1) .. " 🪙)",
+			C.Bad,
+			function()
+				invoke("Salvage", { kind = "Familiar", uid = f.uid })
+				familiarSelected = nil
+			end,
+			"SalvageButton"
+		)
+	end
+end
+
+local function buildFamiliars(page: Frame)
+	Widgets.label({
+		Text = "YOUR FAMILIARS",
+		Font = Theme.Black,
+		TextSize = 13,
+		TextColor3 = C.Gold,
+		Size = UDim2.fromOffset(300, 18),
+		Parent = page,
+	})
+	familiarGrid = Create("ScrollingFrame", {
+		Name = "FamiliarGrid",
+		BackgroundColor3 = C.Panel,
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(420, 482),
+		Position = UDim2.fromOffset(0, 20),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		Parent = page,
+	}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+	familiarPreview = makePreview(page, UDim2.fromOffset(250, 300), UDim2.fromOffset(432, 0))
+	Widgets.label({
+		Name = "FamiliarNote",
+		Text = "<b>Familiars</b> follow you around the Plaza and into matches.\n"
+			.. "Common and Uncommon ones are just for show. From <b>Rare</b> up, each kind has one small power that grows with rarity.\n"
+			.. "Rare familiars glow, Epic ones sparkle, Legendary ones carry an elemental aura and Mythic ones leave a trail. Shiny ones shed gold.",
+		RichText = true,
+		TextSize = 12,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Size = UDim2.fromOffset(250, 196),
+		Position = UDim2.fromOffset(432, 308),
+		Parent = page,
+	})
+	familiarInfo = Create("Frame", {
+		Name = "FamiliarDetails",
+		BackgroundColor3 = C.Panel,
+		Size = UDim2.fromOffset(320, 330),
+		Position = UDim2.fromOffset(692, 0),
+		Parent = page,
+	}, { Create.corner(8), Create.padding(10, 8) })
+	familiarButtons = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(320, 160),
+		Position = UDim2.fromOffset(692, 340),
+		Parent = page,
+	}, { Create.grid(158, 4) })
+	local layout = familiarButtons:FindFirstChildOfClass("UIGridLayout")
+	if layout then
+		layout.CellSize = UDim2.fromOffset(158, 34)
+	end
+end
+
+---------------------------------------------------------------------------
 -- Window
 ---------------------------------------------------------------------------
 
@@ -749,6 +951,8 @@ local function refresh()
 		refreshTailor()
 	elseif currentTab == "Wardrobe" then
 		refreshWardrobe()
+	elseif currentTab == "Familiars" then
+		refreshFamiliars()
 	end
 end
 
@@ -820,7 +1024,14 @@ local function build()
 		Position = UDim2.fromOffset(18, 48),
 		Parent = panel,
 	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, def in { { "Coffers", "🎁  Coffers" }, { "Tailor", "🧵  Tailor" }, { "Wardrobe", "👘  Wardrobe" } } do
+	for i, def in
+		{
+			{ "Coffers", "🎁  Coffers" },
+			{ "Tailor", "🧵  Tailor" },
+			{ "Wardrobe", "👘  Wardrobe" },
+			{ "Familiars", "🐾  Familiars" },
+		}
+	do
 		local b = Widgets.button(def[2], {
 			size = UDim2.fromOffset(160, 32),
 			color = C.Panel3,
@@ -847,6 +1058,7 @@ local function build()
 	buildCoffers(pages.Coffers)
 	buildTailor(pages.Tailor)
 	buildWardrobe(pages.Wardrobe)
+	buildFamiliars(pages.Familiars)
 end
 
 function WardrobeController.init()
