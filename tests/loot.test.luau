@@ -91,6 +91,24 @@ test("chests roll valid loot", function()
 	end
 end)
 
+test("chests hold a handful of items and often a healing draught", function()
+	local rng = Random.new(17)
+	for tierName, tier in LootTables.Tiers do
+		local items, heals = 0, 0
+		for _ = 1, 400 do
+			local entries = LootTables.rollChest(rng, tierName)
+			for _, entry in entries do
+				items += if entry.kind == "Part" or entry.kind == "Consumable" then entry.count or 1 else 1
+				if entry.kind == "Consumable" and entry.id == "HealingDraught" then
+					heals += 1
+				end
+			end
+		end
+		expect(items / 400 <= tier.rolls[2] + 1, tierName .. " chests hold too much")
+		expect(heals / 400 >= tier.healChance * 0.9, tierName .. " chests should often hold a healing draught")
+	end
+end)
+
 test("cornucopia chests are luckier than outer chests", function()
 	local rng = Random.new(5)
 	local function score(tierName)

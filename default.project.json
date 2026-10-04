@@ -43,13 +43,22 @@
           0.27,
           0.27,
           0.32
-        ]
+        ],
+        "Technology": "Future",
+        "EnvironmentDiffuseScale": 1,
+        "EnvironmentSpecularScale": 1
       }
     },
     "Workspace": {
       "$properties": {
         "FallenPartsDestroyHeight": -150,
         "StreamingEnabled": false
+      },
+      "Terrain": {
+        "$className": "Terrain",
+        "$properties": {
+          "Decoration": true
+        }
       }
     },
     "TextChatService": {

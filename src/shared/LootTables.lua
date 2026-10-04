@@ -21,36 +21,43 @@ export type Tier = {
 	luck: number,
 	weights: { [string]: number },
 	maxWandRank: number,
+	healChance: number, -- chance of a Healing Draught on top of the rolls
 }
 
+-- Chests hold only a few things each (so your bag doesn't overflow), plus a good chance of a
+-- Healing Draught.
 LootTables.Tiers = {
 	Outer = {
 		displayName = "Chest",
-		rolls = { 3, 5 },
+		rolls = { 1, 3 },
 		luck = 0,
 		weights = { Part = 52, Spell = 22, Wand = 9, Consumable = 17 },
 		maxWandRank = 4,
+		healChance = 0.5,
 	},
 	Cornucopia = {
 		displayName = "Cornucopia Chest",
-		rolls = { 4, 6 },
+		rolls = { 2, 3 },
 		luck = 0.9,
 		weights = { Part = 40, Spell = 27, Wand = 18, Consumable = 15 },
 		maxWandRank = 6,
+		healChance = 0.6,
 	},
 	Shrine = {
 		displayName = "Shrine Reliquary",
-		rolls = { 4, 6 },
+		rolls = { 2, 4 },
 		luck = 2.2,
 		weights = { Part = 34, Spell = 30, Wand = 24, Consumable = 12 },
 		maxWandRank = 6,
+		healChance = 0.8,
 	},
 	Refill = {
 		displayName = "Chest",
-		rolls = { 3, 5 },
+		rolls = { 1, 3 },
 		luck = 1.2,
 		weights = { Part = 45, Spell = 25, Wand = 14, Consumable = 16 },
 		maxWandRank = 6,
+		healChance = 0.6,
 	},
 } :: { [string]: Tier }
 
@@ -200,8 +207,11 @@ function LootTables.rollChest(rng: any, tierName: string): { LootEntry }
 	local tier = LootTables.Tiers[tierName] or LootTables.Tiers.Outer
 	local entries: { LootEntry } = {}
 	local n = rng:NextInteger(tier.rolls[1], tier.rolls[2])
-	for _ = 1, n do
-		local entry = LootTables.rollEntry(rng, tier)
+	local heal = rng:NextNumber() < tier.healChance
+	for i = 1, n + (if heal then 1 else 0) do
+		local entry = if i > n
+			then { kind = "Consumable", id = "HealingDraught", count = 1 } :: LootEntry
+			else LootTables.rollEntry(rng, tier)
 		-- merge duplicate parts / potions into stacks
 		local merged = false
 		if entry.kind == "Part" or entry.kind == "Consumable" then

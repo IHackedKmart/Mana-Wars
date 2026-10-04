@@ -8,27 +8,27 @@ _Generated from the game data by `lune run tools/gen_docs`. Do not edit by hand.
 
 | | Form | Rarity | Damage | Mana | Cast delay | What it does |
 |---|---|---|---|---|---|---|
-| 🔹 | **Bolt** | Common | 14 | 10 | 0.12s | A reliable magic bolt. Medium speed, medium damage. |
-| 💫 | **Spark** | Common | 6 | 4 | 0.04s | A tiny, very fast spark. Cheap to cast and quick to repeat. |
-| 🎆 | **Spray** | Common | 5 | 14 | 0.24s | A short-ranged shotgun burst of five pellets. |
-| ↩️ | **Boomerang** | Uncommon | 16 | 15 | 0.20s | A spinning glaive that flies out, then returns to you, cutting through everyone on the way. |
-| 💣 | **Grenade** | Uncommon | explosion 26 | 22 | 0.30s | A lobbed bomb that bounces around and explodes when its fuse runs out or it hits someone. |
-| 🔮 | **Orb** | Uncommon | 28 | 26 | 0.32s | A slow, heavy sphere that punches through its first target. |
-| 👻 | **Wisp** | Uncommon | 11 | 15 | 0.18s | A slow spirit that hunts down the nearest enemy on its own. |
-| ⛓️ | **Chain** | Rare | 12 | 18 | 0.20s | Arcs to the nearest enemy in front of you, then jumps to more enemies nearby. |
-| ☁️ | **Cloud** | Rare | zone 10 | 28 | 0.35s | A lobbed flask that bursts into a lingering cloud, hurting everyone who stands in it. |
-| 🏹 | **Lance** | Rare | 20 | 22 | 0.28s | An instant beam of force. Hits whatever is in your crosshair. |
-| 🧨 | **Mine** | Rare | explosion 34 | 20 | 0.25s | A lobbed trap that sticks to the ground, arms itself, and explodes when an enemy walks near. |
-| 🌟 | **Nova** | Rare | 18 | 26 | 0.30s | An instant ring of energy that blasts everything around you. |
+| 🔹 | **Bolt** | Common | 8.4 | 10 | 0.12s | A reliable magic bolt. Medium speed, medium damage. |
+| 💫 | **Spark** | Common | 3.6 | 4 | 0.04s | A tiny, very fast spark. Cheap to cast and quick to repeat. |
+| 🎆 | **Spray** | Common | 3 | 14 | 0.24s | A short-ranged shotgun burst of five pellets. |
+| ↩️ | **Boomerang** | Uncommon | 9.6 | 15 | 0.20s | A spinning glaive that flies out, then returns to you, cutting through everyone on the way. |
+| 💣 | **Grenade** | Uncommon | explosion 15.6 | 22 | 0.30s | A lobbed bomb that bounces around and explodes when its fuse runs out or it hits someone. |
+| 🔮 | **Orb** | Uncommon | 16.8 | 26 | 0.32s | A slow, heavy sphere that punches through its first target. |
+| 👻 | **Wisp** | Uncommon | 6.6 | 15 | 0.18s | A slow spirit that hunts down the nearest enemy on its own. |
+| ⛓️ | **Chain** | Rare | 7.2 | 18 | 0.20s | Arcs to the nearest enemy in front of you, then jumps to more enemies nearby. |
+| ☁️ | **Cloud** | Rare | zone 6 | 28 | 0.35s | A lobbed flask that bursts into a lingering cloud, hurting everyone who stands in it. |
+| 🏹 | **Lance** | Rare | 12 | 22 | 0.28s | An instant beam of force. Hits whatever is in your crosshair. |
+| 🧨 | **Mine** | Rare | explosion 20.4 | 20 | 0.25s | A lobbed trap that sticks to the ground, arms itself, and explodes when an enemy walks near. |
+| 🌟 | **Nova** | Rare | 10.8 | 26 | 0.30s | An instant ring of energy that blasts everything around you. |
 | 🧱 | **Rampart** | Rare | — | 24 | 0.40s | Raises a solid wall where you aim that blocks movement and spells for 6 seconds. Impact effects go off at its base; expiry triggers fire when it crumbles. |
-| 🪚 | **Sawblade** | Rare | 13 | 20 | 0.25s | A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path. |
-| 🐝 | **Swarm** | Rare | 3.5 | 24 | 0.30s | Releases six angry little sprites that wobble off and hunt down enemies. |
+| 🪚 | **Sawblade** | Rare | 7.8 | 20 | 0.25s | A whirling sawblade that rolls along the ground and ricochets off walls, cutting through everyone in its path. |
+| 🐝 | **Swarm** | Rare | 2.1 | 24 | 0.30s | Releases six angry little sprites that wobble off and hunt down enemies. |
 | 🛡️ | **Aegis** | Epic | — | 40 | 0.50s | Wraps you in a shield that absorbs damage for a few seconds. Triggers fire when it ends. |
-| ⚫ | **Black Hole** | Epic | explosion 12 | 45 | 0.50s | A tiny black hole drifts forward, dragging everyone nearby into its crushing core, then collapses with a bang. |
+| ⚫ | **Black Hole** | Epic | explosion 7.2 | 45 | 0.50s | A tiny black hole drifts forward, dragging everyone nearby into its crushing core, then collapses with a bang. |
 | 🌀 | **Blink** | Epic | — | 30 | 0.45s | Teleports you up to 40 studs toward your aim. Triggers fire where you land. |
-| ☄️ | **Meteor** | Epic | explosion 30 | 36 | 0.45s | Calls a burning rock down from the sky onto the spot you aim at. |
-| 🌪️ | **Tornado** | Epic | zone 9 | 34 | 0.45s | A slow, wandering twister that drags enemies in, tosses them into the air and grinds them up. |
-| 🧿 | **Sentry** | Legendary | zone 6 | 50 | 0.50s | Deploys a floating eye that hovers in place for 8 seconds and shoots sparks at the nearest enemy. Its shots inherit its element and modifiers; Pulse and Timer payloads are aimed at enemies too. |
+| ☄️ | **Meteor** | Epic | explosion 18 | 36 | 0.45s | Calls a burning rock down from the sky onto the spot you aim at. |
+| 🌪️ | **Tornado** | Epic | zone 5.4 | 34 | 0.45s | A slow, wandering twister that drags enemies in, tosses them into the air and grinds them up. |
+| 🧿 | **Sentry** | Legendary | zone 3.6 | 50 | 0.50s | Deploys a floating eye that hovers in place for 8 seconds and shoots sparks at the nearest enemy. Its shots inherit its element and modifiers; Pulse and Timer payloads are aimed at enemies too. |
 
 ## Elements
 
@@ -214,11 +214,11 @@ Players vote between 3 random maps in the lobby before every match. Each match g
 
 | | Map | Radius | Scattered chests | Landmarks | Weather | |
 |---|---|---|---|---|---|---|
-| 🌳 | **Verdant Isle** | 450 studs | 30 | 10 | Clear | _Rolling green hills, quiet lakes and crumbling ruins. The classic._ |
-| 🏔️ | **Frostpeak** | 420 studs | 28 | 9 | Snow | _A snowbound island of frozen lakes, pine forests and towering peaks._ |
-| 🌋 | **Ashen Wastes** | 400 studs | 26 | 9 | Ash (lava burns) | _A volcanic wasteland. Black rock, dead trees, and lava lakes that burn._ |
-| 🏜️ | **Sandsea Ruins** | 480 studs | 30 | 11 | Dust | _Endless dunes, sandstone ruins and rare oases. The biggest map._ |
-| 🍄 | **Fungal Hollow** | 380 studs | 24 | 8 | Spores | _A glowing night forest of giant mushrooms. Small, dark and deadly._ |
+| 🌳 | **Verdant Isle** | 450 studs | 30 | 10 | Pollen | _Flower meadows, a winding river, a windmill and the Ancient Oak. The classic._ |
+| 🏔️ | **Frostpeak** | 420 studs | 28 | 9 | Snow | _Snowfields under an aurora: frozen rivers, glowing ice spires and a cosy hunter's lodge._ |
+| 🌋 | **Ashen Wastes** | 400 studs | 26 | 9 | Ash (lava burns) | _Rivers of lava under a smoking volcano. Black glass, ember vents and a dwarven forge._ |
+| 🏜️ | **Sandsea Ruins** | 480 studs | 30 | 11 | Dust | _Striped canyon mesas, palm oases, a step pyramid and a bazaar. The biggest map._ |
+| 🍄 | **Fungal Hollow** | 380 studs | 24 | 8 | Spores | _A glowing night forest of giant mushrooms, fairy rings and fireflies. Small and deadly._ |
 
 ## Potions
 

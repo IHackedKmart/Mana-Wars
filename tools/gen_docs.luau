@@ -91,9 +91,10 @@ for _, part in sortedParts("Form") do
 	if spec.kind == "Blink" or spec.kind == "Aegis" or spec.kind == "Wall" then
 		damage = "—"
 	elseif spec.directMult > 0 then
-		damage = tostring(spec.damage)
+		damage = tostring(math.floor(spec.damage * 10 + 0.5) / 10)
 	else
-		damage = (if spec.explodeRadius > 0 then "explosion " else "zone ") .. spec.damage
+		damage = (if spec.explodeRadius > 0 then "explosion " else "zone ")
+			.. tostring(math.floor(spec.damage * 10 + 0.5) / 10)
 	end
 	line(
 		string.format(

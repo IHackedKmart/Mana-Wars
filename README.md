@@ -76,15 +76,17 @@ The full list of every part, spell, map and kit is in **[docs/CATALOG.md](docs/C
 
 ## Maps
 
-| | Map | Size | Notes |
+| | Map | Size | What makes it different |
 |---|---|---|---|
-| 🌳 | **Verdant Isle** | radius 450 | rolling hills, lakes and ruins. The classic |
-| 🏔️ | **Frostpeak** | radius 420 | snow, frozen lakes, pine forests and tall peaks |
-| 🌋 | **Ashen Wastes** | radius 400 | volcanic, and the lava lakes burn |
-| 🏜️ | **Sandsea Ruins** | radius 480 | dunes, sandstone ruins and oases. The biggest map |
-| 🍄 | **Fungal Hollow** | radius 380 | a glowing night forest of giant mushrooms |
+| 🌳 | **Verdant Isle** | radius 450 | flower meadows, autumn trees, a winding river with wooden bridges, snow-capped mountains, a **windmill** and the glowing **Ancient Oak**. The classic |
+| 🏔️ | **Frostpeak** | radius 420 | snowfields at dusk under an **aurora**, frozen rivers you can walk on, glowing ice crystals, snowmen, a giant **Ice Spire** and a cosy **hunter's lodge** |
+| 🌋 | **Ashen Wastes** | radius 400 | a smoking **volcano**, lava rivers (roads cross on raised causeways), obsidian, basalt columns, ember vents, a **dwarven forge** and an **obsidian gate**. The lava burns |
+| 🏜️ | **Sandsea Ruins** | radius 480 | stepped mesas and striped canyon walls, palm oases ringed with grass, hoodoos, a **step pyramid** with the chest on top and a colourful **bazaar**. The biggest map |
+| 🍄 | **Fungal Hollow** | radius 380 | a glowing night forest of giant mushrooms, glowing flowers and fireflies, a **fairy ring** and a hollow **giant stump** |
 
-Every match generates a fresh layout of the chosen map. The cornucopia holds 10 chests. Another 24–30 chests are scattered at least 55 studs apart, and a few more sit in landmarks like ruined towers, shrines, camps and watchtowers. That is roughly one chest per 10,000–13,000 square studs, so loot is worth travelling for. The storm starts just outside each map's edge, and bigger maps get a longer storm.
+Every match generates a fresh layout of the chosen map: hills, rivers and lakes, ten landmarks (the classic ruined tower, shrine, camp and watchtower, restyled for each map, plus the map's own two), and dirt or stone roads from the plaza out to each landmark. Each map has its own colour grading, clouds, lighting and weather (pollen, snow, ash, dust or spores).
+
+**The spawn is spread out.** The 12 pedestals stand 72 studs from the centre, about 38 studs apart, around a 100-stud-wide plaza that's patterned and decorated in the map's colours (flower planters, ice crystals, braziers, obelisks or glowing mushrooms). The cornucopia holds 10 chests: 6 on the dais around the Mana Spire and 4 out on the plaza. Another 24–30 chests are scattered at least 55 studs apart, and more sit in the landmarks. That is roughly one chest per 10,000–13,500 square studs, so loot is worth travelling for. The storm starts just outside each map's edge, and bigger maps get a longer storm.
 
 ## Controls
 
@@ -105,7 +107,9 @@ Every match generates a fresh layout of the chosen map. The cornucopia holds 10 
 | Chat | **/** | the chat button | |
 | Close any window | **✕** in its corner | the same | |
 
-(Tab is left free for Roblox's player list.) The menu buttons (Spellbook, Grimoire, Class, Spectate, Wardrobe, Auction House and your coins) sit in one column on the left, and they tuck away while a window is open.
+(Tab is left free for Roblox's player list.)
+
+**Balance.** Spells hit for 60% of their listed power (`Config.Combat.SpellDamageMultiplier`; the numbers in tooltips already include it), so fights last long enough to react. Chests hold only 1–4 items each (`rolls` in `src/shared/LootTables.lua`), and most also hold a **Healing Draught** (50–80% of chests, by type), so your bag doesn't overflow and you can recover between fights. The menu buttons (Spellbook, Grimoire, Class, Spectate, Wardrobe, Auction House and your coins) sit in one column on the left, and they tuck away while a window is open.
 
 The Spellbook has three columns: your **wands** on the left (each card shows its mana, cast delay, recharge and perks as chips, and its slots underneath), your **bag** in the middle (tabs for **Spells**, **Parts** and **Potions**, grouped by type with a name under every icon), and the **Spellforge** on the right with a live preview of the spell you're building. Hover anything for its full details.
 - **Slot a spell:** click a spell in your bag, then click a wand slot.
@@ -267,8 +271,13 @@ Almost every number lives in **`src/shared/Config.lua`**: match timings (the gra
 | change wand generation | `src/shared/WandGenerator.lua` |
 | change chest loot odds | `src/shared/LootTables.lua` |
 | add or change a kit, its tier, price or bonus odds | `src/shared/Classes.lua` (and its game pass id in `Config.Kits`) |
-| add a map, or change a map's size, chests, terrain, colours, weather or lighting | `src/server/Map/MapDefs.lua` (one table per map) |
-| change trees, rocks, ruins or the cornucopia | `src/server/Map/Structures.lua` |
+| add a map, or change a map's size, terrain (rivers, mesas, volcano), colours, decoration, landmarks, clouds, colour grading, weather or lighting | `src/server/Map/MapDefs.lua` (one table per map) |
+| change trees, rocks, flowers and other decoration | `src/server/Map/Decor.lua` |
+| change or add landmarks (ruins, the windmill, the pyramid...) | `src/server/Map/Landmarks.lua` (list a new one in a map's `pois`) |
+| change bridges, the volcano's smoke or the aurora | `src/server/Map/Scenery.lua` |
+| change the cornucopia, chests or satchels | `src/server/Map/Structures.lua` (and the spawn ring's size in `Config.Arena`) |
+| change spell damage overall | `Config.Combat.SpellDamageMultiplier` |
+| change how much is in a chest, or the healing potion odds | `Tiers` in `src/shared/LootTables.lua` |
 | change the hub (Arcanum Plaza) | `src/server/Map/Hub.lua` (shared pieces such as portals, lecterns and signs are in `Props.lua`) |
 | change the library | `src/server/Map/Lobby.lua` |
 | change the tutorial or Grimoire text | `src/client/Controllers/TutorialController.lua`, `GrimoireController.lua` |
@@ -301,8 +310,9 @@ src/
                    DevService (the 🛠 Dev panel's tools, admins only),
                    ChatService (proximity chat), DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
                    outfits), FamiliarService (Nip, Last Ember), AuctionService (the cross-server auction house)
-    Map/           MapDefs (the 5 maps), TerrainGen, Structures (trees, ruins, cornucopia, chests),
-                   Hub (Arcanum Plaza), Lobby (the library), Props (shared building blocks)
+    Map/           MapDefs (the 5 maps), TerrainGen (hills, rivers, mesas, volcano, roads), Decor (trees,
+                   rocks, flowers), Landmarks (points of interest), Scenery (bridges, volcano smoke, aurora),
+                   Structures (cornucopia, chests), Hub (Arcanum Plaza), Lobby (the library), Props (shared building blocks)
   client/        (StarterPlayerScripts.Client)
     Controllers/   HUD, Spellbook/Spellforge, Grimoire, Tutorial, chest window, lobby (join/leave queue,
                    vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom, familiars), Auction house,
@@ -342,6 +352,15 @@ node tools/ui/render.cjs build/ui/*.json        # draws build/ui/*.png (needs No
 ```
 
 The PNGs are approximate: they use stand-in fonts and estimate how text wraps. They're good for checking layout and colours. Check the finer details in Studio.
+
+**Pictures of the maps and outfits** work the same way. `mapshot` generates arenas with the real map code and saves what it built, and `maprender` draws an aerial view, the cornucopia, every landmark and a ground-level vista of each (or a line-up of mannequins wearing every robe and hat):
+
+```bash
+lune run tools/sim/mapshot build/maps                  # every arena (add map ids to pick, Hub for the hub + library, Outfits for the line-up)
+node tools/ui/maprender.cjs build/maps/*.json          # needs Node, Playwright and three (npm install three playwright)
+```
+
+These have no Roblox textures, terrain grass or shadows, so the game looks better than they do.
 
 The `tools/sim` scripts run the actual game modules on a small fake engine (`tools/sim/mock.luau`) under [Lune](https://lune-org.github.io/docs). GitHub Actions runs all of these, plus type checking and a Rojo build, on every push.
 

@@ -263,7 +263,8 @@ local function compileInner(recipe: Recipe, ctx: WandContext?, depth: number): S
 		spec.mana, spec.castDelay = mana, delay
 	end
 
-	-- 5. Wand stat multipliers
+	-- 5. Global balance (Config.Combat), then the wand's stat multipliers
+	spec.damage *= Config.Combat.SpellDamageMultiplier
 	if ctx then
 		spec.damage *= ctx.damageMult or 1
 		spec.speed *= ctx.speedMult or 1

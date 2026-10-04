@@ -216,11 +216,20 @@ end
 local function pickWander(): Vector3
 	local center = GameState.stormCenter
 	local radius = math.min(GameState.stormRadius * 0.7, MapService.radius() * 0.7)
-	local angle = rng:NextNumber(0, math.pi * 2)
-	local dist = rng:NextNumber(0, radius)
-	local x = center.X + math.cos(angle) * dist
-	local z = center.Z + math.sin(angle) * dist
-	return Vector3.new(x, MapService.groundAt(x, z) + 3, z)
+	local wet = MapService.liquidLevel() + 1
+	local x, z, y = center.X, center.Z, MapService.groundAt(center.X, center.Z)
+	-- prefer dry ground (lakes, rivers and lava are no place to wander into)
+	for _ = 1, 8 do
+		local angle = rng:NextNumber(0, math.pi * 2)
+		local dist = rng:NextNumber(0, radius)
+		x = center.X + math.cos(angle) * dist
+		z = center.Z + math.sin(angle) * dist
+		y = MapService.groundAt(x, z)
+		if y > wet then
+			break
+		end
+	end
+	return Vector3.new(x, y + 3, z)
 end
 
 local function eyeOf(c: Combatant): Vector3

@@ -16,6 +16,8 @@ export type Rig = {
 	head: BasePart,
 	leftArm: BasePart?, -- the forearm (R15) or arm (R6), for cuffs
 	rightArm: BasePart?,
+	leftUpperArm: BasePart?, -- R15 only: sleeves cover these too
+	rightUpperArm: BasePart?,
 	legLength: number, -- from the bottom of `hips` to the ground
 	weld: boolean, -- weld to the body (live character) or just place (preview)
 	parent: Instance,
@@ -133,7 +135,15 @@ end
 -- Robes
 ---------------------------------------------------------------------------
 
-type SkirtInfo = { bottomY: number, bottomDiameter: number, length: number }
+type SkirtInfo = { bottomY: number, bottomDiameter: number, topRadius: number, length: number }
+
+local function darker(c: Color3, amount: number): Color3
+	return c:Lerp(Color3.new(0, 0, 0), amount)
+end
+
+local function lighter(c: Color3, amount: number): Color3
+	return c:Lerp(Color3.new(1, 1, 1), amount)
+end
 
 local function buildRobe(rig: Rig, robe: Garment)
 	local cloth, trim, sigil = robe.parts.Cloth, robe.parts.Trim, robe.parts.Sigil
@@ -144,6 +154,17 @@ local function buildRobe(rig: Rig, robe: Garment)
 	local width = math.max(ts.X, 1.6)
 	local depth = math.max(ts.Z, 0.8)
 	local design = cloth and cloth.design or "Straight"
+
+	-- the trim's look decides how the hems, lapels, belt and cuffs are finished
+	local style = trim and trim.design or "Hem"
+	local hemMat = accentMat
+	if style == "Runic" or style == "Starlit" then
+		hemMat = Enum.Material.Neon
+	elseif style == "Gilded" or style == "Chain" then
+		hemMat = if accentMat == Enum.Material.Fabric or accentMat == Enum.Material.Leather
+			then Enum.Material.Metal
+			else accentMat
+	end
 
 	-- body: covers the torso (and the R15 lower torso)
 	local drop = if hips ~= torso then hips.Size.Y else 0
@@ -156,19 +177,88 @@ local function buildRobe(rig: Rig, robe: Garment)
 		main,
 		mainMat
 	)
+	local front = -depth / 2 - 0.09
+	local shoulderY = ts.Y / 2
 
-	-- skirt: from the hip joint (bottom of `hips`) down toward the feet
+	-- lapels: a V of trim from the shoulders down to the belt
+	for side = -1, 1, 2 do
+		local x0, y0 = side * width * 0.3, shoulderY - 0.05
+		local x1, y1 = side * 0.12, -ts.Y / 2 - drop + 0.35
+		local len = math.sqrt((x1 - x0) ^ 2 + (y1 - y0) ^ 2)
+		piece(
+			rig,
+			torso,
+			"Lapel",
+			Vector3.new(0.26, len, 0.06),
+			CFrame.new((x0 + x1) / 2, (y0 + y1) / 2, front) * CFrame.Angles(0, 0, math.atan2(x1 - x0, y0 - y1)),
+			accent,
+			hemMat
+		)
+	end
+
+	-- sleeves: fitted on the upper arm, flaring into a wide cuff at the wrist
+	local sleeve = if design == "Battle"
+		then "short"
+		elseif design == "Monk" or design == "Shadow" then "wide"
+		else "bell"
+	local cuffs: { BasePart } = {}
+	for _, pair in { { rig.leftUpperArm, rig.leftArm }, { rig.rightUpperArm, rig.rightArm } } do
+		local upper, lower = pair[1], pair[2]
+		if upper then
+			piece(rig, upper, "Sleeve", upper.Size + Vector3.new(0.14, 0.04, 0.14), CFrame.new(), main, mainMat)
+		end
+		if lower and sleeve ~= "short" then
+			local ls = lower.Size
+			piece(
+				rig,
+				lower,
+				"Sleeve",
+				Vector3.new(ls.X + 0.12, ls.Y - 0.2, ls.Z + 0.12),
+				CFrame.new(0, 0.1, 0),
+				main,
+				mainMat
+			)
+			local flare = if sleeve == "wide" then 0.6 else 0.42
+			local cuff = piece(
+				rig,
+				lower,
+				"SleeveCuff",
+				Vector3.new(ls.X + flare, 0.55, ls.Z + flare),
+				CFrame.new(0, -ls.Y / 2 + 0.2, 0),
+				lighter(main, 0.04),
+				mainMat
+			)
+			table.insert(cuffs, cuff)
+		elseif lower and upper == nil then
+			-- R6 with a short sleeve: just cover the top of the arm
+			piece(
+				rig,
+				lower,
+				"Sleeve",
+				Vector3.new(lower.Size.X + 0.14, 0.8, lower.Size.Z + 0.14),
+				CFrame.new(0, lower.Size.Y / 2 - 0.4, 0),
+				main,
+				mainMat
+			)
+		end
+	end
+
+	-- skirt: from the hip joint (bottom of `hips`) down toward the feet, flaring as it falls
 	local hipY = -hips.Size.Y / 2
 	local L = rig.legLength * 0.94
 	local r0 = width * 0.62
-	local skirt: SkirtInfo = { bottomY = hipY - L, bottomDiameter = r0 * 2 + 0.1, length = L }
-	local function tiers(radii: { number }, length: number)
-		local h = length / #radii
-		for i, r in radii do
-			disc(rig, hips, "RobeSkirt", r * 2, h + 0.02, CFrame.new(0, hipY - h * (i - 0.5), 0), main, mainMat)
+	local skirt: SkirtInfo = { bottomY = hipY - L, bottomDiameter = r0 * 2 + 0.1, topRadius = r0, length = L }
+	local function flare(rTop: number, rBottom: number, length: number, steps: number)
+		local h = length / steps
+		for i = 1, steps do
+			local t = if steps == 1 then 1 else (i - 1) / (steps - 1)
+			local r = rTop + (rBottom - rTop) * t ^ 1.3
+			local shade = if i % 2 == 0 then main else darker(main, 0.04)
+			disc(rig, hips, "RobeSkirt", r * 2, h + 0.03, CFrame.new(0, hipY - h * (i - 0.5), 0), shade, mainMat)
 		end
 		skirt.bottomY = hipY - length
-		skirt.bottomDiameter = radii[#radii] * 2
+		skirt.bottomDiameter = rBottom * 2
+		skirt.topRadius = rTop
 		skirt.length = length
 	end
 
@@ -179,9 +269,9 @@ local function buildRobe(rig: Rig, robe: Garment)
 		or design == "Crystal"
 		or design == "Celestial"
 	then
-		tiers({ r0, r0 + 0.18, r0 + 0.4 }, L)
+		flare(r0, r0 + 0.6, L, 9)
 	elseif design == "Battle" then
-		tiers({ r0, r0 + 0.12 }, L * 0.55)
+		flare(r0, r0 + 0.16, L * 0.55, 3)
 		for side = -1, 1, 2 do
 			piece(
 				rig,
@@ -189,14 +279,34 @@ local function buildRobe(rig: Rig, robe: Garment)
 				"Tabard",
 				Vector3.new(width * 0.6, L * 0.85, 0.12),
 				CFrame.new(0, hipY - L * 0.42, side * (r0 + 0.1)),
-				main:Lerp(Color3.new(0, 0, 0), 0.15),
+				darker(main, 0.15),
 				mainMat
 			)
 		end
 	elseif design == "Monk" then
-		tiers({ r0 + 0.1 }, L)
+		flare(r0 + 0.05, r0 + 0.3, L, 4)
+	elseif design == "Shadow" then
+		flare(r0, r0 + 0.38, L, 7)
+	elseif design == "Cloak" then
+		flare(r0, r0 + 0.3, L, 4)
 	else
-		tiers({ r0 }, L)
+		flare(r0, r0 + 0.2, L, 4)
+	end
+
+	-- the front opening: a panel down the front of the skirt, following its flare
+	if design ~= "Battle" and design ~= "Monk" then
+		local rTop, rBottom = skirt.topRadius, skirt.bottomDiameter / 2
+		local tilt = math.atan2(rBottom - rTop, skirt.length)
+		local panelMat = if style == "Hem" or style == "Double" or style == "Fur" then mainMat else hemMat
+		piece(
+			rig,
+			hips,
+			"FrontPanel",
+			Vector3.new(0.5, skirt.length / math.cos(tilt), 0.06),
+			CFrame.new(0, hipY - skirt.length / 2, -(rTop + rBottom) / 2 - 0.03) * CFrame.Angles(-tilt, 0, 0),
+			if panelMat == mainMat then darker(main, 0.25) else accent,
+			panelMat
+		)
 	end
 
 	if design == "Patchwork" then
@@ -206,20 +316,32 @@ local function buildRobe(rig: Rig, robe: Garment)
 				hips,
 				"Patch",
 				Vector3.new(0.5, 0.45, 0.08),
-				CFrame.new(o.X, hipY + o.Y, o.Z * (r0 + 0.02)),
+				CFrame.new(o.X, hipY + o.Y, o.Z * (r0 + 0.12)),
 				main:Lerp(Color3.fromHSV(i * 0.31 % 1, 0.4, 0.6), 0.45),
 				Enum.Material.Fabric
 			)
 		end
 	elseif design == "Cloak" or design == "Royal" then
-		-- a cape hanging from the shoulders
+		-- a cape hanging from the shoulders, lined in the trim colour
+		local capeH = ts.Y + drop + L * 0.85
+		local capeAt = CFrame.new(0, shoulderY - capeH / 2, depth / 2 + 0.22) * CFrame.Angles(math.rad(-6), 0, 0)
+		piece(rig, torso, "Cape", Vector3.new(width + 0.4, capeH, 0.14), capeAt, darker(main, 0.2), mainMat)
 		piece(
 			rig,
 			torso,
-			"Cape",
-			Vector3.new(width + 0.3, ts.Y + drop + L * 0.85, 0.14),
-			CFrame.new(0, ts.Y / 2 - (ts.Y + drop + L * 0.85) / 2, depth / 2 + 0.2) * CFrame.Angles(math.rad(-6), 0, 0),
-			main:Lerp(Color3.new(0, 0, 0), 0.2),
+			"CapeLining",
+			Vector3.new(width + 0.2, capeH - 0.1, 0.06),
+			capeAt * CFrame.new(0, 0, -0.1),
+			accent,
+			accentMat
+		)
+		piece(
+			rig,
+			torso,
+			"Mantle",
+			Vector3.new(width + 0.5, 0.45, depth + 0.5),
+			CFrame.new(0, shoulderY + 0.05, 0.05),
+			darker(main, 0.1),
 			mainMat
 		)
 		if design == "Royal" then
@@ -232,6 +354,17 @@ local function buildRobe(rig: Rig, robe: Garment)
 				main,
 				mainMat
 			)
+			for side = -1, 1, 2 do
+				ball(
+					rig,
+					torso,
+					"Clasp",
+					0.3,
+					CFrame.new(side * width * 0.38, shoulderY - 0.1, front - 0.04),
+					accent,
+					Enum.Material.Metal
+				)
+			end
 		end
 	elseif design == "Archmage" or design == "Crystal" then
 		-- shoulder pads and a tall collar
@@ -240,10 +373,19 @@ local function buildRobe(rig: Rig, robe: Garment)
 				rig,
 				torso,
 				"Pauldron",
-				Vector3.new(0.9, 0.35, depth + 0.4),
-				CFrame.new(side * (width / 2 + 0.25), ts.Y / 2 + 0.05, 0) * CFrame.Angles(0, 0, math.rad(side * -18)),
+				Vector3.new(1, 0.4, depth + 0.45),
+				CFrame.new(side * (width / 2 + 0.25), shoulderY + 0.05, 0) * CFrame.Angles(0, 0, math.rad(side * -18)),
 				accent,
 				accentMat
+			)
+			piece(
+				rig,
+				torso,
+				"PauldronTrim",
+				Vector3.new(1.04, 0.12, depth + 0.5),
+				CFrame.new(side * (width / 2 + 0.25), shoulderY - 0.1, 0) * CFrame.Angles(0, 0, math.rad(side * -18)),
+				main,
+				hemMat
 			)
 		end
 		piece(
@@ -251,38 +393,52 @@ local function buildRobe(rig: Rig, robe: Garment)
 			torso,
 			"Collar",
 			Vector3.new(width * 0.9, 1.1, 0.14),
-			CFrame.new(0, ts.Y / 2 + 0.45, depth / 2 + 0.05) * CFrame.Angles(math.rad(15), 0, 0),
+			CFrame.new(0, shoulderY + 0.45, depth / 2 + 0.05) * CFrame.Angles(math.rad(15), 0, 0),
 			main,
 			mainMat
 		)
 		if design == "Crystal" then
 			for side = -1, 1, 2 do
-				piece(
-					rig,
-					torso,
-					"Shard",
-					Vector3.new(0.25, 0.9, 0.25),
-					CFrame.new(side * (width / 2 + 0.35), ts.Y / 2 + 0.5, 0) * CFrame.Angles(0, 0, math.rad(side * -25)),
-					main,
-					Enum.Material.Glass
-				)
+				for k = 0, 1 do
+					piece(
+						rig,
+						torso,
+						"Shard",
+						Vector3.new(0.25, 0.9 - k * 0.3, 0.25),
+						CFrame.new(side * (width / 2 + 0.35 + k * 0.25), shoulderY + 0.5 - k * 0.15, k * 0.2)
+							* CFrame.Angles(0, 0, math.rad(side * -(25 + k * 15))),
+						lighter(main, 0.3),
+						Enum.Material.Glass
+					)
+				end
 			end
 		end
 	elseif design == "Shadow" then
-		for i = 1, 8 do
-			local a = (i / 8) * math.pi * 2
+		for i = 1, 10 do
+			local a = (i / 10) * math.pi * 2
 			local len = 0.4 + (i % 3) * 0.25
+			local r = skirt.bottomDiameter / 2 - 0.05
 			piece(
 				rig,
 				hips,
 				"Tatter",
-				Vector3.new(0.35, len, 0.08),
-				CFrame.new(math.cos(a) * r0, skirt.bottomY - len / 2 + 0.05, math.sin(a) * r0)
+				Vector3.new(0.4, len, 0.08),
+				CFrame.new(math.cos(a) * r, skirt.bottomY - len / 2 + 0.05, math.sin(a) * r)
 					* CFrame.Angles(0, -a + math.pi / 2, 0),
-				main:Lerp(Color3.new(0, 0, 0), 0.3),
+				darker(main, 0.3),
 				mainMat
 			)
 		end
+		-- a cowl over the shoulders
+		piece(
+			rig,
+			torso,
+			"Cowl",
+			Vector3.new(width + 0.4, 0.55, depth + 0.45),
+			CFrame.new(0, shoulderY + 0.05, 0),
+			darker(main, 0.2),
+			mainMat
+		)
 	elseif design == "Celestial" then
 		for i, h in { -0.2, -0.9 } do
 			disc(
@@ -296,6 +452,15 @@ local function buildRobe(rig: Rig, robe: Garment)
 				Enum.Material.Neon
 			)
 		end
+		piece(
+			rig,
+			torso,
+			"Mantle",
+			Vector3.new(width + 0.45, 0.4, depth + 0.45),
+			CFrame.new(0, shoulderY + 0.05, 0),
+			lighter(main, 0.1),
+			mainMat
+		)
 	elseif design == "Monk" then
 		piece(
 			rig,
@@ -308,16 +473,20 @@ local function buildRobe(rig: Rig, robe: Garment)
 		)
 	end
 
-	-- trim: hems, belt, cuffs, collar
-	local style = trim and trim.design or "Hem"
-	local hemMat = accentMat
-	if style == "Runic" or style == "Starlit" then
-		hemMat = Enum.Material.Neon
-	elseif style == "Gilded" or style == "Chain" then
-		hemMat = if accentMat == Enum.Material.Fabric or accentMat == Enum.Material.Leather
-			then Enum.Material.Metal
-			else accentMat
+	-- a standing collar (the grand designs have their own)
+	if design ~= "Archmage" and design ~= "Crystal" and design ~= "Shadow" then
+		piece(
+			rig,
+			torso,
+			"NeckCollar",
+			Vector3.new(width * 0.55, 0.3, depth * 0.85),
+			CFrame.new(0, shoulderY + 0.12, 0.04),
+			lighter(main, 0.08),
+			mainMat
+		)
 	end
+
+	-- trim: hems, belt, cuffs, collar
 	local hemThick = if style == "Fur" then 0.4 else 0.2
 	disc(
 		rig,
@@ -334,37 +503,35 @@ local function buildRobe(rig: Rig, robe: Garment)
 			rig,
 			hips,
 			"Hem",
-			skirt.bottomDiameter + 0.08,
+			skirt.bottomDiameter + 0.06,
 			0.12,
 			CFrame.new(0, skirt.bottomY + 0.45, 0),
 			accent,
 			hemMat
 		)
 	end
+	local beltY = if hips == torso then -hips.Size.Y / 2 + 0.3 else hips.Size.Y / 2 - 0.05
+	piece(rig, hips, "Belt", Vector3.new(width + 0.3, 0.26, depth + 0.3), CFrame.new(0, beltY, 0), accent, hemMat)
 	piece(
 		rig,
 		hips,
-		"Belt",
-		Vector3.new(width + 0.3, 0.24, depth + 0.3),
-		-- at the waist: low on an R6 torso, at the top of an R15 lower torso
-		CFrame.new(0, if hips == torso then -hips.Size.Y / 2 + 0.3 else hips.Size.Y / 2 - 0.05, 0),
-		accent,
-		hemMat
+		"Buckle",
+		Vector3.new(0.4, 0.36, 0.08),
+		CFrame.new(0, beltY, -(depth + 0.3) / 2 - 0.03),
+		if hemMat == Enum.Material.Neon then Color3.new(1, 1, 1) else Color3.fromRGB(230, 190, 80),
+		if hemMat == Enum.Material.Neon then Enum.Material.Neon else Enum.Material.Metal
 	)
-	if style ~= "Hem" then
-		for _, arm in { rig.leftArm, rig.rightArm } do
-			if arm then
-				piece(
-					rig,
-					arm,
-					"Cuff",
-					Vector3.new(arm.Size.X + 0.16, if style == "Fur" then 0.35 else 0.22, arm.Size.Z + 0.16),
-					CFrame.new(0, -arm.Size.Y / 2 + 0.25, 0),
-					accent,
-					hemMat
-				)
-			end
-		end
+	-- trimmed cuffs on the sleeves
+	for _, cuff in cuffs do
+		piece(
+			rig,
+			cuff,
+			"Cuff",
+			Vector3.new(cuff.Size.X + 0.06, if style == "Fur" then 0.3 else 0.16, cuff.Size.Z + 0.06),
+			CFrame.new(0, -cuff.Size.Y / 2 + 0.06, 0),
+			accent,
+			hemMat
+		)
 	end
 	if style == "Fur" or style == "Gilded" or style == "Starlit" then
 		piece(
@@ -372,25 +539,14 @@ local function buildRobe(rig: Rig, robe: Garment)
 			torso,
 			"TrimCollar",
 			Vector3.new(width * 0.75, 0.3, depth + 0.3),
-			CFrame.new(0, ts.Y / 2 + 0.02, 0),
-			accent,
-			hemMat
-		)
-	end
-	if style == "Runic" or style == "Embroidered" then
-		piece(
-			rig,
-			torso,
-			"Stripe",
-			Vector3.new(0.18, ts.Y + drop, 0.04),
-			CFrame.new(0, -drop / 2, -depth / 2 - 0.1),
+			CFrame.new(0, shoulderY + 0.02, 0),
 			accent,
 			hemMat
 		)
 	end
 	if style == "Starlit" then
-		for i = 1, 6 do
-			local a = (i / 6) * math.pi * 2
+		for i = 1, 8 do
+			local a = (i / 8) * math.pi * 2
 			local r = skirt.bottomDiameter / 2 + 0.06
 			piece(
 				rig,
@@ -405,20 +561,32 @@ local function buildRobe(rig: Rig, robe: Garment)
 		end
 	end
 
-	-- sigil: a badge on the chest with the emblem glyph
+	-- sigil: a round medallion on the chest with the emblem glyph, in a gold rim
 	if sigil then
 		local glyph = Cosmetics.DesignById.Sigil[sigil.design]
+		local at = CFrame.new(0, ts.Y * 0.12, front - 0.06) * CFrame.Angles(0, math.rad(90), 0)
+		piece(
+			rig,
+			torso,
+			"SigilRim",
+			Vector3.new(0.08, 0.9, 0.9),
+			at * CFrame.new(-0.03, 0, 0),
+			Color3.fromRGB(220, 180, 70),
+			Enum.Material.Metal,
+			Enum.PartType.Cylinder
+		)
 		local badge = piece(
 			rig,
 			torso,
 			"Sigil",
-			Vector3.new(0.75, 0.75, 0.08),
-			CFrame.new(0, ts.Y * 0.15, -depth / 2 - 0.14),
+			Vector3.new(0.1, 0.74, 0.74),
+			at * CFrame.new(0.03, 0, 0),
 			colorOf(sigil),
-			materialOf(sigil)
+			materialOf(sigil),
+			Enum.PartType.Cylinder
 		)
 		local gui = Instance.new("SurfaceGui")
-		gui.Face = Enum.NormalId.Front
+		gui.Face = Enum.NormalId.Right
 		gui.PixelsPerStud = 60
 		gui.LightInfluence = 0
 		gui.Parent = badge
@@ -461,14 +629,28 @@ local function buildHat(rig: Rig, hat: Garment)
 	local bandY, bandD = top - 0.05, hs * 1.22
 	local gemAt = CFrame.new(0, top - 0.02, -hs * 0.62)
 
+	-- a cone built from many thin discs (so it reads as smooth), its tip leaning back as it rises
 	local function cone(baseD: number, tiers: number, tierH: number, bend: number)
+		local steps = tiers * 2
+		local h = tierH * tiers / steps
 		local y = top
-		for i = 1, tiers do
-			local d = baseD * (1 - (i - 1) / tiers) + 0.08
-			local lean = if i > tiers - 2 then bend * (i - (tiers - 2)) else 0
-			disc(rig, head, "HatCone", d, tierH + 0.02, CFrame.new(0, y + tierH / 2, lean), main, mainMat)
-			y += tierH
+		for i = 1, steps do
+			local t = (i - 1) / steps
+			local d = baseD * (1 - t) ^ 1.15 + 0.1
+			local lean = bend * tiers * t ^ 2.2
+			disc(
+				rig,
+				head,
+				"HatCone",
+				d,
+				h + 0.02,
+				CFrame.new(0, y + h / 2, lean),
+				if i % 4 == 0 then darker(main, 0.05) else main,
+				mainMat
+			)
+			y += h
 		end
+		ball(rig, head, "HatTip", 0.16, CFrame.new(0, y, bend * tiers), main, mainMat)
 	end
 
 	if design == "Pointed" or design == "Witch" then
@@ -972,6 +1154,8 @@ function OutfitBuilder.rigOf(character: Model): Rig?
 			head = head,
 			leftArm = character:FindFirstChild("LeftLowerArm") :: BasePart?,
 			rightArm = character:FindFirstChild("RightLowerArm") :: BasePart?,
+			leftUpperArm = character:FindFirstChild("LeftUpperArm") :: BasePart?,
+			rightUpperArm = character:FindFirstChild("RightUpperArm") :: BasePart?,
 			legLength = math.max(1.2, hum.HipHeight),
 			weld = true,
 			parent = character :: Instance,

@@ -48,8 +48,8 @@ Config.Bots = {
 -- Arena ------------------------------------------------------------------
 -- Map size, chest counts and decoration live in src/server/Map/MapDefs.lua (one entry per map).
 Config.Arena = {
-	CornucopiaRadius = 34, -- flat plaza in the middle
-	PedestalRadius = 46,
+	CornucopiaRadius = 50, -- flat plaza in the middle
+	PedestalRadius = 72, -- where players start: far enough apart (~38 studs) that nobody is swarmed at the gong
 	CornucopiaChests = 10,
 	ChestSpacing = 55, -- minimum distance between scattered chests
 	LobbyHeight = 420,
@@ -76,6 +76,7 @@ Config.Queue = {
 -- Combat -----------------------------------------------------------------
 Config.Combat = {
 	MaxHealth = 100,
+	SpellDamageMultiplier = 0.6, -- every spell hits for this share of its listed power (raise for faster fights)
 	BaseWalkSpeed = 16,
 	BaseJumpHeight = 7.2,
 	SelfDamageMultiplier = 0.25, -- your own explosions hurt you a little

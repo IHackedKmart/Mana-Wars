@@ -16,3 +16,4 @@ Thumbs.db
 
 # UI snapshots (MANA_SHOTS=build/ui lune run tools/sim/client)
 /build/ui/
+/build/maps/

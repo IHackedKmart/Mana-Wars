@@ -14,8 +14,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Build = require(script.Parent.Build)
 local Props = require(script.Parent.Props)
-local Structures = require(script.Parent.Structures)
+local Decor = require(script.Parent.Decor)
+local MapDefs = require(script.Parent.MapDefs)
 
+-- the Plaza's gardens use the Verdant Isle look
+local GARDEN = MapDefs.List[1].style
 local Hub = {}
 
 local M = Enum.Material
@@ -749,7 +752,7 @@ function Hub.build(): HubInfo
 			{ Name = "PlanterSoil", Material = M.Grass, Color = GRASS },
 			model
 		)
-		Structures.decor("tree", if deg < 180 then "birch" else "oak", decor, p + Vector3.new(0, 1.5, 0), rng)
+		Decor.build("tree", if deg < 180 then "birch" else "oak", decor, p + Vector3.new(0, 1.5, 0), rng, GARDEN)
 	end
 	local styles = { "oak", "birch", "pine" }
 	for i = 1, 22 do
@@ -764,15 +767,22 @@ function Hub.build(): HubInfo
 		end
 		if not blocked then
 			local r = rng:NextNumber(R - RIM + 5, R - 4)
-			Structures.decor(
+			Decor.build(
 				"tree",
 				styles[rng:NextInteger(1, #styles)],
 				decor,
 				at(math.cos(a) * r, math.sin(a) * r),
-				rng
+				rng,
+				GARDEN
 			)
 			local b = a + rng:NextNumber(0.06, 0.12)
-			Structures.decor("bush", "bush", decor, at(math.cos(b) * (R - 9), math.sin(b) * (R - 9)), rng)
+			Decor.build("bush", "bush", decor, at(math.cos(b) * (R - 9), math.sin(b) * (R - 9)), rng, GARDEN)
+			-- a few flowers around each bush
+			for _ = 1, 4 do
+				local f = b + rng:NextNumber(-0.05, 0.05)
+				local fr = R - 9 + rng:NextNumber(-3, 3)
+				Decor.build("bush", "flower", decor, at(math.cos(f) * fr, math.sin(f) * fr), rng, GARDEN)
+			end
 		end
 	end
 	floatingIsles(animated, center, rng)
