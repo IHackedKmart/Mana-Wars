@@ -19,7 +19,7 @@ Every match also pays out **Enchanted Coins** by finishing place. Spend them on 
 | | Mode | Players | How it plays |
 |---|---|---|---|
 | ⚔️ | **Survival Games** | up to 12 | The classic: vote on one of five islands, start on a pedestal around the cornucopia, loot, and outlast the Mana Storm. |
-| 🤺 | **1v1 Duel** | 2 | A floating arena high above everything, with cover pillars and low walls. Both duelists get the same wand with **one random spell** and **one random potion**. There are no chests. After a 3-second countdown you fight. At 75 seconds the arena starts burning you both (sudden death), and at 2:30 the mage with more health wins. The winner earns 3 coins and the loser 1. A duel starts as soon as two mages are queued, or a bot steps in after 15 seconds alone. You stay queued afterwards, so the next opponent comes along on their own. Up to 6 duels run at once. |
+| 🤺 | **1v1 Duel** | 2 | A floating arena high above everything, with cover pillars and low walls. Both duelists get the same wand with **one random spell** and **one random potion**. There are no chests. Your kit, your outfit's bonuses and your familiar's powers don't count here (you still look the part), so every duel is a fair fight. After a 3-second countdown you fight. At 75 seconds the arena starts burning you both (sudden death), and at 2:30 the mage with more health wins. The winner earns 10 coins and the loser 2. A duel starts as soon as two mages are queued, or a bot steps in after 15 seconds alone. You stay queued afterwards, so the next opponent comes along on their own. Up to 6 duels run at once. |
 | 🧞 | **Battle Royale** | up to 50 | Ride a **magic carpet** across an enormous island of five realms, jump off wherever you like, glide down, loot villages, castles and ruins, and outlast the shrinking storm circles. See below. |
 
 Survival Games and Battle Royale take turns in the main arena. Whichever queue's first player has waited longest goes next. Duels run at the same time as either of them.
@@ -51,7 +51,8 @@ Survival Games and Battle Royale take turns in the main arena. Whichever queue's
   - Each next circle shows as a faint white wall, and the HUD counts down to when the storm moves. Then the wall moves in, its centre sliding over to the new circle.
   - Each circle sits inside the last one. Being outside hurts more at every stage, from 2 up to 15 damage a second.
   - The chests refill after 5 minutes.
-- **Coins** are paid by finishing place, the same as Survival Games (12 for 1st, down to 1 from 12th place on). The HUD shows which realm you're in.
+- **Coins** are paid by finishing place: 50 for 1st, 49 for 2nd, and one less for each place after that, down to 1 for 50th (plus your outfit's Fortune bonus). The HUD shows which realm you're in.
+- **Your kit, outfit and familiar come with you**, exactly as in Survival Games.
 
 Tune the modes in `Config.Duel` and `Config.Royale`, and the island itself in `MapDefs.Royale`.
 
@@ -206,7 +207,7 @@ Things to know:
 
 ## Kits and tiers
 
-Every kit (class) gives a starting wand or two, a few spells, some spell parts, potions, and **one random spell part each match**. The Apprentice is free. Every other kit is a one-time game pass, priced by tier:
+Every kit (class) gives a starting wand or two, a few spells, some spell parts, potions, and **one random spell part each match**, in Survival Games and the Battle Royale (duels hand out their own random loadout instead). The kit you pick at the Class Altar is saved with your profile, so it's still picked next time you play. The Apprentice is free. Every other kit is a one-time game pass, priced by tier:
 
 | Tier | Price | Kits | Random bonus part each match |
 |---|---|---|---|
@@ -229,11 +230,15 @@ The bonus part is a random reward from a paid item, so the odds are shown in the
 
 ## Enchanted Coins, robes and the auction house
 
-**Coins.** Every match pays coins by finishing place, so a full 12-player match pays everyone something:
+**Coins.** Every match pays coins, so everyone earns something:
 
-| Place | 1st | 2nd | 3rd | 4th | 5th | 6th | 7th | 8th | 9th | 10th | 11th | 12th |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Coins | 12 | 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4 | 3 | 2 | 1 |
+| Mode | Coins |
+|---|---|
+| Survival Games | by finishing place: 12 for 1st, 11 for 2nd ... 1 for 12th |
+| Battle Royale | by finishing place: 50 for 1st, 49 for 2nd ... 1 for 50th |
+| 1v1 Duel | 10 for a win, 2 for a loss |
+
+Outfits with the **Fortune** enchantment add a bonus on top of placement coins (not in duels). The amounts live in `Config.Economy.CoinsForFirst`, `Config.Royale.CoinsForFirst`, and `Config.Duel.WinCoins` / `LoseCoins`.
 
 New players start with 60 coins and a plain starter robe and hat. Coins can't be bought with Robux. They're only earned by playing.
 
@@ -291,7 +296,7 @@ So mixing rarities always works, but a matched set looks the best.
 - **Daily reward.** The first time you play each day (days start at midnight UTC) you get **3 Enchanted Coins** (`Config.Rewards.DailyCoins`). Come back on consecutive days to build a streak. If you're still online at midnight, the next day's reward arrives without rejoining.
 - **Achievements.** 19 lifetime goals, each paying coins once (345 in all): first kill, 25 and 100 kills, first win, 10 and 50 wins, 5 duel wins, a Battle Royale win, a top-3 finish, 25 matches, forging 10 spells, opening 100 chests and 10 coffers, stitching a robe or hat, finding 5 familiars or a Shiny one, a first auction sale and a 7-day streak. Open them with **🏆 Achievements** in the Plaza or the library to see your progress bars. The full list is in [docs/CATALOG.md](docs/CATALOG.md#achievements). Stats players had before this update count, so veterans unlock theirs the first time they join.
 - **Roblox badges (optional).** Every achievement can also award a real badge that shows on players' profiles. Create the badges on the Creator Dashboard (*your experience → Engagement → Badges*) and paste each id into `Config.Achievements.BadgeIds` under the achievement's id (e.g. `Victor = 2150000001`). Players who already unlocked the achievement get the badge the next time they join.
-- **The Hall of Champions.** A gilded board behind the spawn in the Plaza lists the **top 10 by wins and by kills across every server, all time**. Scores are saved after each match and when a player leaves, and each server re-reads the lists every 2 minutes (`Config.Leaderboard`). It needs DataStores, so turn on API access to see it in Studio.
+- **The Hall of Champions.** A gilded board behind the spawn in the Plaza has a global leaderboard for each game mode: the **top 10 by Survival Games wins, Battle Royale wins and duel wins**, plus a fourth column for **kills in every mode**, across every server, all time. Scores are saved after each match or duel and when a player leaves, and each server re-reads the lists every 2 minutes (`Config.Leaderboard`). It needs DataStores, so turn on API access to see it in Studio.
 
 ### Analytics
 
@@ -347,6 +352,7 @@ Almost every number lives in **`src/shared/Config.lua`**: match timings (the gra
 | change bridges, the volcano's smoke or the aurora | `src/server/Map/Scenery.lua` |
 | change the cornucopia, chests or satchels | `src/server/Map/Structures.lua` (and the spawn ring's size in `Config.Arena`) |
 | change the daily reward | `Config.Rewards.DailyCoins` |
+| change Battle Royale or duel coins | `Config.Royale.CoinsForFirst`, `Config.Duel.WinCoins` / `LoseCoins` |
 | add or change achievements (goals, coin rewards, icons) | `src/shared/Achievements.lua` (and badge ids in `Config.Achievements`) |
 | change the leaderboard's size or refresh rate | `Config.Leaderboard` |
 | change spell damage overall | `Config.Combat.SpellDamageMultiplier` |

@@ -31,7 +31,7 @@ Modes.List = {
 		icon = "🤺",
 		players = "2 mages",
 		tagline = "One spell. One potion. One winner.",
-		description = "Face a single rival in a floating arena. You each get a random spell and one potion: no chests, no excuses. Starts as soon as an opponent is found.",
+		description = "Face a single rival in a floating arena. You each get a random spell and one potion, and kits and outfit bonuses stay home: a fair fight. Starts as soon as an opponent is found.",
 		color = { 200, 60, 80 },
 	},
 	{

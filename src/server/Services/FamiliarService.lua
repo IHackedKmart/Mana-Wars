@@ -58,7 +58,8 @@ end
 
 function FamiliarService.tryNip(c: Combatant, now: number): boolean
 	local power, value, element = powerOf(c)
-	if power ~= "nip" or not Combatants.canAct(c) or (nextNip[c] or 0) > now then
+	-- (familiars only fight in Survival Games and the Battle Royale: duels are a level playing field)
+	if power ~= "nip" or c.duel or not Combatants.canAct(c) or (nextNip[c] or 0) > now then
 		return false
 	end
 	local target = nearestFoe(c, Combatants.centerOf(c), Familiars.NipRange)
@@ -82,7 +83,7 @@ end
 -- Called by MatchService when a combatant falls (before they're cleaned up).
 function FamiliarService.onDeath(c: Combatant, position: Vector3?)
 	local power, value = powerOf(c)
-	if power ~= "emberWake" or not position then
+	if power ~= "emberWake" or not position or c.duel then
 		return
 	end
 	local color, color2 = colorsOf("Fire")

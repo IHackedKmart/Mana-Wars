@@ -34,8 +34,8 @@ Config.Duel = {
 	SuddenDeathAt = 75, -- seconds into the fight: the arena starts burning both mages
 	SuddenDeathDps = 6,
 	TimeLimit = 150, -- then the healthier mage wins (a draw if level)
-	WinCoins = 3,
-	LoseCoins = 1,
+	WinCoins = 10,
+	LoseCoins = 2,
 	WandRarity = "Rare", -- both duelists get the same wand
 	SpellRarities = { "Common", "Uncommon", "Rare", "Epic" }, -- the random spell comes from these
 }
@@ -62,6 +62,7 @@ Config.Royale = {
 	},
 	ChestRefillAt = 300,
 	HardTimeLimit = 1000,
+	CoinsForFirst = 50, -- 1st place earns 50 Enchanted Coins, 2nd 49 ... 50th earns 1 (never less than 1)
 }
 
 -- Bots fill empty slots so that small servers (and solo testing) still get a real match.

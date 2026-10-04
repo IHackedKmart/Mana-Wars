@@ -37,6 +37,7 @@ export type Profile = {
 	achievements: { [string]: number }, -- achievement id -> when it was unlocked (os.time)
 	daily: { last: number, streak: number, best: number }, -- daily reward: last day claimed (UTC day number)
 	onboarding: { [string]: boolean }, -- analytics onboarding steps already logged
+	kit: string, -- the kit (class) picked at the altar, kept between sessions
 }
 
 local cache: { [Player]: Profile } = {}
@@ -71,6 +72,7 @@ local function newProfile(): Profile
 		achievements = {},
 		daily = { last = 0, streak = 0, best = 0 },
 		onboarding = {},
+		kit = "Apprentice",
 	}
 end
 
@@ -101,6 +103,9 @@ local function fromSaved(data: any): Profile
 	p.counters = cleanMap(data.counters, "number")
 	p.achievements = cleanMap(data.achievements, "number")
 	p.onboarding = cleanMap(data.onboarding, "boolean")
+	if type(data.kit) == "string" then
+		p.kit = data.kit
+	end
 	if type(data.daily) == "table" then
 		p.daily.last = tonumber(data.daily.last) or 0
 		p.daily.streak = tonumber(data.daily.streak) or 0
@@ -130,6 +135,7 @@ local function toSaved(p: Profile, session: { job: string, t: number }?): { [str
 		achievements = p.achievements,
 		daily = p.daily,
 		onboarding = p.onboarding,
+		kit = p.kit,
 		session = session,
 	}
 end

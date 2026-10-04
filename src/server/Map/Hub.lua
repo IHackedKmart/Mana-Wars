@@ -39,7 +39,8 @@ export type HubInfo = {
 	floorY: number,
 }
 
-export type Leaderboard = { wins: TextLabel, kills: TextLabel, footer: TextLabel }
+-- columns by leaderboard id ("wins" = Survival Games, "royaleWins", "duelWins", "kills")
+export type Leaderboard = { columns: { [string]: TextLabel }, footer: TextLabel }
 
 -- Far enough from the arena and the library that they never get in each other's way.
 Hub.CENTER_Z = 700
@@ -105,10 +106,11 @@ local function board(
 	}, gui)
 end
 
--- The Hall of Champions: a tall gilded board with two columns, most wins and most kills.
+-- The Hall of Champions: a wide gilded board with a column per game mode (most Survival Games,
+-- Battle Royale and duel wins) and one for the most kills.
 local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): Leaderboard
 	local model = Build.model("Leaderboard", parent)
-	local size = Vector2.new(30, 17)
+	local size = Vector2.new(40, 17)
 	local face = part(model, "BoardFace", Vector3.new(size.X, size.Y, 0.6), cf, M.WoodPlanks, Props.DARK_WOOD)
 	part(
 		model,
@@ -156,7 +158,7 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 	local function column(x: number, heading: string): TextLabel
 		Build.make("TextLabel", {
 			Name = "Heading",
-			Size = UDim2.fromScale(0.44, 0.08),
+			Size = UDim2.fromScale(0.22, 0.07),
 			Position = UDim2.fromScale(x, 0.17),
 			BackgroundTransparency = 1,
 			Text = heading,
@@ -166,7 +168,7 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 		}, gui)
 		return Build.make("TextLabel", {
 			Name = "Column",
-			Size = UDim2.fromScale(0.44, 0.66),
+			Size = UDim2.fromScale(0.22, 0.66),
 			Position = UDim2.fromScale(x, 0.26),
 			BackgroundTransparency = 1,
 			Text = "Loading...",
@@ -178,8 +180,23 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 			TextColor3 = Color3.fromRGB(255, 235, 190),
 		}, gui)
 	end
-	local wins = column(0.04, "⚔️ MOST WINS")
-	local kills = column(0.52, "💀 MOST KILLS")
+	local columns = {
+		wins = column(0.025, "⚔️ SURVIVAL WINS"),
+		royaleWins = column(0.268, "🧞 ROYALE WINS"),
+		duelWins = column(0.512, "🤺 DUEL WINS"),
+		kills = column(0.755, "💀 MOST KILLS"),
+	}
+	-- thin gold dividers between the columns
+	for i = 1, 3 do
+		Build.make("Frame", {
+			Name = "Divider",
+			Size = UDim2.fromScale(0.003, 0.72),
+			Position = UDim2.fromScale(0.2465 + (i - 1) * 0.2435, 0.18),
+			BackgroundColor3 = Color3.fromRGB(200, 160, 80),
+			BackgroundTransparency = 0.4,
+			BorderSizePixel = 0,
+		}, gui)
+	end
 	local footer = Build.make("TextLabel", {
 		Name = "Footer",
 		Size = UDim2.fromScale(0.92, 0.05),
@@ -190,7 +207,7 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(170, 160, 190),
 	}, gui)
-	return { wins = wins, kills = kills, footer = footer }
+	return { columns = columns, footer = footer }
 end
 
 local function fountain(parent: Instance, animated: Instance, c: Vector3)
@@ -849,9 +866,9 @@ function Hub.build(): HubInfo
 	for i = 1, 22 do
 		local a = (i / 22) * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
 		local deg = math.deg(a) % 360
-		-- keep the portal, the range gate and the towers clear
-		local blocked = deg < 32 or deg > 328 or (deg > 248 and deg < 292)
-		for _, t in { 150, 210, 305, 59, 90 } do
+		-- keep the portal, the range gate, the towers and the Hall of Champions (at 90°) clear
+		local blocked = deg < 32 or deg > 328 or (deg > 248 and deg < 292) or math.abs(deg - 90) < 17
+		for _, t in { 150, 210, 305, 59 } do
 			if math.abs(deg - t) < 9 then
 				blocked = true
 			end

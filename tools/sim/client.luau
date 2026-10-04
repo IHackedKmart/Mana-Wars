@@ -1087,12 +1087,16 @@ do
 	check(okWorn == false, "worn garments can't be listed")
 	checkWarnings("auction")
 
-	-- the profile survives a rejoin (saved on leave, then loaded again)
+	-- the profile survives a rejoin (saved on leave, then loaded again), the picked kit too
 	local coins = State.wardrobe.coins
+	local ClassServiceRejoin = server.load("Server/Services/ClassService")
+	ClassServiceRejoin.select(player, "Stormcaller")
 	DataService.save(player, true)
+	player:SetAttribute("Class", "Apprentice") -- (what a fresh join starts with)
 	DataService.load(player)
 	Mock.step(0.2, true)
 	check(State.wardrobe.coins == coins, "coins should be saved")
+	check(player:GetAttribute("Class") == "Stormcaller", "the picked kit should be saved")
 	check(#State.wardrobe.garments == 2 and State.wardrobe.equipped.Robe ~= nil, "the wardrobe should be saved")
 	checkWarnings("rejoin")
 end

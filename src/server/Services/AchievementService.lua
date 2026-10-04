@@ -133,22 +133,15 @@ function AchievementService.init()
 	for _, name in { "Kill", "Win", "TutorialDone", "DailyClaimed" } do
 		Events.on(name, check)
 	end
-	Events.on("MatchFinished", function(player: Player, place: number, ...: any)
-		local mode = select(5, ...) -- (after outOf, kills, mapId and classId)
-		if place == 1 and mode == "Royale" then
-			DataService.count(player, "royaleWins")
-		end
+	-- (battle royale and duel wins are counted where they're won: MatchService, DuelService)
+	Events.on("MatchFinished", function(player: Player, place: number)
 		if place <= 3 then
 			AchievementService.count(player, "top3")
 		else
 			AchievementService.check(player)
 		end
 	end)
-	Events.on("DuelFinished", function(player: Player, won: boolean)
-		if won then
-			AchievementService.count(player, "duelWins")
-		end
-	end)
+	Events.on("DuelFinished", check)
 	local counters = {
 		ChestOpened = "chests",
 		Forged = "forged",

@@ -215,6 +215,9 @@ local function finish(duel: Duel, winner: Combatant?, reason: string)
 				if won then "duel won" else "duel played",
 				{ type = "Gameplay", sku = "Duel" }
 			)
+			if won then
+				DataService.count(player, "duelWins") -- (for the achievements and the leaderboard)
+			end
 			Events.fire("DuelFinished", player, won, rival.isBot)
 		end
 	end
@@ -258,6 +261,14 @@ local function prepare(c: Combatant, duel: Duel)
 	c.status = {}
 	c.locked = true
 	c.dropping = nil
+	-- no kit, no outfit or familiar bonuses: both duelists start equal (players are re-dressed, and
+	-- their bonuses come back, when they respawn in the library afterwards)
+	c.gear = {}
+	local hum = c.humanoid
+	if hum then
+		hum.MaxHealth = Config.Combat.MaxHealth
+		hum.Health = Config.Combat.MaxHealth
+	end
 end
 
 -- Starts a duel between two combatants (`b` may be nil: a bot steps in).

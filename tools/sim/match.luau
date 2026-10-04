@@ -449,10 +449,10 @@ do
 	local board = MapService.hub and MapService.hub.leaderboard
 	if not board or string.find(board.footer.Text, "All servers", 1, true) == nil then
 		fail("the leaderboard board should be online")
-	elseif string.find(board.wins.Text, player.Name, 1, true) == nil then
-		fail("the leaderboard should list the player's wins: " .. board.wins.Text)
+	elseif string.find(board.columns.wins.Text, player.Name, 1, true) == nil then
+		fail("the leaderboard should list the player's Survival Games wins: " .. board.columns.wins.Text)
 	end
-	print("leaderboard: " .. string.gsub(board and board.wins.Text or "", "\n", " | "))
+	print("leaderboard: " .. string.gsub(board and board.columns.wins.Text or "", "\n", " | "))
 end
 
 -- plus today's daily reward and any achievements the matches unlocked
@@ -572,6 +572,7 @@ end)
 --    match is decided.
 dev("Loadout", { on = false })
 dev("God", { on = true }) -- (the passive player would only get in the way of the test by dying early)
+dev("GiveOutfit", { rarity = "Mythic" }) -- (its bonuses count in the battle royale, not in duels)
 if not waitUntil(function()
 	return me ~= nil and not me.inMatch
 end, 60) then
@@ -729,6 +730,9 @@ end
 if type(player:GetAttribute("RealmName")) ~= "string" then
 	fail("the player should know which realm they're in")
 end
+if next(me.gear) == nil then
+	fail("the player's outfit bonuses should follow them into the battle royale")
+end
 -- the circles: the first one holds, then the storm moves in (its centre too)
 local firstCenter = Mock.repAttributes.StormCenter
 local holdLeft = (Mock.repAttributes.StormMovesAt or 0) - Mock.workspace:GetServerTimeNow()
@@ -753,6 +757,10 @@ if firstCenter == Mock.repAttributes.StormCenter and Mock.repAttributes.StormRad
 end
 -- the final storm burns everyone out: the match is decided
 dev("God", { on = false })
+local royaleProfile = DataService.profile(player)
+local coinsBeforeEnd = royaleProfile.coins
+local achievementsBeforeEnd = table.clone(royaleProfile.achievements)
+local fortune = me.gear.fortune or 0
 dev("Advance", { seconds = 400 })
 local winnersBefore = winners
 if not waitUntil(function()
@@ -771,6 +779,21 @@ for _, c in riders do
 end
 if not me.place then
 	fail("the player should have a finishing place")
+else
+	-- 50 coins for 1st, one less per place (plus the outfit's Fortune), and any achievements
+	local base = math.max(1, Config.Royale.CoinsForFirst + 1 - me.place)
+	local expected = base + math.floor(base * fortune + 0.5)
+	for id in royaleProfile.achievements do
+		if not achievementsBeforeEnd[id] then
+			expected += Achievements.ById[id].reward
+		end
+	end
+	local gained = royaleProfile.coins - coinsBeforeEnd
+	if gained ~= expected then
+		fail(string.format("finishing %d of %d should pay %d coins, got %d", me.place, #riders, expected, gained))
+	else
+		print(string.format("battle royale coins: %d for finishing %d of %d", gained, me.place, #riders))
+	end
 end
 waitUntil(function()
 	return me ~= nil and not me.inMatch and Mock.repAttributes.Phase ~= "Ended"
@@ -827,13 +850,22 @@ if duel then
 	if DamageService.canHurt(rival, me, false) then
 		fail("no damage before the duel's countdown ends")
 	end
+	-- a level playing field: no outfit or familiar bonuses, no kit
+	if next(me.gear) ~= nil or next(rival.gear) ~= nil then
+		fail("outfit and familiar bonuses don't count in a duel")
+	end
+	if me.humanoid.MaxHealth ~= Config.Combat.MaxHealth or rival.humanoid.MaxHealth ~= Config.Combat.MaxHealth then
+		fail("both duelists start with the same health")
+	end
 	waitUntil(function()
 		return duel.state == "Fight"
 	end, 10)
 	if not DamageService.canHurt(rival, me, false) then
 		fail("duelists can hurt each other once the fight is on")
 	end
-	local coinsBefore = DataService.profile(player).coins
+	local duelProfile = DataService.profile(player)
+	local coinsBefore = duelProfile.coins
+	local achievementsBeforeDuel = table.clone(duelProfile.achievements)
 	rival.lastAttacker = me
 	rival.lastAttackTime = Mock.workspace:GetServerTimeNow()
 	rival.humanoid.Health = 0
@@ -841,13 +873,36 @@ if duel then
 	if duel.winner ~= me or duelResults[#duelResults] ~= true then
 		fail("knocking the rival out should win the duel")
 	end
-	local gained = DataService.profile(player).coins - coinsBefore
-	if gained < Config.Duel.WinCoins then
-		fail("the duel winner should earn " .. Config.Duel.WinCoins .. " coins, got " .. gained)
+	local expectedDuel = Config.Duel.WinCoins
+	for id in duelProfile.achievements do
+		if not achievementsBeforeDuel[id] then
+			expectedDuel += Achievements.ById[id].reward
+		end
+	end
+	local gained = duelProfile.coins - coinsBefore
+	if gained ~= expectedDuel then
+		fail("the duel winner should earn " .. expectedDuel .. " coins, got " .. gained)
 	end
 	step(6)
 	if me.duel ~= nil or player:GetAttribute("Mode") ~= nil or me.inMatch then
 		fail("after the duel the player should be back in the library")
+	end
+	if next(me.gear) == nil then
+		fail("back from the duel the outfit's bonuses should return")
+	end
+	-- the duel leaderboard
+	local LeaderboardService = server.load("Server/Services/LeaderboardService")
+	LeaderboardService.refresh()
+	local duelTop = LeaderboardService.top.duelWins
+	if not duelTop[1] or duelTop[1].userId ~= player.UserId or duelTop[1].value ~= 1 then
+		fail("the duel win should reach the global duel leaderboard")
+	end
+	local hall = MapService.hub and MapService.hub.leaderboard
+	if not hall or not string.find(hall.columns.duelWins.Text, player.Name, 1, true) then
+		fail("the Hall of Champions should list the duel winner")
+	end
+	if not hall or not string.find(hall.columns.royaleWins.Text, "Nobody yet", 1, true) then
+		fail("nobody has won a battle royale yet (the bots did)")
 	end
 	if not me.queued or me.queuedMode ~= "Duel" then
 		fail("duelists stay queued for their next opponent")

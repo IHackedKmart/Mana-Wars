@@ -216,12 +216,17 @@ chapter("Welcome", "📖  Welcome", function()
 	para(
 		"Press <b>▶️ Play</b> (or walk through the Plaza's portal) and pick one:\n"
 			.. "<b>⚔️ Survival Games:</b> the classic, explained below.\n"
-			.. "<b>🤺 1v1 Duel:</b> a floating arena, one rival, one random spell and one random potion each. Sudden death after "
+			.. "<b>🤺 1v1 Duel:</b> a floating arena, one rival, one random spell and one random potion each. Your kit, outfit bonuses and familiar powers stay home, so it's a fair fight. Sudden death after "
 			.. Config.Duel.SuddenDeathAt
-			.. " seconds.\n"
+			.. " seconds. The winner earns <b>"
+			.. Config.Duel.WinCoins
+			.. "</b> coins, the loser "
+			.. Config.Duel.LoseCoins
+			.. ".\n"
 			.. "<b>🧞 Battle Royale:</b> up to "
 			.. Config.Royale.MaxParticipants
-			.. " mages ride a <b>magic carpet</b> across an enormous island of five realms. Press <b>SPACE</b> to jump off wherever you like and glide down (steer with your movement keys; nobody can hurt you until you land). Loot the towns, castles and villages, and stay inside the <b>storm circles</b>: the next one shows as a faint white wall before the storm moves in."
+			.. " mages ride a <b>magic carpet</b> across an enormous island of five realms. Press <b>SPACE</b> to jump off wherever you like and glide down (steer with your movement keys; nobody can hurt you until you land). Loot the towns, castles and villages, and stay inside the <b>storm circles</b>: the next one shows as a faint white wall before the storm moves in.\n"
+			.. "Your <b>kit</b>, your outfit's bonuses and your familiar come with you into Survival Games and the Battle Royale, every match."
 	)
 	subheading("How a Survival Games match plays out")
 	para(
@@ -493,7 +498,13 @@ chapter("Wardrobe", "👘  Robes & Familiars", function()
 			.. Config.Economy.CoinsForFirst
 			.. "</b>, 2nd gets "
 			.. Config.Economy.CoinsForFirst - 1
-			.. " ... all the way down to 1 for 12th. New mages start with "
+			.. " ... all the way down to 1 for 12th. A <b>Battle Royale</b> pays "
+			.. Config.Royale.CoinsForFirst
+			.. " for 1st, one less for each place after that, down to 1. A <b>duel</b> pays "
+			.. Config.Duel.WinCoins
+			.. " to the winner and "
+			.. Config.Duel.LoseCoins
+			.. " to the loser. New mages start with "
 			.. Config.Economy.StarterCoins
 			.. " coins and a plain robe and hat."
 	)

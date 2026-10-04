@@ -168,6 +168,11 @@ end
 -- Eliminations
 ---------------------------------------------------------------------------
 
+-- Coins for 1st place in the match being played (the rest get one less per place, at least 1).
+local function coinsForFirst(): number
+	return if GameState.mode == "Royale" then RC.CoinsForFirst else Config.Economy.CoinsForFirst
+end
+
 onDied = function(c: Combatant)
 	if c.duel then
 		DuelService.onDied(c) -- duels keep their own score
@@ -192,7 +197,7 @@ onDied = function(c: Combatant)
 		local place = stillAlive + 1
 		c.place = place
 		if c.player then
-			WardrobeService.awardPlacement(c, place, initialCount)
+			WardrobeService.awardPlacement(c, place, initialCount, coinsForFirst())
 		end
 	end
 	local pos = if c.root then (c.root :: BasePart).Position else nil
@@ -485,6 +490,10 @@ local function finishMatch(winner: Combatant?, def: MapDefs.MapDef, mode: string
 	})
 	if winner and winner.player then
 		DataService.addWin(winner.player)
+		if mode == "Royale" then
+			-- (wins counts every big-match win; the leaderboards split out the battle royale's)
+			DataService.count(winner.player, "royaleWins")
+		end
 	end
 	-- coins for everyone still standing: the winner first, then by kills
 	local standing = {}
@@ -507,7 +516,7 @@ local function finishMatch(winner: Combatant?, def: MapDefs.MapDef, mode: string
 	for i, c in standing do
 		c.place = i
 		if c.player and c.player.Parent then
-			WardrobeService.awardPlacement(c, i, initialCount)
+			WardrobeService.awardPlacement(c, i, initialCount, coinsForFirst())
 		end
 	end
 	for _, c in participants do

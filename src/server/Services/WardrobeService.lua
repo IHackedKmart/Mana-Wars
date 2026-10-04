@@ -116,13 +116,14 @@ local function ordinal(n: number): string
 	return n .. suffix
 end
 
--- Match rewards: 1st place gets 12, 12th gets 1 (Fortune enchantments add a bonus).
-function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: number)
+-- Match rewards: in Survival Games 1st place gets 12 and 12th gets 1; a battle royale passes its
+-- own `forFirst` (50 for 1st down to 1 for 50th). Fortune enchantments add a bonus.
+function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: number, forFirst: number?)
 	local player = c.player
 	if not player then
 		return
 	end
-	local base = math.max(1, E.CoinsForFirst + 1 - place)
+	local base = math.max(1, (forFirst or E.CoinsForFirst) + 1 - place)
 	local bonus = math.floor(base * (c.gear.fortune or 0) + 0.5)
 	WardrobeService.addCoins(
 		player,
@@ -254,7 +255,9 @@ function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?, 
 	if stat then
 		gear[stat] = (gear[stat] or 0) + amount
 	end
-	c.gear = gear
+	-- a duel is a level playing field: you still look the part, but your outfit's and familiar's
+	-- bonuses only count in Survival Games and the Battle Royale
+	c.gear = if c.duel then {} else gear
 	c.familiar = familiar
 	local model = c.model
 	if not model then

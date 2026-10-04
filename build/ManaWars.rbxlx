@@ -958,8 +958,8 @@ Config.Duel = {
 	SuddenDeathAt = 75, -- seconds into the fight: the arena starts burning both mages
 	SuddenDeathDps = 6,
 	TimeLimit = 150, -- then the healthier mage wins (a draw if level)
-	WinCoins = 3,
-	LoseCoins = 1,
+	WinCoins = 10,
+	LoseCoins = 2,
 	WandRarity = "Rare", -- both duelists get the same wand
 	SpellRarities = { "Common", "Uncommon", "Rare", "Epic" }, -- the random spell comes from these
 }
@@ -986,6 +986,7 @@ Config.Royale = {
 	},
 	ChestRefillAt = 300,
 	HardTimeLimit = 1000,
+	CoinsForFirst = 50, -- 1st place earns 50 Enchanted Coins, 2nd 49 ... 50th earns 1 (never less than 1)
 }
 
 -- Bots fill empty slots so that small servers (and solo testing) still get a real match.
@@ -3525,7 +3526,7 @@ Modes.List = {
 		icon = "🤺",
 		players = "2 mages",
 		tagline = "One spell. One potion. One winner.",
-		description = "Face a single rival in a floating arena. You each get a random spell and one potion: no chests, no excuses. Starts as soon as an opponent is found.",
+		description = "Face a single rival in a floating arena. You each get a random spell and one potion, and kits and outfit bonuses stay home: a fair fight. Starts as soon as an opponent is found.",
 		color = { 200, 60, 80 },
 	},
 	{
@@ -9526,7 +9527,8 @@ export type HubInfo = {
 	floorY: number,
 }
 
-export type Leaderboard = { wins: TextLabel, kills: TextLabel, footer: TextLabel }
+-- columns by leaderboard id ("wins" = Survival Games, "royaleWins", "duelWins", "kills")
+export type Leaderboard = { columns: { [string]: TextLabel }, footer: TextLabel }
 
 -- Far enough from the arena and the library that they never get in each other's way.
 Hub.CENTER_Z = 700
@@ -9592,10 +9594,11 @@ local function board(
 	}, gui)
 end
 
--- The Hall of Champions: a tall gilded board with two columns, most wins and most kills.
+-- The Hall of Champions: a wide gilded board with a column per game mode (most Survival Games,
+-- Battle Royale and duel wins) and one for the most kills.
 local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): Leaderboard
 	local model = Build.model("Leaderboard", parent)
-	local size = Vector2.new(30, 17)
+	local size = Vector2.new(40, 17)
 	local face = part(model, "BoardFace", Vector3.new(size.X, size.Y, 0.6), cf, M.WoodPlanks, Props.DARK_WOOD)
 	part(
 		model,
@@ -9643,7 +9646,7 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 	local function column(x: number, heading: string): TextLabel
 		Build.make("TextLabel", {
 			Name = "Heading",
-			Size = UDim2.fromScale(0.44, 0.08),
+			Size = UDim2.fromScale(0.22, 0.07),
 			Position = UDim2.fromScale(x, 0.17),
 			BackgroundTransparency = 1,
 			Text = heading,
@@ -9653,7 +9656,7 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 		}, gui)
 		return Build.make("TextLabel", {
 			Name = "Column",
-			Size = UDim2.fromScale(0.44, 0.66),
+			Size = UDim2.fromScale(0.22, 0.66),
 			Position = UDim2.fromScale(x, 0.26),
 			BackgroundTransparency = 1,
 			Text = "Loading...",
@@ -9665,8 +9668,23 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 			TextColor3 = Color3.fromRGB(255, 235, 190),
 		}, gui)
 	end
-	local wins = column(0.04, "⚔️ MOST WINS")
-	local kills = column(0.52, "💀 MOST KILLS")
+	local columns = {
+		wins = column(0.025, "⚔️ SURVIVAL WINS"),
+		royaleWins = column(0.268, "🧞 ROYALE WINS"),
+		duelWins = column(0.512, "🤺 DUEL WINS"),
+		kills = column(0.755, "💀 MOST KILLS"),
+	}
+	-- thin gold dividers between the columns
+	for i = 1, 3 do
+		Build.make("Frame", {
+			Name = "Divider",
+			Size = UDim2.fromScale(0.003, 0.72),
+			Position = UDim2.fromScale(0.2465 + (i - 1) * 0.2435, 0.18),
+			BackgroundColor3 = Color3.fromRGB(200, 160, 80),
+			BackgroundTransparency = 0.4,
+			BorderSizePixel = 0,
+		}, gui)
+	end
 	local footer = Build.make("TextLabel", {
 		Name = "Footer",
 		Size = UDim2.fromScale(0.92, 0.05),
@@ -9677,7 +9695,7 @@ local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): L
 		TextScaled = true,
 		TextColor3 = Color3.fromRGB(170, 160, 190),
 	}, gui)
-	return { wins = wins, kills = kills, footer = footer }
+	return { columns = columns, footer = footer }
 end
 
 local function fountain(parent: Instance, animated: Instance, c: Vector3)
@@ -10336,9 +10354,9 @@ function Hub.build(): HubInfo
 	for i = 1, 22 do
 		local a = (i / 22) * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
 		local deg = math.deg(a) % 360
-		-- keep the portal, the range gate and the towers clear
-		local blocked = deg < 32 or deg > 328 or (deg > 248 and deg < 292)
-		for _, t in { 150, 210, 305, 59, 90 } do
+		-- keep the portal, the range gate, the towers and the Hall of Champions (at 90°) clear
+		local blocked = deg < 32 or deg > 328 or (deg > 248 and deg < 292) or math.abs(deg - 90) < 17
+		for _, t in { 150, 210, 305, 59 } do
 			if math.abs(deg - t) < 9 then
 				blocked = true
 			end
@@ -16132,22 +16150,15 @@ function AchievementService.init()
 	for _, name in { "Kill", "Win", "TutorialDone", "DailyClaimed" } do
 		Events.on(name, check)
 	end
-	Events.on("MatchFinished", function(player: Player, place: number, ...: any)
-		local mode = select(5, ...) -- (after outOf, kills, mapId and classId)
-		if place == 1 and mode == "Royale" then
-			DataService.count(player, "royaleWins")
-		end
+	-- (battle royale and duel wins are counted where they're won: MatchService, DuelService)
+	Events.on("MatchFinished", function(player: Player, place: number)
 		if place <= 3 then
 			AchievementService.count(player, "top3")
 		else
 			AchievementService.check(player)
 		end
 	end)
-	Events.on("DuelFinished", function(player: Player, won: boolean)
-		if won then
-			AchievementService.count(player, "duelWins")
-		end
-	end)
+	Events.on("DuelFinished", check)
 	local counters = {
 		ChestOpened = "chests",
 		Forged = "forged",
@@ -18557,6 +18568,8 @@ return ChestService
             <string name="Source"><![CDATA[-- Kit (class) selection and ownership. Every paid kit is its own game pass (Config.Kits);
 -- Roblox Premium members get the cheapest tier(s) free, and Studio unlocks everything for testing.
 -- Owned kits are published to the client as the "OwnedKits" attribute (comma separated ids).
+-- The kit a player picks is saved with their profile, so it's still picked next time they play.
+-- Kits are used in Survival Games and the Battle Royale; duels hand out their own random loadout.
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
@@ -18568,12 +18581,15 @@ local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local Classes = require(Shared.Classes)
 local Events = require(script.Parent.Events)
+local DataService = require(script.Parent.DataService)
 
 local ClassService = {}
 
 local owned: { [Player]: { [string]: boolean } } = setmetatable({}, { __mode = "k" }) :: any
 -- dev panel: "all" owns every kit, "locked" ignores the Studio unlock (to test the shop)
 local devMode: { [Player]: string } = setmetatable({}, { __mode = "k" }) :: any
+-- players whose game passes have been looked up this session
+local checked: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 local function passFor(classId: string): number
 	return Config.Kits.GamePassIds[classId] or 0
@@ -18636,9 +18652,20 @@ function ClassService.refresh(player: Player)
 			end
 		end
 	end
+	checked[player] = true
 	publish(player)
 	if not ClassService.owns(player, tostring(player:GetAttribute("Class"))) then
 		player:SetAttribute("Class", Classes.Default)
+	end
+end
+
+-- Picks a kit and remembers it for next time.
+function ClassService.select(player: Player, classId: string)
+	player:SetAttribute("Class", classId)
+	local profile = DataService.profile(player)
+	if profile and profile.kit ~= classId then
+		profile.kit = classId
+		DataService.markDirty(player)
 	end
 end
 
@@ -18680,6 +18707,14 @@ function ClassService.randomClass(rng: Random): string
 end
 
 function ClassService.init()
+	-- the kit picked last time (once their game passes are known, an unowned one falls back to the
+	-- free kit; refresh() checks it again if the profile loads first)
+	DataService.onLoaded(function(player, profile)
+		local saved = profile.kit
+		if Classes.ById[saved] and (not checked[player] or ClassService.owns(player, saved)) then
+			player:SetAttribute("Class", saved)
+		end
+	end)
 	Players.PlayerMembershipChanged:Connect(function(player)
 		publish(player)
 	end)
@@ -18690,7 +18725,7 @@ function ClassService.init()
 			owned[player] = set
 			set[classId] = true
 			publish(player)
-			player:SetAttribute("Class", classId)
+			ClassService.select(player, classId)
 			Events.fire("PassPurchased", player, classId)
 		end
 	end)
@@ -18707,7 +18742,7 @@ function ClassService.init()
 			if not ClassService.owns(player, class.id) then
 				return false, "You don't own the " .. class.name .. " kit yet"
 			end
-			player:SetAttribute("Class", class.id)
+			ClassService.select(player, class.id)
 			Events.fire("KitPicked", player, class.id)
 			return true, class.name .. " selected"
 		elseif action == "Buy" then
@@ -19354,6 +19389,7 @@ export type Profile = {
 	achievements: { [string]: number }, -- achievement id -> when it was unlocked (os.time)
 	daily: { last: number, streak: number, best: number }, -- daily reward: last day claimed (UTC day number)
 	onboarding: { [string]: boolean }, -- analytics onboarding steps already logged
+	kit: string, -- the kit (class) picked at the altar, kept between sessions
 }
 
 local cache: { [Player]: Profile } = {}
@@ -19388,6 +19424,7 @@ local function newProfile(): Profile
 		achievements = {},
 		daily = { last = 0, streak = 0, best = 0 },
 		onboarding = {},
+		kit = "Apprentice",
 	}
 end
 
@@ -19418,6 +19455,9 @@ local function fromSaved(data: any): Profile
 	p.counters = cleanMap(data.counters, "number")
 	p.achievements = cleanMap(data.achievements, "number")
 	p.onboarding = cleanMap(data.onboarding, "boolean")
+	if type(data.kit) == "string" then
+		p.kit = data.kit
+	end
 	if type(data.daily) == "table" then
 		p.daily.last = tonumber(data.daily.last) or 0
 		p.daily.streak = tonumber(data.daily.streak) or 0
@@ -19447,6 +19487,7 @@ local function toSaved(p: Profile, session: { job: string, t: number }?): { [str
 		achievements = p.achievements,
 		daily = p.daily,
 		onboarding = p.onboarding,
+		kit = p.kit,
 		session = session,
 	}
 end
@@ -20402,6 +20443,9 @@ local function finish(duel: Duel, winner: Combatant?, reason: string)
 				if won then "duel won" else "duel played",
 				{ type = "Gameplay", sku = "Duel" }
 			)
+			if won then
+				DataService.count(player, "duelWins") -- (for the achievements and the leaderboard)
+			end
 			Events.fire("DuelFinished", player, won, rival.isBot)
 		end
 	end
@@ -20445,6 +20489,14 @@ local function prepare(c: Combatant, duel: Duel)
 	c.status = {}
 	c.locked = true
 	c.dropping = nil
+	-- no kit, no outfit or familiar bonuses: both duelists start equal (players are re-dressed, and
+	-- their bonuses come back, when they respawn in the library afterwards)
+	c.gear = {}
+	local hum = c.humanoid
+	if hum then
+		hum.MaxHealth = Config.Combat.MaxHealth
+		hum.Health = Config.Combat.MaxHealth
+	end
 end
 
 -- Starts a duel between two combatants (`b` may be nil: a bot steps in).
@@ -20782,7 +20834,8 @@ end
 
 function FamiliarService.tryNip(c: Combatant, now: number): boolean
 	local power, value, element = powerOf(c)
-	if power ~= "nip" or not Combatants.canAct(c) or (nextNip[c] or 0) > now then
+	-- (familiars only fight in Survival Games and the Battle Royale: duels are a level playing field)
+	if power ~= "nip" or c.duel or not Combatants.canAct(c) or (nextNip[c] or 0) > now then
 		return false
 	end
 	local target = nearestFoe(c, Combatants.centerOf(c), Familiars.NipRange)
@@ -20806,7 +20859,7 @@ end
 -- Called by MatchService when a combatant falls (before they're cleaned up).
 function FamiliarService.onDeath(c: Combatant, position: Vector3?)
 	local power, value = powerOf(c)
-	if power ~= "emberWake" or not position then
+	if power ~= "emberWake" or not position or c.duel then
 		return
 	end
 	local color, color2 = colorsOf("Fire")
@@ -21731,10 +21784,11 @@ return InventoryService
         <Item class="ModuleScript" referent="63">
           <Properties>
             <string name="Name">LeaderboardService</string>
-            <string name="Source"><![CDATA[-- The global leaderboard: everyone's lifetime wins and kills go into two OrderedDataStores (shared
--- by every server), and the Hall of Champions board in the Plaza shows the top players of each,
--- refreshed every Config.Leaderboard.RefreshSeconds. Scores are written after each match and when
--- a player leaves. (The player list's Wins / Kills columns are the per-player leaderstats.)
+            <string name="Source"><![CDATA[-- The global leaderboards, one per game mode: everyone's lifetime Survival Games wins, Battle
+-- Royale wins and duel wins, plus kills in every mode, each go into an OrderedDataStore (shared by
+-- every server). The Hall of Champions board in the Plaza shows the top players of each, refreshed
+-- every Config.Leaderboard.RefreshSeconds. Scores are written after each match or duel and when a
+-- player leaves. (The player list's Wins / Kills columns are the per-player leaderstats.)
 
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
@@ -21749,12 +21803,40 @@ local LeaderboardService = {}
 
 export type Entry = { userId: number, name: string, value: number }
 
-local STATS = { "wins", "kills" }
+-- Each board column: which saved stat it ranks. (The "wins" store has always held Survival Games
+-- wins; a profile's wins count every big-match win, so the battle royale's are taken back out.)
+type Board = { id: string, valueOf: (DataService.Profile) -> number }
+local BOARDS: { Board } = {
+	{
+		id = "wins",
+		valueOf = function(p)
+			return math.max(0, p.wins - (p.counters.royaleWins or 0))
+		end,
+	},
+	{
+		id = "royaleWins",
+		valueOf = function(p)
+			return p.counters.royaleWins or 0
+		end,
+	},
+	{
+		id = "duelWins",
+		valueOf = function(p)
+			return p.counters.duelWins or 0
+		end,
+	},
+	{
+		id = "kills",
+		valueOf = function(p)
+			return p.kills
+		end,
+	},
+}
 local stores: { [string]: OrderedDataStore } = {}
 local pushed: { [Player]: { [string]: number } } = {}
 local names: { [number]: string } = {}
 
-LeaderboardService.top = { wins = {}, kills = {} } :: { [string]: { Entry } }
+LeaderboardService.top = { wins = {}, royaleWins = {}, duelWins = {}, kills = {} } :: { [string]: { Entry } }
 LeaderboardService.online = false
 
 local function nameOf(userId: number): string
@@ -21785,7 +21867,7 @@ end
 -- The text of one column of the board.
 function LeaderboardService.columnText(entries: { Entry }): string
 	if #entries == 0 then
-		return "<i>Nobody yet. Win a match to claim the first spot!</i>"
+		return "<i>Nobody yet. Be the first!</i>"
 	end
 	local lines = {}
 	for rank, e in entries do
@@ -21804,18 +21886,20 @@ local function render()
 		return
 	end
 	local board = hub.leaderboard
-	if not LeaderboardService.online then
-		board.wins.Text = "<i>Offline</i>"
-		board.kills.Text = "<i>Offline</i>"
-		board.footer.Text = "The leaderboard needs DataStores: turn on API access in Game Settings » Security"
-		return
+	for _, b in BOARDS do
+		local column = board.columns[b.id]
+		if column then
+			column.Text = if LeaderboardService.online
+				then LeaderboardService.columnText(LeaderboardService.top[b.id] or {})
+				else "<i>Offline</i>"
+		end
 	end
-	board.wins.Text = LeaderboardService.columnText(LeaderboardService.top.wins)
-	board.kills.Text = LeaderboardService.columnText(LeaderboardService.top.kills)
-	board.footer.Text = "All servers, all time  ·  updates every few minutes"
+	board.footer.Text = if LeaderboardService.online
+		then "All servers, all time  ·  updates every few minutes"
+		else "The leaderboard needs DataStores: turn on API access in Game Settings » Security"
 end
 
--- Writes a player's wins and kills to the global lists (only what changed since last time).
+-- Writes a player's scores to the global lists (only what changed since last time).
 function LeaderboardService.push(player: Player)
 	local profile = DataService.profile(player)
 	if not profile or not LeaderboardService.online then
@@ -21823,8 +21907,9 @@ function LeaderboardService.push(player: Player)
 	end
 	local last = pushed[player] or {}
 	pushed[player] = last
-	for _, stat in STATS do
-		local value = (profile :: any)[stat] :: number
+	for _, b in BOARDS do
+		local stat = b.id
+		local value = b.valueOf(profile :: DataService.Profile)
 		if value > 0 and last[stat] ~= value then
 			local store = stores[stat]
 			local ok, err = pcall(function()
@@ -21842,7 +21927,8 @@ end
 -- Reads the top of each list and redraws the board.
 function LeaderboardService.refresh()
 	if LeaderboardService.online then
-		for _, stat in STATS do
+		for _, b in BOARDS do
+			local stat = b.id
 			local store = stores[stat]
 			local ok, page = pcall(function()
 				return store:GetSortedAsync(false, Config.Leaderboard.Size):GetCurrentPage()
@@ -21864,16 +21950,19 @@ end
 
 function LeaderboardService.init()
 	local ok, err = pcall(function()
-		for _, stat in STATS do
-			stores[stat] = DataStoreService:GetOrderedDataStore(DataService.storeName("Leaderboard_" .. stat))
+		for _, b in BOARDS do
+			stores[b.id] = DataStoreService:GetOrderedDataStore(DataService.storeName("Leaderboard_" .. b.id))
 		end
 	end)
-	LeaderboardService.online = ok and stores.wins ~= nil and stores.kills ~= nil
+	LeaderboardService.online = ok and stores.kills ~= nil
 	if not LeaderboardService.online then
 		warn("[Leaderboard] DataStores unavailable, the Hall of Champions stays empty: " .. tostring(err))
 	end
 
 	Events.on("MatchFinished", function(player: Player)
+		LeaderboardService.push(player)
+	end)
+	Events.on("DuelFinished", function(player: Player)
 		LeaderboardService.push(player)
 	end)
 	DataService.onLoaded(function(player)
@@ -22529,6 +22618,11 @@ end
 -- Eliminations
 ---------------------------------------------------------------------------
 
+-- Coins for 1st place in the match being played (the rest get one less per place, at least 1).
+local function coinsForFirst(): number
+	return if GameState.mode == "Royale" then RC.CoinsForFirst else Config.Economy.CoinsForFirst
+end
+
 onDied = function(c: Combatant)
 	if c.duel then
 		DuelService.onDied(c) -- duels keep their own score
@@ -22553,7 +22647,7 @@ onDied = function(c: Combatant)
 		local place = stillAlive + 1
 		c.place = place
 		if c.player then
-			WardrobeService.awardPlacement(c, place, initialCount)
+			WardrobeService.awardPlacement(c, place, initialCount, coinsForFirst())
 		end
 	end
 	local pos = if c.root then (c.root :: BasePart).Position else nil
@@ -22846,6 +22940,10 @@ local function finishMatch(winner: Combatant?, def: MapDefs.MapDef, mode: string
 	})
 	if winner and winner.player then
 		DataService.addWin(winner.player)
+		if mode == "Royale" then
+			-- (wins counts every big-match win; the leaderboards split out the battle royale's)
+			DataService.count(winner.player, "royaleWins")
+		end
 	end
 	-- coins for everyone still standing: the winner first, then by kills
 	local standing = {}
@@ -22868,7 +22966,7 @@ local function finishMatch(winner: Combatant?, def: MapDefs.MapDef, mode: string
 	for i, c in standing do
 		c.place = i
 		if c.player and c.player.Parent then
-			WardrobeService.awardPlacement(c, i, initialCount)
+			WardrobeService.awardPlacement(c, i, initialCount, coinsForFirst())
 		end
 	end
 	for _, c in participants do
@@ -26044,13 +26142,14 @@ local function ordinal(n: number): string
 	return n .. suffix
 end
 
--- Match rewards: 1st place gets 12, 12th gets 1 (Fortune enchantments add a bonus).
-function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: number)
+-- Match rewards: in Survival Games 1st place gets 12 and 12th gets 1; a battle royale passes its
+-- own `forFirst` (50 for 1st down to 1 for 50th). Fortune enchantments add a bonus.
+function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: number, forFirst: number?)
 	local player = c.player
 	if not player then
 		return
 	end
-	local base = math.max(1, E.CoinsForFirst + 1 - place)
+	local base = math.max(1, (forFirst or E.CoinsForFirst) + 1 - place)
 	local bonus = math.floor(base * (c.gear.fortune or 0) + 0.5)
 	WardrobeService.addCoins(
 		player,
@@ -26182,7 +26281,9 @@ function WardrobeService.dressWith(c: Combatant, robe: Garment?, hat: Garment?, 
 	if stat then
 		gear[stat] = (gear[stat] or 0) + amount
 	end
-	c.gear = gear
+	-- a duel is a level playing field: you still look the part, but your outfit's and familiar's
+	-- bonuses only count in Survival Games and the Battle Royale
+	c.gear = if c.duel then {} else gear
 	c.familiar = familiar
 	local model = c.model
 	if not model then
@@ -31701,12 +31802,17 @@ chapter("Welcome", "📖  Welcome", function()
 	para(
 		"Press <b>▶️ Play</b> (or walk through the Plaza's portal) and pick one:\n"
 			.. "<b>⚔️ Survival Games:</b> the classic, explained below.\n"
-			.. "<b>🤺 1v1 Duel:</b> a floating arena, one rival, one random spell and one random potion each. Sudden death after "
+			.. "<b>🤺 1v1 Duel:</b> a floating arena, one rival, one random spell and one random potion each. Your kit, outfit bonuses and familiar powers stay home, so it's a fair fight. Sudden death after "
 			.. Config.Duel.SuddenDeathAt
-			.. " seconds.\n"
+			.. " seconds. The winner earns <b>"
+			.. Config.Duel.WinCoins
+			.. "</b> coins, the loser "
+			.. Config.Duel.LoseCoins
+			.. ".\n"
 			.. "<b>🧞 Battle Royale:</b> up to "
 			.. Config.Royale.MaxParticipants
-			.. " mages ride a <b>magic carpet</b> across an enormous island of five realms. Press <b>SPACE</b> to jump off wherever you like and glide down (steer with your movement keys; nobody can hurt you until you land). Loot the towns, castles and villages, and stay inside the <b>storm circles</b>: the next one shows as a faint white wall before the storm moves in."
+			.. " mages ride a <b>magic carpet</b> across an enormous island of five realms. Press <b>SPACE</b> to jump off wherever you like and glide down (steer with your movement keys; nobody can hurt you until you land). Loot the towns, castles and villages, and stay inside the <b>storm circles</b>: the next one shows as a faint white wall before the storm moves in.\n"
+			.. "Your <b>kit</b>, your outfit's bonuses and your familiar come with you into Survival Games and the Battle Royale, every match."
 	)
 	subheading("How a Survival Games match plays out")
 	para(
@@ -31978,7 +32084,13 @@ chapter("Wardrobe", "👘  Robes & Familiars", function()
 			.. Config.Economy.CoinsForFirst
 			.. "</b>, 2nd gets "
 			.. Config.Economy.CoinsForFirst - 1
-			.. " ... all the way down to 1 for 12th. New mages start with "
+			.. " ... all the way down to 1 for 12th. A <b>Battle Royale</b> pays "
+			.. Config.Royale.CoinsForFirst
+			.. " for 1st, one less for each place after that, down to 1. A <b>duel</b> pays "
+			.. Config.Duel.WinCoins
+			.. " to the winner and "
+			.. Config.Duel.LoseCoins
+			.. " to the loser. New mages start with "
 			.. Config.Economy.StarterCoins
 			.. " coins and a plain robe and hat."
 	)

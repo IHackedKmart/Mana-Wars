@@ -213,10 +213,10 @@ Kits (classes) decide what you start each match with. The Apprentice is free; ev
 | | Mode | Players | |
 |---|---|---|---|
 | ⚔️ | **Survival Games** | Up to 12 mages | Vote on one of five islands, start on a pedestal around the cornucopia, loot chests and outlast everyone as the Mana Storm closes in. |
-| 🤺 | **1v1 Duel** | 2 mages | Face a single rival in a floating arena. You each get a random spell and one potion: no chests, no excuses. Starts as soon as an opponent is found. |
+| 🤺 | **1v1 Duel** | 2 mages | Face a single rival in a floating arena. You each get a random spell and one potion, and kits and outfit bonuses stay home: a fair fight. Starts as soon as an opponent is found. |
 | 🧞 | **Battle Royale** | Up to 50 mages | Ride a flying carpet across an enormous island of five lands, jump off wherever you like and glide down. Loot villages, castles and ruins while the storm circle shrinks. |
 
-**Duels:** a bot steps in after 15s alone; sudden death at 75s (6 damage a second), time limit 150s; 3 coins for a win, 1 for a loss; up to 6 duels at once.
+**Duels:** a bot steps in after 15s alone; sudden death at 75s (6 damage a second), time limit 150s; 10 coins for a win, 2 for a loss; up to 6 duels at once.
 
 **Battle Royale:** up to 50 mages (bots fill to 20). The queue gathers for 30s while the island is built, then the magic carpet crosses it in 50s, 330 studs up. Gliders fall at 32 studs/s and steer at 55 studs/s. Chests refill at 300s.
 
@@ -261,7 +261,7 @@ In Survival Games, players vote between 3 random maps in the lobby before every 
 
 ## Robes, hats and coffers
 
-Matches pay **Enchanted Coins** by finishing place: 12 for 1st, 11 for 2nd ... 1 for 12th (plus the outfit's Fortune bonus). New players get 60 coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (10% fee, listings last 48 hours, 10 at a time).
+Matches pay **Enchanted Coins** by finishing place: 12 for 1st, 11 for 2nd ... 1 for 12th in Survival Games, and 50 for 1st down to 1 in a Battle Royale (plus the outfit's Fortune bonus). Duels pay 10 for a win and 2 for a loss. New players get 60 coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (10% fee, listings last 48 hours, 10 at a time).
 
 | | Coffer | Price | Parts | Odds | Only here |
 |---|---|---|---|---|---|
