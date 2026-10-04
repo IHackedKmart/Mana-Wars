@@ -324,7 +324,7 @@ line()
 local E = Config.Economy
 line(
 	string.format(
-		"Matches pay **Enchanted Coins** by finishing place: %d for 1st, %d for 2nd ... 1 for 12th in Survival Games, and %d for 1st down to 1 in a Battle Royale (plus the outfit's Fortune bonus). Duels pay %d for a win and %d for a loss. New players get %d coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (%d%% fee, listings last %d hours, %d at a time).",
+		"Matches pay **Enchanted Coins** by finishing place: %d for 1st, %d for 2nd ... 1 for 12th in Survival Games, and in a Battle Royale, counting real players only, N coins for the best of N players (up to %d) down to 1 (plus the outfit's Fortune bonus). Duels pay %d for a win and %d for a loss. New players get %d coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (%d%% fee, listings last %d hours, %d at a time).",
 		E.CoinsForFirst,
 		E.CoinsForFirst - 1,
 		Config.Royale.CoinsForFirst,

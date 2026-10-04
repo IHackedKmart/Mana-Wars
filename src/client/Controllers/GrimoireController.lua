@@ -498,9 +498,9 @@ chapter("Wardrobe", "👘  Robes & Familiars", function()
 			.. Config.Economy.CoinsForFirst
 			.. "</b>, 2nd gets "
 			.. Config.Economy.CoinsForFirst - 1
-			.. " ... all the way down to 1 for 12th. A <b>Battle Royale</b> pays "
+			.. " ... all the way down to 1 for 12th. A <b>Battle Royale</b> only counts real players (not bots): the best of N players earns N coins (up to "
 			.. Config.Royale.CoinsForFirst
-			.. " for 1st, one less for each place after that, down to 1. A <b>duel</b> pays "
+			.. " in a full match), one less for each place after that, down to 1. A <b>duel</b> pays "
 			.. Config.Duel.WinCoins
 			.. " to the winner and "
 			.. Config.Duel.LoseCoins

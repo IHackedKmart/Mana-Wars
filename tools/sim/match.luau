@@ -780,8 +780,10 @@ end
 if not me.place then
 	fail("the player should have a finishing place")
 else
-	-- 50 coins for 1st, one less per place (plus the outfit's Fortune), and any achievements
-	local base = math.max(1, Config.Royale.CoinsForFirst + 1 - me.place)
+	-- coins count real players only: one player in the match (plus 19 bots) earns 1 coin, whatever
+	-- the place (plus the outfit's Fortune), and any achievements
+	local players = 1
+	local base = math.max(1, math.min(Config.Royale.CoinsForFirst, players) + 1 - 1)
 	local expected = base + math.floor(base * fortune + 0.5)
 	for id in royaleProfile.achievements do
 		if not achievementsBeforeEnd[id] then

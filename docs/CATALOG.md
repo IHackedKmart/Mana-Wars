@@ -261,7 +261,7 @@ In Survival Games, players vote between 3 random maps in the lobby before every 
 
 ## Robes, hats and coffers
 
-Matches pay **Enchanted Coins** by finishing place: 12 for 1st, 11 for 2nd ... 1 for 12th in Survival Games, and 50 for 1st down to 1 in a Battle Royale (plus the outfit's Fortune bonus). Duels pay 10 for a win and 2 for a loss. New players get 60 coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (10% fee, listings last 48 hours, 10 at a time).
+Matches pay **Enchanted Coins** by finishing place: 12 for 1st, 11 for 2nd ... 1 for 12th in Survival Games, and in a Battle Royale, counting real players only, N coins for the best of N players (up to 50) down to 1 (plus the outfit's Fortune bonus). Duels pay 10 for a win and 2 for a loss. New players get 60 coins and a plain robe and hat. Coins buy **coffers** of robe and hat parts; parts are stitched into garments at the Tailor's Loom, or traded on the auction house (10% fee, listings last 48 hours, 10 at a time).
 
 | | Coffer | Price | Parts | Odds | Only here |
 |---|---|---|---|---|---|

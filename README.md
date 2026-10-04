@@ -51,7 +51,7 @@ Survival Games and Battle Royale take turns in the main arena. Whichever queue's
   - Each next circle shows as a faint white wall, and the HUD counts down to when the storm moves. Then the wall moves in, its centre sliding over to the new circle.
   - Each circle sits inside the last one. Being outside hurts more at every stage, from 2 up to 15 damage a second.
   - The chests refill after 5 minutes.
-- **Coins** are paid by finishing place: 50 for 1st, 49 for 2nd, and one less for each place after that, down to 1 for 50th (plus your outfit's Fortune bonus). The HUD shows which realm you're in.
+- **Coins** count real players only, so bots never inflate them. With N players in the match, the best-placed player earns N coins, the next N − 1, and so on down to 1 (plus your outfit's Fortune bonus). A full 50-player match pays 50 for 1st down to 1 for 50th. The HUD shows which realm you're in.
 - **Your kit, outfit and familiar come with you**, exactly as in Survival Games.
 
 Tune the modes in `Config.Duel` and `Config.Royale`, and the island itself in `MapDefs.Royale`.
@@ -235,7 +235,7 @@ The bonus part is a random reward from a paid item, so the odds are shown in the
 | Mode | Coins |
 |---|---|
 | Survival Games | by finishing place: 12 for 1st, 11 for 2nd ... 1 for 12th |
-| Battle Royale | by finishing place: 50 for 1st, 49 for 2nd ... 1 for 50th |
+| Battle Royale | by place among real players only: N coins for the best of N players, down to 1 (50 down to 1 in a full match) |
 | 1v1 Duel | 10 for a win, 2 for a loss |
 
 Outfits with the **Fortune** enchantment add a bonus on top of placement coins (not in duels). The amounts live in `Config.Economy.CoinsForFirst`, `Config.Royale.CoinsForFirst`, and `Config.Duel.WinCoins` / `LoseCoins`.

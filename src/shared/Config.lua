@@ -62,7 +62,9 @@ Config.Royale = {
 	},
 	ChestRefillAt = 300,
 	HardTimeLimit = 1000,
-	CoinsForFirst = 50, -- 1st place earns 50 Enchanted Coins, 2nd 49 ... 50th earns 1 (never less than 1)
+	-- coins count real players only (bots never add to them): with N players in the match, the best
+	-- placed player earns N coins (at most this), the next N - 1 ... the last 1. A full 50: 50 down to 1.
+	CoinsForFirst = 50,
 }
 
 -- Bots fill empty slots so that small servers (and solo testing) still get a real match.

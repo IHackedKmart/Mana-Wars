@@ -168,9 +168,20 @@ end
 -- Eliminations
 ---------------------------------------------------------------------------
 
--- Coins for 1st place in the match being played (the rest get one less per place, at least 1).
-local function coinsForFirst(): number
-	return if GameState.mode == "Royale" then RC.CoinsForFirst else Config.Economy.CoinsForFirst
+-- Coins for finishing. Survival Games pays by place among everyone (12 for 1st ... 1 for 12th).
+-- A battle royale only counts real players, so bots never inflate it: with N players in the match,
+-- the best-placed player earns N coins (at most Config.Royale.CoinsForFirst), the next N - 1, and
+-- so on down to 1. `playerPlace` is the place among real players only.
+local function payPlacement(c: Combatant, place: number, playerPlace: number)
+	if not c.player then
+		return
+	end
+	if GameState.mode == "Royale" then
+		local first = math.min(RC.CoinsForFirst, initialHumans)
+		WardrobeService.awardPlacement(c, playerPlace, initialHumans, first, "players")
+	else
+		WardrobeService.awardPlacement(c, place, initialCount)
+	end
 end
 
 onDied = function(c: Combatant)
@@ -186,19 +197,20 @@ onDied = function(c: Combatant)
 	c.alive = false
 	CarpetService.forget(c)
 	-- finishing place: everyone still standing finishes ahead of you
-	local stillAlive = 0
+	local stillAlive, playersAlive = 0, 0
 	for _, other in participants do
 		if other.alive and other ~= c then
 			stillAlive += 1
+			if other.player then
+				playersAlive += 1
+			end
 		end
 	end
 	-- (someone who dies as the match ends was already ranked with the survivors: no second payout)
 	if c.place == nil then
 		local place = stillAlive + 1
 		c.place = place
-		if c.player then
-			WardrobeService.awardPlacement(c, place, initialCount, coinsForFirst())
-		end
+		payPlacement(c, place, playersAlive + 1)
 	end
 	local pos = if c.root then (c.root :: BasePart).Position else nil
 	FamiliarService.onDeath(c, pos)
@@ -513,10 +525,14 @@ local function finishMatch(winner: Combatant?, def: MapDefs.MapDef, mode: string
 		end
 		return a.kills > b.kills
 	end)
+	local playersRanked = 0
 	for i, c in standing do
 		c.place = i
-		if c.player and c.player.Parent then
-			WardrobeService.awardPlacement(c, i, initialCount, coinsForFirst())
+		if c.player then
+			playersRanked += 1
+			if c.player.Parent then
+				payPlacement(c, i, playersRanked)
+			end
 		end
 	end
 	for _, c in participants do

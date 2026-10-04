@@ -117,8 +117,9 @@ local function ordinal(n: number): string
 end
 
 -- Match rewards: in Survival Games 1st place gets 12 and 12th gets 1; a battle royale passes its
--- own `forFirst` (50 for 1st down to 1 for 50th). Fortune enchantments add a bonus.
-function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: number, forFirst: number?)
+-- own `forFirst` and counts places among real players only (`among` = "players" for the toast).
+-- Fortune enchantments add a bonus.
+function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: number, forFirst: number?, among: string?)
 	local player = c.player
 	if not player then
 		return
@@ -128,7 +129,11 @@ function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: numb
 	WardrobeService.addCoins(
 		player,
 		base + bonus,
-		ordinal(place) .. " of " .. outOf .. (if bonus > 0 then ", +" .. bonus .. " Fortune" else ""),
+		ordinal(place)
+			.. " of "
+			.. outOf
+			.. (if among then " " .. among else "")
+			.. (if bonus > 0 then ", +" .. bonus .. " Fortune" else ""),
 		{ type = "Gameplay", sku = "MatchPlacement" }
 	)
 end
