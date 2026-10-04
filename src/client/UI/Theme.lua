@@ -12,13 +12,15 @@ Theme.Black = Enum.Font.GothamBlack
 Theme.Title = Enum.Font.Fantasy
 
 Theme.Colors = {
-	Background = Color3.fromRGB(14, 12, 22),
-	Panel = Color3.fromRGB(26, 22, 40),
-	Panel2 = Color3.fromRGB(36, 31, 54),
-	Panel3 = Color3.fromRGB(48, 42, 70),
-	Stroke = Color3.fromRGB(95, 75, 155),
-	Accent = Color3.fromRGB(165, 115, 255),
+	Background = Color3.fromRGB(17, 14, 29),
+	Panel = Color3.fromRGB(29, 24, 46),
+	Panel2 = Color3.fromRGB(40, 34, 61),
+	Panel3 = Color3.fromRGB(56, 47, 84),
+	Stroke = Color3.fromRGB(108, 86, 168),
+	Accent = Color3.fromRGB(146, 96, 240),
 	Gold = Color3.fromRGB(255, 205, 90),
+	GoldDeep = Color3.fromRGB(176, 128, 46),
+	Ink = Color3.fromRGB(9, 7, 16),
 	Text = Color3.fromRGB(236, 230, 248),
 	Dim = Color3.fromRGB(160, 150, 185),
 	Good = Color3.fromRGB(120, 230, 140),
@@ -49,6 +51,10 @@ end
 
 function Theme.darken(c: Color3, amount: number): Color3
 	return c:Lerp(Color3.new(0, 0, 0), amount)
+end
+
+function Theme.lighten(c: Color3, amount: number): Color3
+	return c:Lerp(Color3.new(1, 1, 1), amount)
 end
 
 return Theme

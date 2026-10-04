@@ -149,6 +149,7 @@ end
 local function build()
 	gui = Widgets.screen("DevPanel", 30)
 	local root = Widgets.scaledRoot(gui)
+	root.Name = "ButtonRoot"
 	openButton = Widgets.button("🛠 Dev", {
 		size = UDim2.fromOffset(84, 32),
 		position = UDim2.new(1, -16, 0, 52),
@@ -164,51 +165,27 @@ local function build()
 	openButton.Name = "DevButton"
 	openButton.Visible = false
 
-	panel = Widgets.panel({
-		Name = "Panel",
-		Size = UDim2.fromOffset(660, 600),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.02,
-		Visible = false,
-		Parent = root,
-	})
-	local stroke = panel:FindFirstChildOfClass("UIStroke")
-	if stroke then
-		stroke.Color = GOLD
-	end
-	Widgets.label({
-		Text = "🛠 DEVELOPER TOOLS",
-		Font = Theme.Black,
-		TextSize = 22,
-		TextColor3 = GOLD,
-		Size = UDim2.fromOffset(400, 28),
-		Position = UDim2.fromOffset(16, 10),
-		Parent = panel,
-	})
-	Widgets.label({
-		Text = "Only you see this. Studio play tests save to separate test data. Press ` to open or close.",
-		TextSize = 12,
-		TextColor3 = C.Dim,
-		Size = UDim2.new(1, -80, 0, 16),
-		Position = UDim2.fromOffset(16, 38),
-		Parent = panel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(32, 32),
-		position = UDim2.new(1, -44, 0, 10),
-		color = C.Panel3,
-		onClick = function()
+	local window = Widgets.window(gui, {
+		title = "Developer Tools",
+		icon = "🛠",
+		subtitle = "Only you see this  ·  Studio play tests save to separate test data  ·  ` opens and closes it",
+		size = Vector2.new(680, 650),
+		onClose = function()
 			DevController.close()
 		end,
-		parent = panel,
 	})
+	local frameStroke = window.panel:FindFirstChildOfClass("UIStroke")
+	if frameStroke then
+		frameStroke.Color = GOLD
+	end
+	panel = window.root
+	panel.Name = "Panel"
+	panel.Visible = false
+	local body = window.body
 
 	-- the big one
 	local unlock = Widgets.button("⭐  UNLOCK EVERYTHING  ⭐", {
-		size = UDim2.new(1, -32, 0, 46),
-		position = UDim2.fromOffset(16, 62),
+		size = UDim2.new(1, 0, 0, 46),
 		color = GOLD,
 		textColor = Color3.fromRGB(40, 25, 0),
 		textSize = 20,
@@ -218,7 +195,7 @@ local function build()
 				syncStatus()
 			end
 		end,
-		parent = panel,
+		parent = body,
 	})
 	unlock.Name = "UnlockAll"
 	Widgets.label({
@@ -227,17 +204,17 @@ local function build()
 		TextWrapped = true,
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -32, 0, 30),
-		Position = UDim2.fromOffset(16, 110),
-		Parent = panel,
+		Size = UDim2.new(1, 0, 0, 30),
+		Position = UDim2.fromOffset(0, 50),
+		Parent = body,
 	})
 
 	-- rarity picker (used by the "give" buttons below)
 	local picker = Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -32, 0, 30),
-		Position = UDim2.fromOffset(16, 146),
-		Parent = panel,
+		Size = UDim2.new(1, 0, 0, 30),
+		Position = UDim2.fromOffset(0, 86),
+		Parent = body,
 	}, { Create.list(Enum.FillDirection.Horizontal, 5) })
 	for i, name in Rarity.Order do
 		local b = Widgets.button(name, {
@@ -272,12 +249,12 @@ local function build()
 		BackgroundColor3 = C.Panel,
 		BackgroundTransparency = 0.3,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -32, 1, -196),
-		Position = UDim2.fromOffset(16, 182),
+		Size = UDim2.new(1, 0, 1, -124),
+		Position = UDim2.fromOffset(0, 124),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollBarThickness = 6,
-		Parent = panel,
+		Parent = body,
 	}, { Create.corner(8), Create.padding(10, 8), Create.list(Enum.FillDirection.Vertical, 6) })
 
 	local s = section(scroll, "COINS & COFFERS")
@@ -417,9 +394,12 @@ end
 function DevController.init()
 	build()
 	local function update()
-		openButton.Visible = player:GetAttribute("Dev") == true
+		-- (tucked away while another window is open, so it never covers a close button)
+		local busy = State.anyMenuOpen()
+		openButton.Visible = player:GetAttribute("Dev") == true and not busy
 	end
 	player:GetAttributeChangedSignal("Dev"):Connect(update)
+	State.MenusChanged:Connect(update)
 	update()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then

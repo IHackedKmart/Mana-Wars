@@ -15,6 +15,7 @@ local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
 local Widgets = require(UI.Widgets)
+local Dock = require(UI.Dock)
 local ItemInfo = require(UI.ItemInfo)
 local State = require(script.Parent.State)
 local InputController = require(script.Parent.InputController)
@@ -27,6 +28,7 @@ local C = Theme.Colors
 
 local root: Frame
 local combat: Frame
+local spellbookButton: TextButton
 local phaseTitle: TextLabel
 local phaseSub: TextLabel
 local bannerTitle: TextLabel
@@ -158,17 +160,24 @@ end
 
 local function buildTop()
 	local top = Widgets.panel({
+		Name = "PhasePanel",
 		Size = UDim2.fromOffset(440, 56),
 		Position = UDim2.new(0.5, 0, 0, 10),
 		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundTransparency = 0.2,
+		BackgroundColor3 = C.Background,
+		BackgroundTransparency = 0.12,
 		Parent = root,
 	})
+	local topStroke = top:FindFirstChildOfClass("UIStroke") :: UIStroke
+	topStroke.Color = C.GoldDeep
+	topStroke.Transparency = 0.2
 	phaseTitle = Widgets.label({
 		Size = UDim2.new(1, 0, 0, 28),
 		Position = UDim2.fromOffset(0, 5),
 		Font = Theme.Black,
 		TextSize = 20,
+		TextColor3 = C.Gold,
+		TextStrokeTransparency = 0.7,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Parent = top,
 	})
@@ -245,29 +254,31 @@ local function buildTop()
 		Parent = root,
 	})
 
-	local spellbookButton = Widgets.button("📖 Spellbook  [B]", {
-		size = UDim2.fromOffset(190, 36),
-		position = UDim2.fromOffset(16, 64),
-		color = C.Panel3,
+	local dock = Dock.get()
+	spellbookButton = Widgets.button("📖  Spellbook   [B]", {
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(70, 52, 120),
+		layoutOrder = 1,
 		onClick = function()
 			if InputController.onToggleInventory then
 				InputController.onToggleInventory()
 			end
 		end,
-		parent = combat,
+		parent = dock,
 	})
 	spellbookButton.Name = "SpellbookButton"
-	Widgets.button("📜 Grimoire  [H]", {
-		size = UDim2.fromOffset(190, 36),
-		position = UDim2.fromOffset(16, 106),
-		color = Color3.fromRGB(110, 80, 40),
+	Widgets.button("📜  Grimoire   [H]", {
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(116, 82, 40),
+		layoutOrder = 2,
 		onClick = function()
 			if InputController.onToggleGrimoire then
 				InputController.onToggleGrimoire()
 			end
 		end,
-		parent = root,
-	})
+		parent = dock,
+	}).Name =
+		"GrimoireButton"
 end
 
 local function buildCombat()
@@ -276,11 +287,12 @@ local function buildCombat()
 		Size = UDim2.fromOffset(310, 64),
 		Position = UDim2.new(0, 16, 1, -16),
 		AnchorPoint = Vector2.new(0, 1),
-		BackgroundTransparency = 0.2,
+		BackgroundColor3 = C.Background,
+		BackgroundTransparency = 0.15,
 		Parent = combat,
 	})
 	Widgets.label({
-		Text = "HEALTH",
+		Text = "❤  HEALTH",
 		Font = Theme.Black,
 		TextSize = 12,
 		TextColor3 = C.Dim,
@@ -616,6 +628,7 @@ end
 local function updateCombat()
 	local active = State.canAct()
 	combat.Visible = active
+	spellbookButton.Visible = active
 	crosshair.Visible = active and not State.anyMenuOpen()
 	if not active then
 		stormWarning.Visible = false
@@ -668,6 +681,10 @@ function HUDController.init()
 	pcall(function()
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
+	end)
+	-- the menu dock steps aside while a window is open
+	State.MenusChanged:Connect(function()
+		Dock.setVisible(not State.anyMenuOpen())
 	end)
 
 	local gui = Widgets.screen("HUD", 1)

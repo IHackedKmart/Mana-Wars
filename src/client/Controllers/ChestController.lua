@@ -159,50 +159,41 @@ end
 local function build()
 	gui = Widgets.screen("Chest", 9)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	local panel = Widgets.panel({
-		Size = UDim2.fromOffset(420, 470),
-		Position = UDim2.new(1, -40, 0.5, 0),
-		AnchorPoint = Vector2.new(1, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.05,
-		Parent = root,
-	})
-	titleLabel = Widgets.label({
-		Font = Theme.Black,
-		TextSize = 20,
-		TextColor3 = C.Gold,
-		Size = UDim2.new(1, -70, 0, 30),
-		Position = UDim2.fromOffset(16, 10),
-		Parent = panel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(32, 32),
-		position = UDim2.new(1, -44, 0, 8),
-		color = C.Panel3,
-		onClick = function()
+	-- a side window: you can still see (and walk) around while looting, so no dimming
+	local window = Widgets.window(gui, {
+		title = "Chest",
+		icon = "🧰",
+		subtitle = "Click Take, or press F to take everything",
+		size = Vector2.new(430, 480),
+		onClose = function()
 			ChestController.close()
 		end,
-		parent = panel,
 	})
+	window.scrim.Visible = false
+	window.panel.Position = UDim2.new(1, -36, 0.5, 0)
+	window.panel.AnchorPoint = Vector2.new(1, 0.5)
+	window.title.TextSize = 24
+	window.title.Size = UDim2.new(1, -130, 0, 32)
+	titleLabel = window.title
 	list = Create("ScrollingFrame", {
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -20, 1, -104),
-		Position = UDim2.fromOffset(12, 48),
-		ScrollBarThickness = 6,
+		Size = UDim2.new(1, 0, 1, -50),
+		ScrollBarThickness = 5,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
-		Parent = panel,
-	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+		Parent = window.body,
+	}, { Create.list(Enum.FillDirection.Vertical, 6), Create.padding(2, 2) })
 	Widgets.button("Take All  [F]", {
-		size = UDim2.new(1, -24, 0, 38),
-		position = UDim2.new(0, 12, 1, -48),
-		color = C.Accent,
+		size = UDim2.new(1, 0, 0, 40),
+		position = UDim2.new(0, 0, 1, -40),
+		color = C.Gold,
+		textColor = C.Ink,
+		textSize = 16,
 		onClick = function()
 			take(nil)
 		end,
-		parent = panel,
+		parent = window.body,
 	})
 end
 

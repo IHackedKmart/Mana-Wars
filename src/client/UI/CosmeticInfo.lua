@@ -152,6 +152,29 @@ function CosmeticInfo.familiar(f: any): ItemInfo.Info
 	}
 end
 
+-- A short label for cards and lists ("Novice Robe", "Star Sigil", "Dust Bunny"); the tooltip
+-- has the full name.
+function CosmeticInfo.shortName(kind: string, item: any): string
+	if kind == "Familiar" then
+		local s = Familiars.SpeciesById[item.species]
+		return if s then s.name else tostring(item.name)
+	end
+	local part = item
+	if kind == "Garment" then
+		part = item.parts and item.parts[Cosmetics.Garments[item.kind].slots[1]]
+	end
+	local design = part and Cosmetics.DesignById[part.slot] and Cosmetics.DesignById[part.slot][part.design]
+	if not design then
+		return tostring(item.name)
+	end
+	if part.slot == "Sigil" then
+		return design.name .. " Sigil"
+	elseif part.slot == "Gem" then
+		return design.name .. " Gem"
+	end
+	return design.name
+end
+
 -- Info / icon / colour for any wardrobe item ("Part", "Garment" or "Familiar").
 function CosmeticInfo.item(kind: string, item: any): ItemInfo.Info
 	if kind == "Garment" then

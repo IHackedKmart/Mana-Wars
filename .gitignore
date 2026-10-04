@@ -13,3 +13,6 @@ globalTypes.d.luau
 .DS_Store
 Thumbs.db
 .vscode/settings.json
+
+# UI snapshots (MANA_SHOTS=build/ui lune run tools/sim/client)
+/build/ui/

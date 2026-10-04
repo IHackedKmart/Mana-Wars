@@ -854,6 +854,15 @@ Config.Economy = {
 
 Config.DataStoreName = "ManaWars_Stats_v1"
 
+-- Chat -----------------------------------------------------------------------
+-- Proximity chat: text messages only reach players within Range studs of the speaker, and chat
+-- bubbles fade out at the same distance. (Voice chat is spatial by itself once it's turned on in
+-- the experience's settings.)
+Config.Chat = {
+	Proximity = true, -- false = everyone in the server sees every message
+	Range = 70, -- studs
+}
+
 -- Developer tools ----------------------------------------------------------
 -- The 🛠 Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
 -- everyone in Studio, the experience's owner in live servers, and the user ids listed here
@@ -7469,6 +7478,7 @@ local Services = script:WaitForChild("Services")
 
 local order = {
 	"DataService",
+	"ChatService",
 	"MapService",
 	"StatusService",
 	"DamageService",
@@ -12399,6 +12409,78 @@ return CastingService
         </Item>
         <Item class="ModuleScript" referent="39">
           <Properties>
+            <string name="Name">ChatService</string>
+            <string name="Source"><![CDATA[-- Proximity chat. The server decides who each text message reaches: only players within
+-- Config.Chat.Range studs of the speaker (and the speaker themselves). The Plaza, the library and
+-- the arena are far apart, so each has its own conversation, and in a match you only talk to
+-- whoever is near you. Chat bubbles fade out at the same distance.
+-- Voice chat needs no code: Roblox voice is spatial (you hear people near you) once voice is
+-- enabled for the experience.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+
+local ChatService = {}
+
+local function rootOf(player: Player): BasePart?
+	local character = player.Character
+	return character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+end
+
+-- Can `listener` see what `speaker` says?
+function ChatService.inRange(speaker: Player, listener: Player): boolean
+	if speaker == listener or not Config.Chat.Proximity then
+		return true
+	end
+	local a, b = rootOf(speaker), rootOf(listener)
+	if not a or not b then
+		return false -- (between lives: you can't be heard until you're back in the world)
+	end
+	return (a.Position - b.Position).Magnitude <= Config.Chat.Range
+end
+
+-- The TextChannel.ShouldDeliverCallback: called once per listener for every message.
+function ChatService.shouldDeliver(message: any, textSource: any): boolean
+	local from = message and message.TextSource
+	local speaker = from and Players:GetPlayerByUserId(from.UserId)
+	local listener = textSource and Players:GetPlayerByUserId(textSource.UserId)
+	if not speaker or not listener then
+		return true -- system messages and the like
+	end
+	return ChatService.inRange(speaker, listener)
+end
+
+function ChatService.init()
+	local ok, service = pcall(function()
+		return game:GetService("TextChatService")
+	end)
+	if not ok or not service then
+		return
+	end
+	local textChat = service :: TextChatService
+	task.spawn(function()
+		local channels = textChat:WaitForChild("TextChannels", 30)
+		local general = channels and channels:WaitForChild("RBXGeneral", 30)
+		if general and general:IsA("TextChannel") then
+			general.ShouldDeliverCallback = ChatService.shouldDeliver
+		else
+			warn("[Chat] no RBXGeneral channel: proximity chat is off (is TextChatService enabled?)")
+		end
+		local bubbles = textChat:FindFirstChildOfClass("BubbleChatConfiguration")
+		if bubbles and Config.Chat.Proximity then
+			bubbles.MaxDistance = Config.Chat.Range
+		end
+	end)
+end
+
+return ChatService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="40">
+          <Properties>
             <string name="Name">ChestService</string>
             <string name="Source"><![CDATA[-- Chests and loot satchels: spawning, rolling loot, opening, taking items,
 -- the classic mid-game refill, and the satchel a mage drops on death.
@@ -12735,7 +12817,7 @@ return ChestService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="40">
+        <Item class="ModuleScript" referent="41">
           <Properties>
             <string name="Name">ClassService</string>
             <string name="Source"><![CDATA[-- Kit (class) selection and ownership. Every paid kit is its own game pass (Config.Kits);
@@ -12913,7 +12995,7 @@ return ClassService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="41">
+        <Item class="ModuleScript" referent="42">
           <Properties>
             <string name="Name">Combatants</string>
             <string name="Source"><![CDATA[-- Registry of everything that can fight: real players and bots share one shape,
@@ -13192,7 +13274,7 @@ return Combatants
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="42">
+        <Item class="ModuleScript" referent="43">
           <Properties>
             <string name="Name">DamageService</string>
             <string name="Source"><![CDATA[-- The single place damage is dealt: grace period, self-damage, crits, marks, shields,
@@ -13402,7 +13484,7 @@ return DamageService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="43">
+        <Item class="ModuleScript" referent="44">
           <Properties>
             <string name="Name">DataService</string>
             <string name="Source"><![CDATA[-- Player profiles saved with DataStores: lifetime stats (wins / kills / matches, shown on the
@@ -13717,7 +13799,7 @@ return DataService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="44">
+        <Item class="ModuleScript" referent="45">
           <Properties>
             <string name="Name">DevService</string>
             <string name="Source"><![CDATA[-- Developer tools behind the 🛠 Dev panel: free coins and coffers, every cosmetic and familiar,
@@ -14215,7 +14297,7 @@ return DevService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="45">
+        <Item class="ModuleScript" referent="46">
           <Properties>
             <string name="Name">FX</string>
             <string name="Source"><![CDATA[-- Thin wrapper over the FX remote so services can say FX.all("Boom", ...) without
@@ -14255,7 +14337,7 @@ return FX
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="46">
+        <Item class="ModuleScript" referent="47">
           <Properties>
             <string name="Name">FamiliarService</string>
             <string name="Source"><![CDATA[-- Familiar powers that need the server:
@@ -14385,7 +14467,7 @@ return FamiliarService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="47">
+        <Item class="ModuleScript" referent="48">
           <Properties>
             <string name="Name">GameState</string>
             <string name="Source"><![CDATA[-- Server-wide match state that several services read. MatchService is the only writer.
@@ -14423,7 +14505,7 @@ return GameState
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="48">
+        <Item class="ModuleScript" referent="49">
           <Properties>
             <string name="Name">InventoryService</string>
             <string name="Source"><![CDATA[-- Owns every combatant's inventory: wands (with their slotted spells), the spell bag,
@@ -15247,7 +15329,7 @@ return InventoryService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="49">
+        <Item class="ModuleScript" referent="50">
           <Properties>
             <string name="Name">MapService</string>
             <string name="Source"><![CDATA[-- Builds the hub (Arcanum Plaza) and the library lobby once, and a brand new arena for every
@@ -15508,7 +15590,7 @@ return MapService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="50">
+        <Item class="ModuleScript" referent="51">
           <Properties>
             <string name="Name">MatchService</string>
             <string name="Source"><![CDATA[-- The survival-games loop:
@@ -16246,7 +16328,7 @@ return MatchService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="51">
+        <Item class="ModuleScript" referent="52">
           <Properties>
             <string name="Name">PracticeService</string>
             <string name="Source"><![CDATA[-- Training dummies on the hub's Practice Range and the library's Practice Terrace. They take
@@ -16417,7 +16499,7 @@ return PracticeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="52">
+        <Item class="ModuleScript" referent="53">
           <Properties>
             <string name="Name">ProjectileService</string>
             <string name="Source"><![CDATA[-- Authoritative projectile simulation. Every frame each projectile moves (ProjectileSim),
@@ -16967,7 +17049,7 @@ return ProjectileService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="53">
+        <Item class="ModuleScript" referent="54">
           <Properties>
             <string name="Name">QueueService</string>
             <string name="Source"><![CDATA[-- The queue between the hub and a match.
@@ -17182,7 +17264,7 @@ return QueueService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="54">
+        <Item class="ModuleScript" referent="55">
           <Properties>
             <string name="Name">SpellExecutor</string>
             <string name="Source"><![CDATA[-- Executes compiled spells: spawns projectiles, fires beams, novas, chains, meteors,
@@ -18018,7 +18100,7 @@ return SpellExecutor
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="55">
+        <Item class="ModuleScript" referent="56">
           <Properties>
             <string name="Name">StatusService</string>
             <string name="Source"><![CDATA[-- Burning, venom, chill/freeze, radiant marks, shields, haste and regeneration.
@@ -18407,7 +18489,7 @@ return StatusService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="56">
+        <Item class="ModuleScript" referent="57">
           <Properties>
             <string name="Name">VoteService</string>
             <string name="Source"><![CDATA[-- The map vote held in the library before every match. Only players in the queue can vote.
@@ -18556,7 +18638,7 @@ return VoteService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="57">
+        <Item class="ModuleScript" referent="58">
           <Properties>
             <string name="Name">WardrobeService</string>
             <string name="Source"><![CDATA[-- Enchanted Coins and the wardrobe: opening Coffers, stitching parts into robes and hats,
@@ -19086,7 +19168,7 @@ return WardrobeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="58">
+        <Item class="ModuleScript" referent="59">
           <Properties>
             <string name="Name">WorldQuery</string>
             <string name="Source"><![CDATA[-- Raycasts against the world (never characters) and sweeps against combatant capsules.
@@ -19163,7 +19245,7 @@ return WorldQuery
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="59">
+        <Item class="ModuleScript" referent="60">
           <Properties>
             <string name="Name">ZoneService</string>
             <string name="Source"><![CDATA[-- Lingering ground effects left by Cloud spells and the Lingering modifier, and the solid
@@ -19344,17 +19426,17 @@ return ZoneService
       </Item>
     </Item>
   </Item>
-  <Item class="StarterPlayer" referent="60">
+  <Item class="StarterPlayer" referent="61">
     <Properties>
       <string name="Name">StarterPlayer</string>
       <float name="CameraMaxZoomDistance">60</float>
       <float name="CharacterWalkSpeed">16</float>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="61">
+    <Item class="StarterPlayerScripts" referent="62">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="62">
+      <Item class="LocalScript" referent="63">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[-- Mana Wars client entry point.
@@ -19381,6 +19463,7 @@ local WardrobeController = require(Controllers.WardrobeController)
 local FamiliarController = require(Controllers.FamiliarController)
 local DevController = require(Controllers.DevController)
 local AuctionController = require(Controllers.AuctionController)
+local ChatController = require(Controllers.ChatController)
 
 State.init()
 Widgets.initTooltip()
@@ -19398,6 +19481,7 @@ WardrobeController.init()
 FamiliarController.init()
 DevController.init()
 AuctionController.init()
+ChatController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
 InputController.onToggleGrimoire = GrimoireController.toggle
@@ -19421,11 +19505,11 @@ GrimoireController.onReplayTutorial = TutorialController.start
 print("[Mana Wars] client ready")
 ]]></string>
         </Properties>
-        <Item class="Folder" referent="63">
+        <Item class="Folder" referent="64">
           <Properties>
             <string name="Name">Controllers</string>
           </Properties>
-          <Item class="ModuleScript" referent="64">
+          <Item class="ModuleScript" referent="65">
             <Properties>
               <string name="Name">AmbienceController</string>
               <string name="Source"><![CDATA[-- Per-map weather drawn around the camera while you're on the island:
@@ -19531,7 +19615,7 @@ return AmbienceController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="65">
+          <Item class="ModuleScript" referent="66">
             <Properties>
               <string name="Name">AuctionController</string>
               <string name="Source"><![CDATA[-- The Gilded Gavel: the auction house. Opened from the pavilion in the Plaza or the hub button.
@@ -19572,7 +19656,7 @@ local gui: ScreenGui
 local coinsLabel: TextLabel
 local scopeLabel: TextLabel
 local pages: { [string]: Frame } = {}
-local tabButtons: { [string]: TextButton } = {}
+local tabs: Widgets.TabsHandle
 local currentTab = "Browse"
 local isOpen = false
 local refresh: () -> ()
@@ -20026,14 +20110,18 @@ local function refreshSell()
 	local function add(kind: string, item: any)
 		order += 1
 		local icon, color = itemIcon(kind, item)
-		Widgets.tile({
+		Widgets.card({
 			name = "Sell_" .. item.uid,
-			size = 54,
+			width = 72,
 			icon = icon,
 			iconColor = color,
-			border = Theme.rarity(item.rarity),
+			rarity = item.rarity,
+			caption = CosmeticInfo.shortName(kind, item),
 			selected = sellSelected ~= nil and sellSelected.uid == item.uid,
-			label = if kind == "Garment" then item.kind elseif kind == "Familiar" then "Familiar" else nil,
+			badge = if kind == "Garment"
+				then (if item.kind == "Robe" then "👘" else "🎩")
+				elseif kind == "Familiar" then "🐾"
+				else nil,
 			layoutOrder = order,
 			info = function()
 				return itemInfo(kind, item)
@@ -20107,7 +20195,15 @@ local function buildSell(page: Frame)
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollBarThickness = 6,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(54, 8) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	sellInfo = Create("Frame", {
 		Name = "SellDetails",
 		BackgroundColor3 = C.Panel,
@@ -20289,9 +20385,7 @@ refresh = function()
 	if not isOpen then
 		return
 	end
-	for name, button in tabButtons do
-		button.BackgroundColor3 = if name == currentTab then C.Accent else C.Panel3
-	end
+	tabs.set(currentTab)
 	for name, page in pages do
 		page.Visible = name == currentTab
 	end
@@ -20334,81 +20428,54 @@ end
 local function build()
 	gui = Widgets.screen("AuctionHouse", 11)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	local panel = Widgets.panel({
-		Size = UDim2.fromOffset(1040, 620),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.03,
-		Parent = root,
+	local window = Widgets.window(gui, {
+		title = "The Gilded Gavel",
+		icon = "⚖",
+		subtitle = "",
+		size = Vector2.new(1040, 644),
+		onClose = function()
+			AuctionController.close()
+		end,
 	})
-	Widgets.label({
-		Text = "THE GILDED GAVEL",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(300, 30),
-		Position = UDim2.fromOffset(18, 10),
-		Parent = panel,
-	})
-	scopeLabel = Widgets.label({
-		Name = "Scope",
-		Text = "",
-		TextSize = 12,
-		TextColor3 = C.Dim,
-		Size = UDim2.fromOffset(340, 30),
-		Position = UDim2.fromOffset(250, 12),
-		Parent = panel,
-	})
+	scopeLabel = window.subtitle
 	coinsLabel = Widgets.label({
 		Name = "Coins",
 		Text = "",
 		Font = Theme.Black,
-		TextSize = 18,
+		TextSize = 17,
 		TextColor3 = GOLD,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(320, 30),
-		Position = UDim2.new(1, -378, 0, 10),
-		Parent = panel,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.35,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 32),
+		Parent = window.right,
 	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 8),
-		color = C.Panel3,
-		onClick = function()
-			AuctionController.close()
-		end,
-		parent = panel,
-	})
-	local tabs = Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -36, 0, 34),
-		Position = UDim2.fromOffset(18, 48),
-		Parent = panel,
-	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, def in { { "Browse", "🔍  Browse" }, { "Sell", "💰  Sell" }, { "Mine", "📜  My listings" } } do
-		local b = Widgets.button(def[2], {
-			size = UDim2.fromOffset(160, 32),
-			color = C.Panel3,
-			layoutOrder = i,
-			onClick = function()
-				Sounds.play("Click")
-				currentTab = def[1]
-				confirmId = nil
-				refresh()
-			end,
-			parent = tabs,
-		})
-		b.Name = "Tab_" .. def[1]
-		tabButtons[def[1]] = b
-		pages[def[1]] = Create("Frame", {
-			Name = "Page_" .. def[1],
+	Create.corner(16).Parent = coinsLabel
+	Create.padding(14, 0).Parent = coinsLabel
+	tabs = Widgets.tabs(
+		window.body,
+		{
+			{ "Browse", "🔍  Browse" },
+			{ "Sell", "💰  Sell" },
+			{ "Mine", "📜  My listings" },
+		},
+		160,
+		function(id)
+			Sounds.play("Click")
+			currentTab = id
+			confirmId = nil
+			refresh()
+		end
+	)
+	for _, name in { "Browse", "Sell", "Mine" } do
+		pages[name] = Create("Frame", {
+			Name = "Page_" .. name,
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -36, 1, -104),
-			Position = UDim2.fromOffset(18, 92),
+			Size = UDim2.new(1, 0, 1, -44),
+			Position = UDim2.fromOffset(0, 44),
 			Visible = false,
-			Parent = panel,
+			Parent = window.body,
 		})
 	end
 	buildBrowse(pages.Browse)
@@ -20446,7 +20513,55 @@ return AuctionController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="66">
+          <Item class="ModuleScript" referent="67">
+            <Properties>
+              <string name="Name">ChatController</string>
+              <string name="Source"><![CDATA[-- Proximity chat, client side. The server filters who receives each message (ChatService); here we
+-- fade chat bubbles out at the same range and tell the player how chat works.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+
+local ChatController = {}
+
+local function note(): string
+	if Config.Chat.Proximity then
+		return string.format("💬 Proximity chat: only mages within %d studs can hear you.", Config.Chat.Range)
+	end
+	return "💬 Chat reaches everyone in the server."
+end
+
+function ChatController.init()
+	local ok, service = pcall(function()
+		return game:GetService("TextChatService")
+	end)
+	if not ok or not service then
+		return
+	end
+	local textChat = service :: TextChatService
+	task.spawn(function()
+		local bubbles = textChat:FindFirstChildOfClass("BubbleChatConfiguration")
+		if bubbles and Config.Chat.Proximity then
+			bubbles.MaxDistance = Config.Chat.Range
+		end
+		local channels = textChat:WaitForChild("TextChannels", 30)
+		local general = channels and channels:WaitForChild("RBXGeneral", 30)
+		if general and general:IsA("TextChannel") then
+			pcall(function()
+				general:DisplaySystemMessage(note())
+			end)
+		end
+	end)
+end
+
+ChatController.note = note
+
+return ChatController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="68">
             <Properties>
               <string name="Name">ChestController</string>
               <string name="Source"><![CDATA[-- The loot window shown when you open a chest or a dead mage's satchel.
@@ -20610,50 +20725,41 @@ end
 local function build()
 	gui = Widgets.screen("Chest", 9)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	local panel = Widgets.panel({
-		Size = UDim2.fromOffset(420, 470),
-		Position = UDim2.new(1, -40, 0.5, 0),
-		AnchorPoint = Vector2.new(1, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.05,
-		Parent = root,
-	})
-	titleLabel = Widgets.label({
-		Font = Theme.Black,
-		TextSize = 20,
-		TextColor3 = C.Gold,
-		Size = UDim2.new(1, -70, 0, 30),
-		Position = UDim2.fromOffset(16, 10),
-		Parent = panel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(32, 32),
-		position = UDim2.new(1, -44, 0, 8),
-		color = C.Panel3,
-		onClick = function()
+	-- a side window: you can still see (and walk) around while looting, so no dimming
+	local window = Widgets.window(gui, {
+		title = "Chest",
+		icon = "🧰",
+		subtitle = "Click Take, or press F to take everything",
+		size = Vector2.new(430, 480),
+		onClose = function()
 			ChestController.close()
 		end,
-		parent = panel,
 	})
+	window.scrim.Visible = false
+	window.panel.Position = UDim2.new(1, -36, 0.5, 0)
+	window.panel.AnchorPoint = Vector2.new(1, 0.5)
+	window.title.TextSize = 24
+	window.title.Size = UDim2.new(1, -130, 0, 32)
+	titleLabel = window.title
 	list = Create("ScrollingFrame", {
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -20, 1, -104),
-		Position = UDim2.fromOffset(12, 48),
-		ScrollBarThickness = 6,
+		Size = UDim2.new(1, 0, 1, -50),
+		ScrollBarThickness = 5,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
-		Parent = panel,
-	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+		Parent = window.body,
+	}, { Create.list(Enum.FillDirection.Vertical, 6), Create.padding(2, 2) })
 	Widgets.button("Take All  [F]", {
-		size = UDim2.new(1, -24, 0, 38),
-		position = UDim2.new(0, 12, 1, -48),
-		color = C.Accent,
+		size = UDim2.new(1, 0, 0, 40),
+		position = UDim2.new(0, 0, 1, -40),
+		color = C.Gold,
+		textColor = C.Ink,
+		textSize = 16,
 		onClick = function()
 			take(nil)
 		end,
-		parent = panel,
+		parent = window.body,
 	})
 end
 
@@ -20707,7 +20813,7 @@ return ChestController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="67">
+          <Item class="ModuleScript" referent="69">
             <Properties>
               <string name="Name">DevController</string>
               <string name="Source"><![CDATA[-- The 🛠 Dev panel: test everything without spending anything. It shows for players the server
@@ -20861,6 +20967,7 @@ end
 local function build()
 	gui = Widgets.screen("DevPanel", 30)
 	local root = Widgets.scaledRoot(gui)
+	root.Name = "ButtonRoot"
 	openButton = Widgets.button("🛠 Dev", {
 		size = UDim2.fromOffset(84, 32),
 		position = UDim2.new(1, -16, 0, 52),
@@ -20876,51 +20983,27 @@ local function build()
 	openButton.Name = "DevButton"
 	openButton.Visible = false
 
-	panel = Widgets.panel({
-		Name = "Panel",
-		Size = UDim2.fromOffset(660, 600),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.02,
-		Visible = false,
-		Parent = root,
-	})
-	local stroke = panel:FindFirstChildOfClass("UIStroke")
-	if stroke then
-		stroke.Color = GOLD
-	end
-	Widgets.label({
-		Text = "🛠 DEVELOPER TOOLS",
-		Font = Theme.Black,
-		TextSize = 22,
-		TextColor3 = GOLD,
-		Size = UDim2.fromOffset(400, 28),
-		Position = UDim2.fromOffset(16, 10),
-		Parent = panel,
-	})
-	Widgets.label({
-		Text = "Only you see this. Studio play tests save to separate test data. Press ` to open or close.",
-		TextSize = 12,
-		TextColor3 = C.Dim,
-		Size = UDim2.new(1, -80, 0, 16),
-		Position = UDim2.fromOffset(16, 38),
-		Parent = panel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(32, 32),
-		position = UDim2.new(1, -44, 0, 10),
-		color = C.Panel3,
-		onClick = function()
+	local window = Widgets.window(gui, {
+		title = "Developer Tools",
+		icon = "🛠",
+		subtitle = "Only you see this  ·  Studio play tests save to separate test data  ·  ` opens and closes it",
+		size = Vector2.new(680, 650),
+		onClose = function()
 			DevController.close()
 		end,
-		parent = panel,
 	})
+	local frameStroke = window.panel:FindFirstChildOfClass("UIStroke")
+	if frameStroke then
+		frameStroke.Color = GOLD
+	end
+	panel = window.root
+	panel.Name = "Panel"
+	panel.Visible = false
+	local body = window.body
 
 	-- the big one
 	local unlock = Widgets.button("⭐  UNLOCK EVERYTHING  ⭐", {
-		size = UDim2.new(1, -32, 0, 46),
-		position = UDim2.fromOffset(16, 62),
+		size = UDim2.new(1, 0, 0, 46),
 		color = GOLD,
 		textColor = Color3.fromRGB(40, 25, 0),
 		textSize = 20,
@@ -20930,7 +21013,7 @@ local function build()
 				syncStatus()
 			end
 		end,
-		parent = panel,
+		parent = body,
 	})
 	unlock.Name = "UnlockAll"
 	Widgets.label({
@@ -20939,17 +21022,17 @@ local function build()
 		TextWrapped = true,
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -32, 0, 30),
-		Position = UDim2.fromOffset(16, 110),
-		Parent = panel,
+		Size = UDim2.new(1, 0, 0, 30),
+		Position = UDim2.fromOffset(0, 50),
+		Parent = body,
 	})
 
 	-- rarity picker (used by the "give" buttons below)
 	local picker = Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -32, 0, 30),
-		Position = UDim2.fromOffset(16, 146),
-		Parent = panel,
+		Size = UDim2.new(1, 0, 0, 30),
+		Position = UDim2.fromOffset(0, 86),
+		Parent = body,
 	}, { Create.list(Enum.FillDirection.Horizontal, 5) })
 	for i, name in Rarity.Order do
 		local b = Widgets.button(name, {
@@ -20984,12 +21067,12 @@ local function build()
 		BackgroundColor3 = C.Panel,
 		BackgroundTransparency = 0.3,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -32, 1, -196),
-		Position = UDim2.fromOffset(16, 182),
+		Size = UDim2.new(1, 0, 1, -124),
+		Position = UDim2.fromOffset(0, 124),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollBarThickness = 6,
-		Parent = panel,
+		Parent = body,
 	}, { Create.corner(8), Create.padding(10, 8), Create.list(Enum.FillDirection.Vertical, 6) })
 
 	local s = section(scroll, "COINS & COFFERS")
@@ -21129,9 +21212,12 @@ end
 function DevController.init()
 	build()
 	local function update()
-		openButton.Visible = player:GetAttribute("Dev") == true
+		-- (tucked away while another window is open, so it never covers a close button)
+		local busy = State.anyMenuOpen()
+		openButton.Visible = player:GetAttribute("Dev") == true and not busy
 	end
 	player:GetAttributeChangedSignal("Dev"):Connect(update)
+	State.MenusChanged:Connect(update)
 	update()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
@@ -21147,7 +21233,7 @@ return DevController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="68">
+          <Item class="ModuleScript" referent="70">
             <Properties>
               <string name="Name">FXController</string>
               <string name="Source"><![CDATA[-- Draws every spell. The server only sends compact events; all parts here are local
@@ -22273,7 +22359,7 @@ return FXController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="69">
+          <Item class="ModuleScript" referent="71">
             <Properties>
               <string name="Name">FamiliarBuilder</string>
               <string name="Source"><![CDATA[-- Builds familiar models out of parts (no meshes needed) and poses them every frame: flapping
@@ -23179,7 +23265,7 @@ return FamiliarBuilder
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="70">
+          <Item class="ModuleScript" referent="72">
             <Properties>
               <string name="Name">FamiliarController</string>
               <string name="Source"><![CDATA[-- Familiars following their mages. The server puts a "Familiar" attribute on each character
@@ -23511,7 +23597,7 @@ return FamiliarController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="71">
+          <Item class="ModuleScript" referent="73">
             <Properties>
               <string name="Name">GrimoireController</string>
               <string name="Source"><![CDATA[-- The Grimoire: an in-game encyclopedia that explains how to play and how to craft spells,
@@ -24277,7 +24363,7 @@ return GrimoireController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="72">
+          <Item class="ModuleScript" referent="74">
             <Properties>
               <string name="Name">HUDController</string>
               <string name="Source"><![CDATA[-- In-match HUD: health/shield, mana, wand hotbar with the spell deck, potions,
@@ -24297,6 +24383,7 @@ local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
 local Widgets = require(UI.Widgets)
+local Dock = require(UI.Dock)
 local ItemInfo = require(UI.ItemInfo)
 local State = require(script.Parent.State)
 local InputController = require(script.Parent.InputController)
@@ -24309,6 +24396,7 @@ local C = Theme.Colors
 
 local root: Frame
 local combat: Frame
+local spellbookButton: TextButton
 local phaseTitle: TextLabel
 local phaseSub: TextLabel
 local bannerTitle: TextLabel
@@ -24440,17 +24528,24 @@ end
 
 local function buildTop()
 	local top = Widgets.panel({
+		Name = "PhasePanel",
 		Size = UDim2.fromOffset(440, 56),
 		Position = UDim2.new(0.5, 0, 0, 10),
 		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundTransparency = 0.2,
+		BackgroundColor3 = C.Background,
+		BackgroundTransparency = 0.12,
 		Parent = root,
 	})
+	local topStroke = top:FindFirstChildOfClass("UIStroke") :: UIStroke
+	topStroke.Color = C.GoldDeep
+	topStroke.Transparency = 0.2
 	phaseTitle = Widgets.label({
 		Size = UDim2.new(1, 0, 0, 28),
 		Position = UDim2.fromOffset(0, 5),
 		Font = Theme.Black,
 		TextSize = 20,
+		TextColor3 = C.Gold,
+		TextStrokeTransparency = 0.7,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Parent = top,
 	})
@@ -24527,29 +24622,31 @@ local function buildTop()
 		Parent = root,
 	})
 
-	local spellbookButton = Widgets.button("📖 Spellbook  [B]", {
-		size = UDim2.fromOffset(190, 36),
-		position = UDim2.fromOffset(16, 64),
-		color = C.Panel3,
+	local dock = Dock.get()
+	spellbookButton = Widgets.button("📖  Spellbook   [B]", {
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(70, 52, 120),
+		layoutOrder = 1,
 		onClick = function()
 			if InputController.onToggleInventory then
 				InputController.onToggleInventory()
 			end
 		end,
-		parent = combat,
+		parent = dock,
 	})
 	spellbookButton.Name = "SpellbookButton"
-	Widgets.button("📜 Grimoire  [H]", {
-		size = UDim2.fromOffset(190, 36),
-		position = UDim2.fromOffset(16, 106),
-		color = Color3.fromRGB(110, 80, 40),
+	Widgets.button("📜  Grimoire   [H]", {
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(116, 82, 40),
+		layoutOrder = 2,
 		onClick = function()
 			if InputController.onToggleGrimoire then
 				InputController.onToggleGrimoire()
 			end
 		end,
-		parent = root,
-	})
+		parent = dock,
+	}).Name =
+		"GrimoireButton"
 end
 
 local function buildCombat()
@@ -24558,11 +24655,12 @@ local function buildCombat()
 		Size = UDim2.fromOffset(310, 64),
 		Position = UDim2.new(0, 16, 1, -16),
 		AnchorPoint = Vector2.new(0, 1),
-		BackgroundTransparency = 0.2,
+		BackgroundColor3 = C.Background,
+		BackgroundTransparency = 0.15,
 		Parent = combat,
 	})
 	Widgets.label({
-		Text = "HEALTH",
+		Text = "❤  HEALTH",
 		Font = Theme.Black,
 		TextSize = 12,
 		TextColor3 = C.Dim,
@@ -24898,6 +24996,7 @@ end
 local function updateCombat()
 	local active = State.canAct()
 	combat.Visible = active
+	spellbookButton.Visible = active
 	crosshair.Visible = active and not State.anyMenuOpen()
 	if not active then
 		stormWarning.Visible = false
@@ -24950,6 +25049,10 @@ function HUDController.init()
 	pcall(function()
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
+	end)
+	-- the menu dock steps aside while a window is open
+	State.MenusChanged:Connect(function()
+		Dock.setVisible(not State.anyMenuOpen())
 	end)
 
 	local gui = Widgets.screen("HUD", 1)
@@ -25051,7 +25154,7 @@ return HUDController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="73">
+          <Item class="ModuleScript" referent="75">
             <Properties>
               <string name="Name">InputController</string>
               <string name="Source"><![CDATA[-- Casting and hotkeys.
@@ -25295,7 +25398,7 @@ return InputController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="74">
+          <Item class="ModuleScript" referent="76">
             <Properties>
               <string name="Name">InventoryController</string>
               <string name="Source"><![CDATA[-- The Spellbook: manage wands, slot spells into them, and craft new spells in the Spellforge.
@@ -25348,9 +25451,10 @@ type Selection = {
 }
 
 local gui: ScreenGui
-local panel: Frame
 local wandList: ScrollingFrame
-local bagList: ScrollingFrame
+local bagPages: { [string]: ScrollingFrame } = {}
+local bagTabs: Widgets.TabsHandle
+local bagTab = "Spells"
 local forgeFrame: Frame
 local detailsInfo: Frame
 local detailsButtons: Frame
@@ -25500,36 +25604,55 @@ end
 ---------------------------------------------------------------------------
 
 local function wandCard(index: number, wand: Items.WandItem | false, equipped: boolean, order: number)
+	if not wand then
+		local empty = Widgets.panel({
+			Name = "EmptyWand_" .. index,
+			Size = UDim2.new(1, -10, 0, 44),
+			BackgroundColor3 = C.Panel,
+			BackgroundTransparency = 0.4,
+			LayoutOrder = order,
+			Parent = wandList,
+		})
+		local stroke = empty:FindFirstChildOfClass("UIStroke") :: UIStroke
+		stroke.Transparency = 0.75
+		Widgets.label({
+			Text = index .. "   Empty wand slot  ·  find wands in chests",
+			TextColor3 = C.Dim,
+			TextSize = 13,
+			Size = UDim2.new(1, -24, 1, 0),
+			Position = UDim2.fromOffset(14, 0),
+			Parent = empty,
+		})
+		return
+	end
+	local rarityColor = Theme.rarity(wand.rarity)
 	local card = Widgets.panel({
-		Size = UDim2.new(1, -8, 0, if wand then 128 else 56),
+		Name = "Wand_" .. index,
+		Size = UDim2.new(1, -10, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = if equipped then C.Panel3 else C.Panel2,
 		LayoutOrder = order,
 		Parent = wandList,
 	})
+	Create.padding(10, 8).Parent = card
+	Create.list(Enum.FillDirection.Vertical, 6).Parent = card
 	local stroke = card:FindFirstChildOfClass("UIStroke") :: UIStroke
-	if not wand then
-		stroke.Transparency = 0.7
-		Widgets.label({
-			Text = index .. "   Empty wand slot - find wands in chests",
-			TextColor3 = C.Dim,
-			TextSize = 14,
-			Size = UDim2.new(1, -20, 1, 0),
-			Position = UDim2.fromOffset(12, 0),
-			Parent = card,
-		})
-		return
-	end
-	stroke.Color = if equipped
-		then C.Gold
-		elseif isSelected("Wand", index) then Color3.new(1, 1, 1)
-		else Theme.rarity(wand.rarity)
-	stroke.Transparency = 0
+	stroke.Color = if equipped then C.Gold elseif isSelected("Wand", index) then Color3.new(1, 1, 1) else rarityColor
+	stroke.Transparency = if equipped then 0 else 0.35
+	stroke.Thickness = if equipped then 2 else 1.5
 
+	-- header: the wand, its name and type, and Equip
+	local top = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 46),
+		LayoutOrder = 1,
+		Parent = card,
+	})
 	Widgets.tile({
 		size = 46,
 		wandColor = Theme.rgb(wand.color),
-		gemColor = Theme.rarity(wand.rarity),
-		border = Theme.rarity(wand.rarity),
+		gemColor = rarityColor,
+		border = rarityColor,
 		selected = isSelected("Wand", index),
 		onClick = function()
 			choose({ kind = "Wand", wand = index })
@@ -25537,70 +25660,94 @@ local function wandCard(index: number, wand: Items.WandItem | false, equipped: b
 		info = function()
 			return ItemInfo.wand(wand)
 		end,
-		parent = card,
-	}).Position =
-		UDim2.fromOffset(8, 8)
-
+		parent = top,
+	})
 	local s = wand.stats
-	local tags = { wand.rarity .. " " .. wand.wandType }
-	if s.spellsPerCast > 1 then
-		table.insert(tags, "casts " .. s.spellsPerCast .. " at once")
-	end
-	if s.shuffle then
-		table.insert(tags, "shuffled")
-	end
 	Widgets.label({
-		Text = index .. ". " .. wand.name,
+		Text = index .. "  " .. wand.name,
 		Font = Theme.Bold,
 		TextSize = 15,
-		TextColor3 = Theme.rarity(wand.rarity),
+		TextColor3 = rarityColor,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Size = UDim2.new(1, -180, 0, 18),
-		Position = UDim2.fromOffset(62, 6),
-		Parent = card,
+		Size = UDim2.new(1, -150, 0, 20),
+		Position = UDim2.fromOffset(56, 3),
+		Parent = top,
 	})
 	Widgets.label({
-		Text = table.concat(tags, " · "),
+		Text = wand.rarity .. " " .. wand.wandType .. "  ·  " .. s.capacity .. " slots",
 		TextSize = 12,
 		TextColor3 = C.Dim,
-		Size = UDim2.new(1, -180, 0, 14),
-		Position = UDim2.fromOffset(62, 24),
-		Parent = card,
+		Size = UDim2.new(1, -150, 0, 16),
+		Position = UDim2.fromOffset(56, 24),
+		Parent = top,
 	})
-	Widgets.label({
-		Text = string.format(
-			"Mana %d (+%d/s) · Delay %.2fs · Recharge %.2fs",
-			s.manaMax,
-			s.manaRegen,
-			s.castDelay,
-			s.rechargeTime
-		),
-		TextSize = 12,
-		Size = UDim2.new(1, -70, 0, 14),
-		Position = UDim2.fromOffset(62, 40),
+	if equipped then
+		local pill = Widgets.label({
+			Text = "EQUIPPED",
+			Font = Theme.Black,
+			TextSize = 11,
+			TextColor3 = C.Ink,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			BackgroundColor3 = C.Gold,
+			BackgroundTransparency = 0,
+			Size = UDim2.fromOffset(78, 22),
+			Position = UDim2.new(1, -78, 0, 2),
+			Parent = top,
+		})
+		Create.corner(11).Parent = pill
+	else
+		Widgets.button("Equip", {
+			size = UDim2.fromOffset(70, 26),
+			position = UDim2.new(1, -70, 0, 0),
+			textSize = 13,
+			onClick = function()
+				invoke("Equip", { index = index })
+			end,
+			parent = top,
+		})
+	end
+
+	-- stats at a glance
+	local chips = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 18),
+		LayoutOrder = 2,
 		Parent = card,
-	})
+	}, { Create.list(Enum.FillDirection.Horizontal, 5) })
+	Widgets.chip(chips, string.format("💧 %d  +%d/s", s.manaMax, s.manaRegen), C.Mana, 1)
+	Widgets.chip(chips, string.format("⏱ %.2fs", s.castDelay), nil, 2)
+	Widgets.chip(chips, string.format("🔄 %.2fs", s.rechargeTime), nil, 3)
+	if s.spellsPerCast > 1 then
+		Widgets.chip(chips, "✦ casts " .. s.spellsPerCast, C.Accent, 4)
+	end
+	if s.shuffle then
+		Widgets.chip(chips, "🔀 shuffled", C.Dim, 5)
+	end
 	local perks = {}
 	for _, perk in wand.perks do
 		table.insert(perks, "★ " .. WandGenerator.describePerk(perk))
 	end
-	Widgets.label({
-		Text = if #perks > 0 then table.concat(perks, "   ") else "",
-		TextSize = 12,
-		TextColor3 = C.Gold,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Size = UDim2.new(1, -70, 0, 14),
-		Position = UDim2.fromOffset(62, 55),
-		Parent = card,
-	})
+	if #perks > 0 then
+		Widgets.label({
+			Text = table.concat(perks, "     "),
+			TextSize = 12,
+			TextColor3 = C.Gold,
+			TextWrapped = true,
+			AutomaticSize = Enum.AutomaticSize.Y,
+			Size = UDim2.new(1, 0, 0, 14),
+			LayoutOrder = 3,
+			Parent = card,
+		})
+	end
 
+	-- the spell slots, cast left to right
 	local slots = Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -16, 0, 42),
-		Position = UDim2.fromOffset(8, 78),
+		Size = UDim2.new(1, 0, 0, 44),
+		LayoutOrder = 4,
 		Parent = card,
 	}, { Create.list(Enum.FillDirection.Horizontal, 4) })
-	local tileSize = if s.capacity > 8 then 36 else 40
+	local tileSize = if s.capacity > 8 then 38 else 44
 	for si = 1, s.capacity do
 		local spell = wand.slots[si]
 		if spell then
@@ -25654,108 +25801,84 @@ local function wandCard(index: number, wand: Items.WandItem | false, equipped: b
 			})
 		end
 	end
-
-	if equipped then
-		Widgets.label({
-			Text = "EQUIPPED",
-			Font = Theme.Black,
-			TextSize = 12,
-			TextColor3 = C.Gold,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			Size = UDim2.fromOffset(100, 16),
-			Position = UDim2.new(1, -108, 0, 8),
-			Parent = card,
-		})
-	else
-		Widgets.button("Equip", {
-			size = UDim2.fromOffset(64, 24),
-			position = UDim2.new(1, -72, 0, 6),
-			textSize = 13,
-			onClick = function()
-				invoke("Equip", { index = index })
-			end,
-			parent = card,
-		})
-	end
 end
 
 ---------------------------------------------------------------------------
 -- Bag column
 ---------------------------------------------------------------------------
 
-local function sectionTitle(text: string, order: number)
+local CARD = 80
+
+local function emptyNote(parent: Instance, text: string, order: number)
 	Widgets.label({
 		Text = text,
-		Font = Theme.Black,
-		TextSize = 13,
 		TextColor3 = C.Dim,
-		Size = UDim2.new(1, 0, 0, 18),
+		TextSize = 13,
+		TextWrapped = true,
+		Size = UDim2.new(1, -8, 0, 36),
 		LayoutOrder = order,
-		Parent = bagList,
+		Parent = parent,
 	})
 end
 
-local function gridFrame(order: number, count: number, cell: number): Frame
-	local perRow = 6
-	local rows = math.max(1, math.ceil(count / perRow))
-	return Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -8, 0, rows * (cell + 6)),
-		LayoutOrder = order,
-		Parent = bagList,
-	}, { Create.grid(cell, 6) })
-end
-
 local function buildBag()
-	Widgets.clear(bagList, true)
+	for _, page in bagPages do
+		Widgets.clear(page, true)
+	end
 	local inv = inventory()
 	if not inv then
 		return
 	end
-	local order = 0
-	local function nextOrder(): number
-		order += 1
-		return order
-	end
 
-	sectionTitle(string.format("SPELLS  %d/%d", #inv.spells, Config.Inventory.MaxSpells), nextOrder())
-	local spellGrid = gridFrame(nextOrder(), math.max(1, #inv.spells), 50)
+	-- Spells
+	local spellsPage = bagPages.Spells
+	Widgets.sectionHeader(
+		spellsPage,
+		string.format("Spells  %d / %d", #inv.spells, Config.Inventory.MaxSpells),
+		"click one, then a wand slot",
+		1
+	)
 	if #inv.spells == 0 then
-		Widgets.label({
-			Text = "No loose spells. Loot chests or forge some!",
-			TextColor3 = C.Dim,
-			TextSize = 13,
-			Size = UDim2.new(1, 0, 0, 20),
-			Parent = spellGrid,
-		})
-		local grid = spellGrid:FindFirstChildOfClass("UIGridLayout") :: UIGridLayout
-		grid.CellSize = UDim2.new(1, 0, 0, 20)
-	end
-	for i, spell in inv.spells do
-		local icon, color = ItemInfo.spellVisual(spell.recipe)
-		Widgets.tile({
-			name = "Spell_" .. spell.uid,
-			size = 50,
-			icon = icon,
-			iconColor = color,
-			border = Theme.rarity(spell.rarity),
-			corner = if spell.recipe.trigger then "⚙" else nil,
-			selected = isSelected("Spell", spell.uid) or draft.payloadUid == spell.uid,
-			layoutOrder = i,
-			onClick = function()
-				if isSelected("Spell", spell.uid) then
-					choose(nil)
-				else
-					choose({ kind = "Spell", uid = spell.uid })
-				end
-			end,
-			info = function()
-				return ItemInfo.spell(spell, State.equippedWand())
-			end,
-			parent = spellGrid,
-		})
+		emptyNote(spellsPage, "No loose spells. Loot chests, or forge one from parts in the Spellforge.", 2)
+	else
+		local grid = Widgets.cardGrid(spellsPage, CARD, 2, "SpellCards")
+		for i, spell in inv.spells do
+			local icon, color = ItemInfo.spellVisual(spell.recipe)
+			Widgets.card({
+				name = "Spell_" .. spell.uid,
+				width = CARD,
+				icon = icon,
+				iconColor = color,
+				rarity = spell.rarity,
+				caption = spell.name,
+				captionColor = Theme.lighten(Theme.rarity(spell.rarity), 0.35),
+				badge = if spell.recipe.trigger then "⚙" else nil,
+				selected = isSelected("Spell", spell.uid) or draft.payloadUid == spell.uid,
+				layoutOrder = i,
+				onClick = function()
+					if isSelected("Spell", spell.uid) then
+						choose(nil)
+					else
+						choose({ kind = "Spell", uid = spell.uid })
+					end
+				end,
+				info = function()
+					return ItemInfo.spell(spell, State.equippedWand())
+				end,
+				parent = grid,
+			})
+		end
 	end
 
+	-- Parts, grouped by kind
+	local partsPage = bagPages.Parts
+	local order = 0
+	local hints = {
+		Form = "what the spell is",
+		Element = "what it's made of",
+		Modifier = "how it behaves",
+		Trigger = "casts a payload spell",
+	}
 	for _, category in SpellParts.Categories do
 		local owned = {}
 		for _, part in SpellParts.ByCategory[category] do
@@ -25763,62 +25886,63 @@ local function buildBag()
 				table.insert(owned, part)
 			end
 		end
-		sectionTitle(string.upper(category) .. " PARTS", nextOrder())
-		local grid = gridFrame(nextOrder(), math.max(1, #owned), 50)
+		order += 1
+		Widgets.sectionHeader(partsPage, category .. " parts  " .. #owned, hints[category], order)
+		order += 1
 		if #owned == 0 then
-			local layout = grid:FindFirstChildOfClass("UIGridLayout") :: UIGridLayout
-			layout.CellSize = UDim2.new(1, 0, 0, 20)
-			Widgets.label({
-				Text = "None yet",
-				TextColor3 = C.Dim,
-				TextSize = 12,
-				Size = UDim2.new(1, 0, 0, 20),
-				Parent = grid,
-			})
-		end
-		for i, part in owned do
-			local left = available(part.id)
-			Widgets.tile({
-				name = "Part_" .. part.id,
-				size = 50,
-				icon = part.icon,
-				iconColor = Theme.CategoryColors[category],
-				border = Theme.rarity(part.rarity),
-				count = left,
-				empty = left <= 0,
-				selected = isSelected("Part", part.id),
-				layoutOrder = i,
-				onClick = function()
-					selected = { kind = "Part", id = part.id }
-					addPartToDraft(part.id)
-					refresh()
-				end,
-				info = function()
-					return ItemInfo.part(part.id)
-				end,
-				parent = grid,
-			})
+			emptyNote(partsPage, "None yet", order)
+		else
+			local grid = Widgets.cardGrid(partsPage, CARD, order, category .. "Cards")
+			for i, part in owned do
+				local left = available(part.id)
+				Widgets.card({
+					name = "Part_" .. part.id,
+					width = CARD,
+					icon = part.icon,
+					iconColor = Theme.CategoryColors[category],
+					rarity = part.rarity,
+					caption = part.name,
+					count = left,
+					empty = left <= 0,
+					selected = isSelected("Part", part.id),
+					layoutOrder = i,
+					onClick = function()
+						selected = { kind = "Part", id = part.id }
+						addPartToDraft(part.id)
+						refresh()
+					end,
+					info = function()
+						return ItemInfo.part(part.id)
+					end,
+					parent = grid,
+				})
+			end
 		end
 	end
 
+	-- Potions
+	local potionsPage = bagPages.Potions
 	local potions = {}
 	for _, c in Consumables.List do
 		if (inv.consumables[c.id] or 0) > 0 then
 			table.insert(potions, c)
 		end
 	end
-	if #potions > 0 then
-		sectionTitle("POTIONS", nextOrder())
-		local grid = gridFrame(nextOrder(), #potions, 50)
+	Widgets.sectionHeader(potionsPage, "Potions  " .. #potions, "drink with the key shown", 1)
+	if #potions == 0 then
+		emptyNote(potionsPage, "No potions. They turn up in chests.", 2)
+	else
+		local grid = Widgets.cardGrid(potionsPage, CARD, 2, "PotionCards")
 		for i, c in potions do
-			Widgets.tile({
+			Widgets.card({
 				name = "Potion_" .. c.id,
-				size = 50,
+				width = CARD,
 				icon = c.icon,
 				iconColor = Theme.rgb(c.color),
-				border = Theme.rarity(c.rarity),
+				rarity = c.rarity,
+				caption = c.name,
 				count = inv.consumables[c.id],
-				label = c.key,
+				badge = c.key,
 				selected = isSelected("Consumable", c.id),
 				layoutOrder = i,
 				onClick = function()
@@ -25830,6 +25954,35 @@ local function buildBag()
 				parent = grid,
 			})
 		end
+	end
+
+	-- tab labels with counts
+	local partCount = 0
+	for _, n in inv.parts do
+		if n > 0 then
+			partCount += 1
+		end
+	end
+	bagTabs.buttons.Spells.Text = "✨ Spells " .. #inv.spells
+	bagTabs.buttons.Parts.Text = "🧩 Parts " .. partCount
+	bagTabs.buttons.Potions.Text = "🧪 Potions " .. #potions
+	bagTabs.set(bagTab)
+	for name, page in bagPages do
+		page.Visible = name == bagTab
+	end
+end
+
+-- Switches the bag to the tab holding a named element ("Part_Bolt", "Spell_..."), so the tutorial
+-- can point at it.
+function InventoryController.reveal(elementName: string)
+	local tab = if string.sub(elementName, 1, 5) == "Part_"
+		then "Parts"
+		elseif string.sub(elementName, 1, 7) == "Potion_" then "Potions"
+		elseif string.sub(elementName, 1, 6) == "Spell_" then "Spells"
+		else nil
+	if tab and tab ~= bagTab then
+		bagTab = tab
+		refresh()
 	end
 end
 
@@ -25848,7 +26001,7 @@ local function forgeSlot(
 	local holder = Create("Frame", {
 		Name = "Forge_" .. string.gsub(title, " ", ""),
 		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(56, 66),
+		Size = UDim2.fromOffset(68, 66),
 		LayoutOrder = order,
 		Parent = parent,
 	})
@@ -25867,7 +26020,7 @@ local function forgeSlot(
 			else nil,
 		parent = holder,
 	}).Position =
-		UDim2.fromOffset(4, 0)
+		UDim2.fromOffset(10, 0)
 	Widgets.label({
 		Text = title,
 		TextSize = 10,
@@ -25882,31 +26035,16 @@ end
 
 local function buildForge()
 	Widgets.clear(forgeFrame, true)
-	Widgets.label({
-		Text = "✦ SPELLFORGE",
-		Font = Theme.Black,
-		TextSize = 16,
-		TextColor3 = C.Accent,
-		Size = UDim2.new(1, 0, 0, 20),
-		Position = UDim2.fromOffset(12, 8),
-		Parent = forgeFrame,
-	})
-	Widgets.label({
-		Text = "Click parts in your bag to add them",
-		TextSize = 11,
-		TextColor3 = C.Dim,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.new(1, -24, 0, 20),
-		Position = UDim2.fromOffset(12, 8),
-		Parent = forgeFrame,
-	})
+	local head = Widgets.sectionHeader(forgeFrame, "✦ Spellforge", "click parts to add them", 0)
+	head.Position = UDim2.fromOffset(12, 8)
+	head.Size = UDim2.new(1, -24, 0, 22)
 
 	local row1 = Create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -16, 0, 66),
-		Position = UDim2.fromOffset(8, 32),
+		Position = UDim2.fromOffset(12, 36),
 		Parent = forgeFrame,
-	}, { Create.list(Enum.FillDirection.Horizontal, 2) })
+	}, { Create.list(Enum.FillDirection.Horizontal, 6) })
 	forgeSlot(row1, "FORM", draft.form, function()
 		draft.form = nil
 		refresh()
@@ -25924,7 +26062,7 @@ local function buildForge()
 	local payloadHolder = Create("Frame", {
 		Name = "Forge_PAYLOAD",
 		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(56, 66),
+		Size = UDim2.fromOffset(68, 66),
 		LayoutOrder = 4,
 		Parent = row1,
 	})
@@ -25959,7 +26097,7 @@ local function buildForge()
 			else nil,
 		parent = payloadHolder,
 	}).Position =
-		UDim2.fromOffset(4, 0)
+		UDim2.fromOffset(10, 0)
 	Widgets.label({
 		Text = "PAYLOAD",
 		TextSize = 10,
@@ -25974,9 +26112,9 @@ local function buildForge()
 	local row2 = Create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -16, 0, 66),
-		Position = UDim2.fromOffset(8, 100),
+		Position = UDim2.fromOffset(12, 104),
 		Parent = forgeFrame,
-	}, { Create.list(Enum.FillDirection.Horizontal, 2) })
+	}, { Create.list(Enum.FillDirection.Horizontal, 6) })
 	for i = 1, Config.Spell.MaxModifiers do
 		local id = draft.mods[i]
 		forgeSlot(row2, "MOD " .. i, id, function()
@@ -25987,11 +26125,13 @@ local function buildForge()
 
 	-- preview
 	local preview = Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -24, 0, 92),
-		Position = UDim2.fromOffset(12, 170),
+		Name = "Preview",
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.5,
+		Size = UDim2.new(1, -24, 0, 96),
+		Position = UDim2.fromOffset(12, 176),
 		Parent = forgeFrame,
-	})
+	}, { Create.corner(8), Create.padding(8, 6) })
 	local recipe = draftRecipe()
 	if not recipe then
 		Widgets.label({
@@ -26028,29 +26168,40 @@ local function buildForge()
 				Parent = preview,
 			})
 			local lines = SpellBuilder.describe(spec)
-			local statText = {}
+			local stats = Create("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 1, -22),
+				Position = UDim2.fromOffset(0, 22),
+				Parent = preview,
+			}, {
+				Create("UIGridLayout", {
+					CellSize = UDim2.new(0.5, -4, 0, 16),
+					CellPadding = UDim2.fromOffset(6, 2),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+			})
 			for i, line in lines do
 				if i > 8 then
 					break
 				end
-				table.insert(statText, line[1] .. ": " .. line[2])
+				Widgets.label({
+					Text = "<font color='#a096b9'>" .. line[1] .. "</font>  " .. line[2],
+					RichText = true,
+					TextSize = 12,
+					TextTruncate = Enum.TextTruncate.AtEnd,
+					LayoutOrder = i,
+					Parent = stats,
+				})
 			end
-			Widgets.label({
-				Text = table.concat(statText, "   "),
-				TextWrapped = true,
-				TextSize = 12,
-				TextYAlignment = Enum.TextYAlignment.Top,
-				Size = UDim2.new(1, 0, 1, -20),
-				Position = UDim2.fromOffset(0, 20),
-				Parent = preview,
-			})
 		end
 	end
 
 	local forgeButton = Widgets.button("Forge Spell", {
-		size = UDim2.new(0.62, -16, 0, 34),
-		position = UDim2.new(0, 12, 1, -44),
-		color = if recipe then C.Accent else C.Panel3,
+		size = UDim2.new(0.66, -16, 0, 36),
+		position = UDim2.new(0, 12, 1, -46),
+		color = if recipe then C.Gold else C.Panel3,
+		textColor = if recipe then C.Ink else C.Dim,
+		textSize = 16,
 		onClick = function()
 			if not recipe then
 				State.toast("Add a Form part first", C.Bad)
@@ -26071,6 +26222,7 @@ local function buildForge()
 				clearDraft()
 				if type(newUid) == "string" then
 					selected = { kind = "Spell", uid = newUid }
+					bagTab = "Spells"
 				end
 				refresh()
 			end
@@ -26080,8 +26232,8 @@ local function buildForge()
 	forgeButton.Name = "ForgeButton"
 
 	Widgets.button("Clear", {
-		size = UDim2.new(0.38, -12, 0, 34),
-		position = UDim2.new(0.62, 0, 1, -44),
+		size = UDim2.new(0.34, -12, 0, 36),
+		position = UDim2.new(0.66, 0, 1, -46),
 		color = C.Panel3,
 		onClick = function()
 			clearDraft()
@@ -26097,7 +26249,7 @@ end
 
 local function detailButton(text: string, color: Color3?, fn: () -> ())
 	Widgets.button(text, {
-		size = UDim2.fromOffset(102, 30),
+		size = UDim2.fromOffset(100, 30),
 		textSize = 13,
 		color = color,
 		onClick = function()
@@ -26228,119 +26380,111 @@ end
 local function build()
 	gui = Widgets.screen("Spellbook", 10)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	panel = Widgets.panel({
-		Size = UDim2.fromOffset(1190, 630),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.05,
-		Parent = root,
-	})
-	Widgets.label({
-		Text = "SPELLBOOK",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(300, 30),
-		Position = UDim2.fromOffset(18, 10),
-		Parent = panel,
-	})
-	Widgets.label({
-		Text = "Select a spell, then click a wand slot to equip it.  Wands cast their spells left to right.",
-		TextSize = 13,
-		TextColor3 = C.Dim,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -400, 0, 30),
-		Position = UDim2.fromOffset(200, 10),
-		Parent = panel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 8),
-		color = C.Panel3,
-		onClick = function()
+	local window = Widgets.window(gui, {
+		title = "Spellbook",
+		icon = "📖",
+		subtitle = "Pick a spell, then click a wand slot  ·  wands cast left to right  ·  right-click a slotted spell to unslot it",
+		size = Vector2.new(1210, 660),
+		onClose = function()
 			InventoryController.close()
 		end,
-		parent = panel,
 	})
+	local body = window.body
 	restockButton = Widgets.button("♻ Restock Spell Lab", {
-		size = UDim2.fromOffset(170, 34),
-		position = UDim2.new(1, -224, 0, 8),
-		color = Color3.fromRGB(60, 120, 90),
+		size = UDim2.fromOffset(170, 32),
+		color = Color3.fromRGB(56, 116, 88),
 		textSize = 13,
 		onClick = function()
 			clearDraft()
 			selected = nil
 			invoke("ResetPractice", {})
 		end,
-		parent = panel,
+		parent = window.right,
 	})
 
-	local function column(x: number, width: number, title: string): Frame
-		local col = Widgets.panel({
-			Size = UDim2.new(0, width, 1, -62),
-			Position = UDim2.fromOffset(x, 50),
+	local function column(x: number, width: number): Frame
+		return Widgets.panel({
+			Size = UDim2.new(0, width, 1, 0),
+			Position = UDim2.fromOffset(x, 0),
 			BackgroundColor3 = C.Panel,
-			Parent = panel,
+			Parent = body,
 		})
-		Widgets.label({
-			Text = title,
-			Font = Theme.Black,
-			TextSize = 14,
-			TextColor3 = C.Accent,
-			Size = UDim2.new(1, -20, 0, 22),
-			Position = UDim2.fromOffset(10, 6),
-			Parent = col,
-		})
-		return col
 	end
 
-	local wandCol = column(12, 440, "WANDS  (keys 1-4)")
+	-- wands
+	local wandCol = column(0, 440)
+	local wandHead = Widgets.sectionHeader(wandCol, "Wands", "keys 1-4 switch", 0)
+	wandHead.Position = UDim2.fromOffset(12, 8)
+	wandHead.Size = UDim2.new(1, -24, 0, 22)
 	wandList = Create("ScrollingFrame", {
 		Name = "Wands",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -12, 1, -36),
-		Position = UDim2.fromOffset(8, 30),
-		ScrollBarThickness = 6,
+		Size = UDim2.new(1, -14, 1, -42),
+		Position = UDim2.fromOffset(10, 36),
+		ScrollBarThickness = 5,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
 		Parent = wandCol,
-	}, { Create.list(Enum.FillDirection.Vertical, 8) })
+	}, { Create.list(Enum.FillDirection.Vertical, 8), Create.padding(2, 2) })
 
-	local bagCol = column(462, 370, "BAG")
-	bagList = Create("ScrollingFrame", {
-		Name = "Bag",
+	-- the bag: spells, parts and potions on separate tabs
+	local bagCol = column(450, 384)
+	local tabsHolder = Create("Frame", {
 		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = UDim2.new(1, -12, 1, -36),
-		Position = UDim2.fromOffset(8, 30),
-		ScrollBarThickness = 6,
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		CanvasSize = UDim2.new(),
+		Size = UDim2.new(1, -20, 0, 34),
+		Position = UDim2.fromOffset(10, 8),
 		Parent = bagCol,
-	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+	})
+	bagTabs = Widgets.tabs(
+		tabsHolder,
+		{
+			{ "Spells", "✨ Spells" },
+			{ "Parts", "🧩 Parts" },
+			{ "Potions", "🧪 Potions" },
+		},
+		116,
+		function(id)
+			Sounds.play("Click")
+			bagTab = id
+			refresh()
+		end
+	)
+	for _, name in { "Spells", "Parts", "Potions" } do
+		bagPages[name] = Create("ScrollingFrame", {
+			Name = name .. "Page",
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, -14, 1, -54),
+			Position = UDim2.fromOffset(10, 48),
+			ScrollBarThickness = 5,
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(),
+			Visible = name == bagTab,
+			Parent = bagCol,
+		}, { Create.list(Enum.FillDirection.Vertical, 8), Create.padding(2, 2) })
+	end
 
+	-- forge and details
 	forgeFrame = Widgets.panel({
 		Name = "Spellforge",
-		Size = UDim2.fromOffset(344, 316),
-		Position = UDim2.fromOffset(842, 50),
+		Size = UDim2.new(0, 330, 0, 330),
+		Position = UDim2.fromOffset(844, 0),
 		BackgroundColor3 = C.Panel,
-		Parent = panel,
+		Parent = body,
 	})
 	local details = Widgets.panel({
 		Name = "Details",
-		Size = UDim2.new(0, 344, 1, -378),
-		Position = UDim2.fromOffset(842, 372),
+		Size = UDim2.new(0, 330, 1, -340),
+		Position = UDim2.fromOffset(844, 340),
 		BackgroundColor3 = C.Panel,
-		Parent = panel,
+		Parent = body,
 	})
 	local detailsScroll = Create("ScrollingFrame", {
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -16, 1, -48),
-		Position = UDim2.fromOffset(8, 6),
+		Size = UDim2.new(1, -20, 1, -54),
+		Position = UDim2.fromOffset(12, 8),
 		ScrollBarThickness = 4,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
@@ -26354,8 +26498,8 @@ local function build()
 	})
 	detailsButtons = Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -16, 0, 32),
-		Position = UDim2.new(0, 8, 1, -38),
+		Size = UDim2.new(1, -20, 0, 32),
+		Position = UDim2.new(0, 10, 1, -40),
 		Parent = details,
 	}, { Create.list(Enum.FillDirection.Horizontal, 6) })
 end
@@ -26366,6 +26510,10 @@ function InventoryController.open()
 	end
 	isOpen = true
 	gui.Enabled = true
+	local inv = inventory()
+	if inv and #inv.spells == 0 and bagTab == "Spells" then
+		bagTab = "Parts" -- nothing to slot yet: show what you can forge with
+	end
 	State.setMenu("inventory", true)
 	refresh()
 end
@@ -26426,7 +26574,7 @@ return InventoryController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="75">
+          <Item class="ModuleScript" referent="77">
             <Properties>
               <string name="Name">LobbyController</string>
               <string name="Source"><![CDATA[-- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
@@ -26449,6 +26597,7 @@ local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
 local Widgets = require(UI.Widgets)
+local Dock = require(UI.Dock)
 local ItemInfo = require(UI.ItemInfo)
 local State = require(script.Parent.State)
 local Sounds = require(script.Parent.Sounds)
@@ -26665,54 +26814,37 @@ local function renderClasses()
 	end
 end
 
+local function setKitShop(visible: boolean)
+	classPanel.Visible = visible
+	State.setMenu("kits", visible)
+	if visible then
+		renderClasses()
+	end
+end
+
 local function buildClassPanel()
-	classPanel = Widgets.panel({
-		Size = UDim2.fromOffset(940, 540),
-		Position = UDim2.fromScale(0.5, 0.52),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.05,
-		Visible = false,
-		Parent = root,
-	})
-	Widgets.label({
-		Text = "CHOOSE YOUR KIT",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(400, 30),
-		Position = UDim2.fromOffset(20, 12),
-		Parent = classPanel,
-	})
-	Widgets.label({
-		Text = "Your kit decides the wands, spells and parts you start with, plus a random bonus part each match. Hover a kit to see everything in it.",
-		TextSize = 13,
-		TextColor3 = C.Dim,
-		TextWrapped = true,
-		Size = UDim2.new(1, -80, 0, 18),
-		Position = UDim2.fromOffset(20, 42),
-		Parent = classPanel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 10),
-		color = C.Panel3,
-		onClick = function()
-			classPanel.Visible = false
+	local kitGui = Widgets.screen("KitShop", 8)
+	local window = Widgets.window(kitGui, {
+		title = "Choose Your Kit",
+		icon = "🎓",
+		subtitle = "Your kit decides the wands, spells and parts you start with, plus a random bonus part each match. Hover a kit to see everything in it.",
+		size = Vector2.new(960, 600),
+		onClose = function()
+			setKitShop(false)
 		end,
-		parent = classPanel,
 	})
+	classPanel = window.root
+	classPanel.Visible = false
 	classGrid = Create("ScrollingFrame", {
 		Name = "KitList",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -30, 1, -110),
-		Position = UDim2.fromOffset(20, 70),
+		Size = UDim2.new(1, 0, 1, -28),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 8,
-		Parent = classPanel,
-	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+		ScrollBarThickness = 6,
+		Parent = window.body,
+	}, { Create.list(Enum.FillDirection.Vertical, 6), Create.padding(2, 2) })
 	local premiumNote = if Config.Kits.PremiumFreeTier > 0
 		then "  ·  Roblox Premium members get every " .. Classes.tierInfo(Config.Kits.PremiumFreeTier).name .. " kit free"
 		else ""
@@ -26721,9 +26853,9 @@ local function buildClassPanel()
 		TextSize = 12,
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -40, 0, 18),
-		Position = UDim2.new(0, 20, 1, -30),
-		Parent = classPanel,
+		Size = UDim2.new(1, 0, 0, 18),
+		Position = UDim2.new(0, 0, 1, -18),
+		Parent = window.body,
 	})
 end
 
@@ -26781,14 +26913,14 @@ end
 
 local function buildSpectate()
 	spectateButton = Widgets.button("👁  Spectate the match", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 190),
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = C.Panel3,
+		layoutOrder = 4,
 		onClick = function()
 			setSpectate(true)
 			updateSpectate()
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
 	spectateBar = Widgets.panel({
 		Size = UDim2.fromOffset(420, 50),
@@ -27084,8 +27216,7 @@ function LobbyController.init()
 		if action == "Grimoire" and LobbyController.onOpenGrimoire then
 			LobbyController.onOpenGrimoire()
 		elseif action == "ClassPicker" then
-			classPanel.Visible = true
-			renderClasses()
+			setKitShop(true)
 		elseif action == "Wardrobe" and LobbyController.onOpenWardrobe then
 			LobbyController.onOpenWardrobe("Tailor")
 		elseif action == "Coffers" and LobbyController.onOpenWardrobe then
@@ -27096,17 +27227,15 @@ function LobbyController.init()
 	end)
 
 	classButton = Widgets.button("🎓  Class: Apprentice", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 148),
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = C.Accent,
+		layoutOrder = 3,
 		onClick = function()
-			classPanel.Visible = not classPanel.Visible
-			if classPanel.Visible then
-				renderClasses()
-			end
+			setKitShop(not classPanel.Visible)
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
+	classButton.Name = "ClassButton"
 
 	local function updateClassButton()
 		local class = Classes.ById[tostring(player:GetAttribute("Class"))]
@@ -27119,27 +27248,27 @@ function LobbyController.init()
 	end
 	-- the Tailor's Loom and the Auction House are only open in the Plaza
 	wardrobeButton = Widgets.button("👘  Wardrobe & Coffers", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 232),
-		color = C.Panel3,
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(120, 50, 90),
+		layoutOrder = 5,
 		onClick = function()
 			if LobbyController.onOpenWardrobe then
 				LobbyController.onOpenWardrobe(nil)
 			end
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
 	wardrobeButton.Name = "WardrobeButton"
 	auctionButton = Widgets.button("⚖  Auction House", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 274),
-		color = C.Panel3,
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(46, 92, 110),
+		layoutOrder = 6,
 		onClick = function()
 			if LobbyController.onOpenAuction then
 				LobbyController.onOpenAuction()
 			end
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
 	auctionButton.Name = "AuctionButton"
 	coinsPill = Widgets.label({
@@ -27147,14 +27276,16 @@ function LobbyController.init()
 		Text = "🪙 0 Enchanted Coins",
 		Font = Theme.Black,
 		TextSize = 16,
-		TextColor3 = Color3.fromRGB(255, 215, 90),
-		BackgroundColor3 = C.Panel,
-		BackgroundTransparency = 0.15,
-		Size = UDim2.fromOffset(230, 30),
-		Position = UDim2.fromOffset(16, 316),
-		Parent = root,
+		TextColor3 = C.Gold,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.3,
+		Size = UDim2.fromOffset(Dock.WIDTH, 32),
+		LayoutOrder = 7,
+		Parent = Dock.get(),
 	})
-	Create.corner(15).Parent = coinsPill
+	Create.corner(16).Parent = coinsPill
+	Create.stroke(C.GoldDeep, 1.5, 0.3).Parent = coinsPill
 	local function updateCoins()
 		coinsPill.Text = "🪙 " .. tostring(player:GetAttribute("Coins") or 0) .. " Enchanted Coins"
 	end
@@ -27174,8 +27305,8 @@ function LobbyController.init()
 		wardrobeButton.Visible = inLobby and State.inHub()
 		auctionButton.Visible = wardrobeButton.Visible
 		coinsPill.Visible = inLobby
-		if not inLobby then
-			classPanel.Visible = false
+		if not inLobby and classPanel.Visible then
+			setKitShop(false)
 		end
 		spectateButton.Visible = inLobby and matchRunning and not spectating
 		spectateBar.Visible = spectating
@@ -27212,7 +27343,7 @@ return LobbyController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="76">
+          <Item class="ModuleScript" referent="78">
             <Properties>
               <string name="Name">Sounds</string>
               <string name="Source"><![CDATA[-- Sound effects. These use sounds that ship with every Roblox client so the game works
@@ -27297,7 +27428,7 @@ return Sounds
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="77">
+          <Item class="ModuleScript" referent="79">
             <Properties>
               <string name="Name">State</string>
               <string name="Source"><![CDATA[-- Client-side cache of everything the UI shows: inventory, equipped wand state,
@@ -27448,7 +27579,7 @@ return State
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="78">
+          <Item class="ModuleScript" referent="80">
             <Properties>
               <string name="Name">StormController</string>
               <string name="Source"><![CDATA[-- Draws the shrinking Mana Storm wall locally from replicated attributes,
@@ -27559,7 +27690,7 @@ return StormController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="79">
+          <Item class="ModuleScript" referent="81">
             <Properties>
               <string name="Name">TutorialController</string>
               <string name="Source"><![CDATA[-- A hands-on tutorial in the Spell Lab (the hub on your first visit): open the Spellbook, forge a spell from parts,
@@ -27806,6 +27937,9 @@ local function update()
 	end
 	-- make the next thing to click glow
 	if step.highlight then
+		if InventoryController.isOpen() then
+			InventoryController.reveal(step.highlight) -- (switches the bag to the right tab)
+		end
 		local target = findTarget(step.highlight)
 		if target and (not glow or glow.Parent ~= target) then
 			clearGlow()
@@ -27944,7 +28078,7 @@ return TutorialController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="80">
+          <Item class="ModuleScript" referent="82">
             <Properties>
               <string name="Name">VFX</string>
               <string name="Source"><![CDATA[-- Building blocks for spell effects, and how each element looks.
@@ -28568,7 +28702,7 @@ return VFX
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="81">
+          <Item class="ModuleScript" referent="83">
             <Properties>
               <string name="Name">WardrobeController</string>
               <string name="Source"><![CDATA[-- The Tailor's Loom: open Coffers with Enchanted Coins, stitch parts into robes and hats, and
@@ -28606,7 +28740,7 @@ local action = Remotes.func("WardrobeAction")
 local gui: ScreenGui
 local coinsLabel: TextLabel
 local pages: { [string]: Frame } = {}
-local tabButtons: { [string]: TextButton } = {}
+local tabs: Widgets.TabsHandle
 local currentTab = "Coffers"
 local isOpen = false
 
@@ -29012,12 +29146,15 @@ local function refreshTailor()
 		for _, part in sortByRarity(State.wardrobe.parts) do
 			if part.slot == slot then
 				n += 1
-				Widgets.tile({
+				Widgets.itemRow({
 					name = "Pick_" .. part.uid,
-					size = 58,
 					icon = CosmeticInfo.icon(part),
 					iconColor = CosmeticInfo.color(part),
-					border = Theme.rarity(part.rarity),
+					rarity = part.rarity,
+					title = CosmeticInfo.shortName("Part", part),
+					subtitle = part.rarity .. "  ·  " .. (if Cosmetics.ColorById[part.color]
+						then Cosmetics.ColorById[part.color].name
+						else "") .. (if part.aura then "  ·  ✨ aura" else ""),
 					selected = draft[slot] == part.uid,
 					layoutOrder = n,
 					info = function()
@@ -29117,13 +29254,13 @@ local function buildTailor(page: Frame)
 			Name = "Slot" .. i,
 			BackgroundColor3 = C.Panel,
 			BorderSizePixel = 0,
-			Size = UDim2.fromOffset(212, 440),
+			Size = UDim2.fromOffset(212, 452),
 			Position = UDim2.fromOffset(x, 62),
 			CanvasSize = UDim2.new(),
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
-			ScrollBarThickness = 6,
+			ScrollBarThickness = 5,
 			Parent = page,
-		}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+		}, { Create.corner(8), Create.padding(6, 6), Create.list(Enum.FillDirection.Vertical, 6) })
 	end
 	tailorPreview = makePreview(page, UDim2.fromOffset(330, 250), UDim2.fromOffset(672, 0))
 	tailorSummary = Widgets.label({
@@ -29186,13 +29323,14 @@ local function refreshWardrobe()
 	Widgets.clear(partGrid, true)
 	for i, g in sortByRarity(w.garments) do
 		local isWorn = w.equipped[g.kind] == g.uid
-		Widgets.tile({
+		Widgets.card({
 			name = "Garment_" .. g.uid,
-			size = 58,
+			width = 72,
 			icon = Cosmetics.Garments[g.kind].icon,
 			iconColor = CosmeticInfo.color(g.parts[Cosmetics.Garments[g.kind].slots[1]]),
-			border = Theme.rarity(g.rarity),
-			corner = if isWorn then "✔" else nil,
+			rarity = g.rarity,
+			caption = CosmeticInfo.shortName("Garment", g),
+			badge = if isWorn then "✔" else nil,
 			selected = selected ~= nil and selected.uid == g.uid,
 			layoutOrder = i,
 			info = function()
@@ -29206,12 +29344,13 @@ local function refreshWardrobe()
 		})
 	end
 	for i, p in sortByRarity(w.parts) do
-		Widgets.tile({
+		Widgets.card({
 			name = "Part_" .. p.uid,
-			size = 50,
+			width = 72,
 			icon = CosmeticInfo.icon(p),
 			iconColor = CosmeticInfo.color(p),
-			border = Theme.rarity(p.rarity),
+			rarity = p.rarity,
+			caption = CosmeticInfo.shortName("Part", p),
 			selected = selected ~= nil and selected.uid == p.uid,
 			layoutOrder = i,
 			info = function()
@@ -29309,33 +29448,49 @@ local function buildWardrobe(page: Frame)
 		Name = "Garments",
 		BackgroundColor3 = C.Panel,
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(420, 200),
-		Position = UDim2.fromOffset(0, 20),
+		Size = UDim2.fromOffset(420, 212),
+		Position = UDim2.fromOffset(0, 22),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
+		ScrollBarThickness = 5,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	Widgets.label({
 		Text = "LOOSE PARTS",
 		Font = Theme.Black,
 		TextSize = 13,
 		TextColor3 = C.Gold,
 		Size = UDim2.fromOffset(300, 18),
-		Position = UDim2.fromOffset(0, 228),
+		Position = UDim2.fromOffset(0, 248),
 		Parent = page,
 	})
 	partGrid = Create("ScrollingFrame", {
 		Name = "Parts",
 		BackgroundColor3 = C.Panel,
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(420, 254),
-		Position = UDim2.fromOffset(0, 248),
+		Size = UDim2.fromOffset(420, 244),
+		Position = UDim2.fromOffset(0, 270),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
+		ScrollBarThickness = 5,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(50, 6) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	wardrobePreview = makePreview(page, UDim2.fromOffset(250, 300), UDim2.fromOffset(432, 0))
 	gearLabel = Widgets.label({
 		Name = "Bonuses",
@@ -29387,14 +29542,15 @@ local function refreshFamiliars()
 	Widgets.clear(familiarGrid, true)
 	local list = sortByRarity(w.familiars or {})
 	for i, f in list do
-		Widgets.tile({
+		Widgets.card({
 			name = "Familiar_" .. f.uid,
-			size = 58,
+			width = 72,
 			icon = CosmeticInfo.familiarIcon(f),
 			iconColor = CosmeticInfo.familiarColor(f),
-			border = Theme.rarity(f.rarity),
+			rarity = f.rarity,
+			caption = CosmeticInfo.shortName("Familiar", f),
 			selected = familiarSelected == f.uid,
-			corner = if w.equipped.Familiar == f.uid then "🐾" elseif f.shiny then "✨" else nil,
+			badge = if w.equipped.Familiar == f.uid then "🐾" elseif f.shiny then "✨" else nil,
 			layoutOrder = i,
 			info = function()
 				return CosmeticInfo.familiar(f)
@@ -29462,13 +29618,21 @@ local function buildFamiliars(page: Frame)
 		Name = "FamiliarGrid",
 		BackgroundColor3 = C.Panel,
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(420, 482),
-		Position = UDim2.fromOffset(0, 20),
+		Size = UDim2.fromOffset(420, 492),
+		Position = UDim2.fromOffset(0, 22),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
+		ScrollBarThickness = 5,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	familiarPreview = makePreview(page, UDim2.fromOffset(250, 300), UDim2.fromOffset(432, 0))
 	Widgets.label({
 		Name = "FamiliarNote",
@@ -29514,9 +29678,7 @@ local function refresh()
 	if not isOpen then
 		return
 	end
-	for name, button in tabButtons do
-		button.BackgroundColor3 = if name == currentTab then C.Accent else C.Panel3
-	end
+	tabs.set(currentTab)
 	for name, page in pages do
 		page.Visible = name == currentTab
 	end
@@ -29553,80 +29715,54 @@ end
 local function build()
 	gui = Widgets.screen("Wardrobe", 11)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	local panel = Widgets.panel({
-		Size = UDim2.fromOffset(1040, 620),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.03,
-		Parent = root,
-	})
-	Widgets.label({
-		Text = "THE TAILOR'S LOOM",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(400, 30),
-		Position = UDim2.fromOffset(18, 10),
-		Parent = panel,
+	local window = Widgets.window(gui, {
+		title = "The Tailor's Loom",
+		icon = "🧵",
+		subtitle = "Open coffers, stitch robes and hats, dress up and summon familiars",
+		size = Vector2.new(1040, 644),
+		onClose = function()
+			WardrobeController.close()
+		end,
 	})
 	coinsLabel = Widgets.label({
 		Name = "Coins",
 		Text = "",
 		Font = Theme.Black,
-		TextSize = 18,
-		TextColor3 = Color3.fromRGB(255, 215, 90),
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(320, 30),
-		Position = UDim2.new(1, -378, 0, 10),
-		Parent = panel,
+		TextSize = 17,
+		TextColor3 = C.Gold,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.35,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 32),
+		Parent = window.right,
 	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 8),
-		color = C.Panel3,
-		onClick = function()
-			WardrobeController.close()
-		end,
-		parent = panel,
-	})
-	local tabs = Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -36, 0, 34),
-		Position = UDim2.fromOffset(18, 48),
-		Parent = panel,
-	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, def in
+	Create.corner(16).Parent = coinsLabel
+	Create.padding(14, 0).Parent = coinsLabel
+	tabs = Widgets.tabs(
+		window.body,
 		{
 			{ "Coffers", "🎁  Coffers" },
 			{ "Tailor", "🧵  Tailor" },
 			{ "Wardrobe", "👘  Wardrobe" },
 			{ "Familiars", "🐾  Familiars" },
-		}
-	do
-		local b = Widgets.button(def[2], {
-			size = UDim2.fromOffset(160, 32),
-			color = C.Panel3,
-			layoutOrder = i,
-			onClick = function()
-				Sounds.play("Click")
-				currentTab = def[1]
-				refresh()
-			end,
-			parent = tabs,
-		})
-		b.Name = "Tab_" .. def[1]
-		tabButtons[def[1]] = b
-		local page = Create("Frame", {
-			Name = "Page_" .. def[1],
+		},
+		160,
+		function(id)
+			Sounds.play("Click")
+			currentTab = id
+			refresh()
+		end
+	)
+	for _, name in { "Coffers", "Tailor", "Wardrobe", "Familiars" } do
+		pages[name] = Create("Frame", {
+			Name = "Page_" .. name,
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -36, 1, -104),
-			Position = UDim2.fromOffset(18, 92),
+			Size = UDim2.new(1, 0, 1, -44),
+			Position = UDim2.fromOffset(0, 44),
 			Visible = false,
-			Parent = panel,
+			Parent = window.body,
 		})
-		pages[def[1]] = page
 	end
 	buildCoffers(pages.Coffers)
 	buildTailor(pages.Tailor)
@@ -29651,11 +29787,11 @@ return WardrobeController
             </Properties>
           </Item>
         </Item>
-        <Item class="Folder" referent="82">
+        <Item class="Folder" referent="84">
           <Properties>
             <string name="Name">UI</string>
           </Properties>
-          <Item class="ModuleScript" referent="83">
+          <Item class="ModuleScript" referent="85">
             <Properties>
               <string name="Name">CosmeticInfo</string>
               <string name="Source"><![CDATA[-- Tooltip / detail text for robe and hat parts, finished garments and familiars.
@@ -29812,6 +29948,29 @@ function CosmeticInfo.familiar(f: any): ItemInfo.Info
 	}
 end
 
+-- A short label for cards and lists ("Novice Robe", "Star Sigil", "Dust Bunny"); the tooltip
+-- has the full name.
+function CosmeticInfo.shortName(kind: string, item: any): string
+	if kind == "Familiar" then
+		local s = Familiars.SpeciesById[item.species]
+		return if s then s.name else tostring(item.name)
+	end
+	local part = item
+	if kind == "Garment" then
+		part = item.parts and item.parts[Cosmetics.Garments[item.kind].slots[1]]
+	end
+	local design = part and Cosmetics.DesignById[part.slot] and Cosmetics.DesignById[part.slot][part.design]
+	if not design then
+		return tostring(item.name)
+	end
+	if part.slot == "Sigil" then
+		return design.name .. " Sigil"
+	elseif part.slot == "Gem" then
+		return design.name .. " Gem"
+	end
+	return design.name
+end
+
 -- Info / icon / colour for any wardrobe item ("Part", "Garment" or "Familiar").
 function CosmeticInfo.item(kind: string, item: any): ItemInfo.Info
 	if kind == "Garment" then
@@ -29852,7 +30011,7 @@ return CosmeticInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="84">
+          <Item class="ModuleScript" referent="86">
             <Properties>
               <string name="Name">Create</string>
               <string name="Source"><![CDATA[-- Declarative-ish instance builder:
@@ -29945,7 +30104,48 @@ return Create
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="85">
+          <Item class="ModuleScript" referent="87">
+            <Properties>
+              <string name="Name">Dock</string>
+              <string name="Source"><![CDATA[-- The stack of menu buttons down the left of the screen (Spellbook, Grimoire, class, wardrobe,
+-- auction house, coins). Buttons from different controllers share it, so a hidden button
+-- never leaves a gap, and the whole stack tucks away while a full-screen window is open.
+
+local Create = require(script.Parent.Create)
+local Widgets = require(script.Parent.Widgets)
+
+local Dock = {}
+
+Dock.WIDTH = 236
+
+local frame: Frame? = nil
+
+function Dock.get(): Frame
+	if frame then
+		return frame
+	end
+	local gui = Widgets.screen("Dock", 4)
+	local root = Widgets.scaledRoot(gui)
+	local f = Create("Frame", {
+		Name = "Dock",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(Dock.WIDTH, 420),
+		Position = UDim2.fromOffset(16, 64),
+		Parent = root,
+	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+	frame = f
+	return f
+end
+
+function Dock.setVisible(visible: boolean)
+	Dock.get().Visible = visible
+end
+
+return Dock
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="88">
             <Properties>
               <string name="Name">ItemInfo</string>
               <string name="Source"><![CDATA[-- Builds tooltip / details content for every kind of item.
@@ -30113,7 +30313,7 @@ return ItemInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="86">
+          <Item class="ModuleScript" referent="89">
             <Properties>
               <string name="Name">Theme</string>
               <string name="Source"><![CDATA[-- Colours and fonts for every screen. Tweak here to re-skin the whole UI.
@@ -30130,13 +30330,15 @@ Theme.Black = Enum.Font.GothamBlack
 Theme.Title = Enum.Font.Fantasy
 
 Theme.Colors = {
-	Background = Color3.fromRGB(14, 12, 22),
-	Panel = Color3.fromRGB(26, 22, 40),
-	Panel2 = Color3.fromRGB(36, 31, 54),
-	Panel3 = Color3.fromRGB(48, 42, 70),
-	Stroke = Color3.fromRGB(95, 75, 155),
-	Accent = Color3.fromRGB(165, 115, 255),
+	Background = Color3.fromRGB(17, 14, 29),
+	Panel = Color3.fromRGB(29, 24, 46),
+	Panel2 = Color3.fromRGB(40, 34, 61),
+	Panel3 = Color3.fromRGB(56, 47, 84),
+	Stroke = Color3.fromRGB(108, 86, 168),
+	Accent = Color3.fromRGB(146, 96, 240),
 	Gold = Color3.fromRGB(255, 205, 90),
+	GoldDeep = Color3.fromRGB(176, 128, 46),
+	Ink = Color3.fromRGB(9, 7, 16),
 	Text = Color3.fromRGB(236, 230, 248),
 	Dim = Color3.fromRGB(160, 150, 185),
 	Good = Color3.fromRGB(120, 230, 140),
@@ -30169,11 +30371,15 @@ function Theme.darken(c: Color3, amount: number): Color3
 	return c:Lerp(Color3.new(0, 0, 0), amount)
 end
 
+function Theme.lighten(c: Color3, amount: number): Color3
+	return c:Lerp(Color3.new(1, 1, 1), amount)
+end
+
 return Theme
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="87">
+          <Item class="ModuleScript" referent="90">
             <Properties>
               <string name="Name">Widgets</string>
               <string name="Source"><![CDATA[-- Reusable UI pieces: item tiles, buttons, bars, info cards, the hover tooltip,
@@ -30253,11 +30459,23 @@ function Widgets.label(props: { [string]: any }): TextLabel
 	return Create("TextLabel", defaults)
 end
 
+-- A soft top-to-bottom shade (a UIGradient multiplies the background colour).
+local function shade(parent: Instance, bottom: number?)
+	local b = bottom or 0.78
+	Create("UIGradient", {
+		Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(b, b, b)),
+		Rotation = 90,
+		Parent = parent,
+	})
+end
+Widgets.shade = shade
+
 function Widgets.panel(props: { [string]: any }): Frame
 	local frame = Create("Frame", {
 		BackgroundColor3 = C.Panel,
 		BorderSizePixel = 0,
-	}, { Create.corner(10), Create.stroke(C.Stroke, 1.5, 0.3) })
+	}, { Create.corner(10), Create.stroke(C.Stroke, 1.5, 0.45) })
+	shade(frame, 0.82)
 	Create.apply(frame, props)
 	return frame
 end
@@ -30282,19 +30500,30 @@ function Widgets.button(text: string, opts: ButtonOptions?): TextButton
 		Font = Theme.Bold,
 		TextSize = o.textSize or 15,
 		TextColor3 = o.textColor or Color3.new(1, 1, 1),
+		TextStrokeTransparency = 0.85,
 		BackgroundColor3 = base,
 		AutoButtonColor = false,
 		Size = o.size or UDim2.fromOffset(120, 34),
 		Position = o.position or UDim2.new(),
 		AnchorPoint = o.anchor or Vector2.zero,
 		LayoutOrder = o.layoutOrder or 0,
+	}, { Create.corner(8), Create.stroke(C.Ink, 1, 0.55) })
+	shade(button, 0.74)
+	-- hover: a light sheen on top, so whatever colour the code sets the button to is kept
+	local sheen = Create("Frame", {
+		Name = "Sheen",
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 0,
+		Parent = button,
 	}, { Create.corner(8) })
 	button.MouseEnter:Connect(function()
-		TweenService:Create(button, TweenInfo.new(0.12), { BackgroundColor3 = base:Lerp(Color3.new(1, 1, 1), 0.18) })
-			:Play()
+		TweenService:Create(sheen, TweenInfo.new(0.12), { BackgroundTransparency = 0.86 }):Play()
 	end)
 	button.MouseLeave:Connect(function()
-		TweenService:Create(button, TweenInfo.new(0.12), { BackgroundColor3 = base }):Play()
+		TweenService:Create(sheen, TweenInfo.new(0.12), { BackgroundTransparency = 1 }):Play()
 	end)
 	if o.onClick then
 		button.Activated:Connect(o.onClick)
@@ -30668,6 +30897,543 @@ function Widgets.clear(container: Instance, keepLayouts: boolean?)
 	end
 end
 
+---------------------------------------------------------------------------
+-- Windows (every full-screen menu shares this frame)
+---------------------------------------------------------------------------
+
+export type WindowOptions = {
+	title: string,
+	subtitle: string?,
+	icon: string?,
+	size: Vector2,
+	onClose: (() -> ())?,
+}
+
+export type Window = {
+	root: Frame,
+	scrim: Frame,
+	panel: Frame,
+	body: Frame,
+	header: Frame,
+	right: Frame, -- header area left of the close button, for coins / extra buttons
+	title: TextLabel,
+	subtitle: TextLabel,
+	close: TextButton,
+}
+
+-- A framed window: dims the screen behind it, a gold-trimmed panel, an icon + title +
+-- subtitle header with a gilded divider, a close button, and a body frame for the content.
+function Widgets.window(gui: ScreenGui, o: WindowOptions): Window
+	local root = Widgets.scaledRoot(gui)
+	local scrim = Create("Frame", {
+		Name = "Scrim",
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.42,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
+		Active = true, -- clicks don't fall through to the world UI behind
+		Parent = root,
+	})
+	local panel = Create("Frame", {
+		Name = "Window",
+		BackgroundColor3 = C.Background,
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(o.size.X, o.size.Y),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Parent = root,
+	}, { Create.corner(14), Create.stroke(C.GoldDeep, 2, 0.1) })
+	Create("UIGradient", {
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+			ColorSequenceKeypoint.new(0.12, Color3.fromRGB(235, 232, 245)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(190, 185, 205)),
+		}),
+		Rotation = 90,
+		Parent = panel,
+	})
+	-- an inner hairline for a double-border look
+	Create("Frame", {
+		Name = "Inlay",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -10, 1, -10),
+		Position = UDim2.fromOffset(5, 5),
+		ZIndex = 0,
+		Parent = panel,
+	}, { Create.corner(11), Create.stroke(C.Stroke, 1, 0.55) })
+
+	local header = Create("Frame", {
+		Name = "Header",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 62),
+		Parent = panel,
+	})
+	local x = 22
+	if o.icon then
+		Create("TextLabel", {
+			Name = "Icon",
+			BackgroundTransparency = 1,
+			Text = o.icon,
+			TextScaled = true,
+			Font = Theme.Bold,
+			Size = UDim2.fromOffset(34, 34),
+			Position = UDim2.fromOffset(20, 14),
+			Parent = header,
+		})
+		x = 64
+	end
+	local title = Widgets.label({
+		Name = "Title",
+		Text = o.title,
+		Font = Theme.Title,
+		TextSize = 30,
+		TextColor3 = C.Gold,
+		TextStrokeTransparency = 0.55,
+		Size = UDim2.new(0.5, 0, 0, 32),
+		Position = UDim2.fromOffset(x, 8),
+		Parent = header,
+	})
+	local subtitle = Widgets.label({
+		Name = "Subtitle",
+		Text = o.subtitle or "",
+		TextSize = 12,
+		TextColor3 = C.Dim,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Size = UDim2.new(1, -x - 330, 0, 16),
+		Position = UDim2.fromOffset(x + 1, 40),
+		Parent = header,
+	})
+	-- gilded divider that fades at both ends
+	local divider = Create("Frame", {
+		Name = "Divider",
+		BackgroundColor3 = C.Gold,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -40, 0, 2),
+		Position = UDim2.fromOffset(20, 61),
+		Parent = panel,
+	})
+	Create("UIGradient", {
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.15, 0.25),
+			NumberSequenceKeypoint.new(0.85, 0.25),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = divider,
+	})
+	local close = Widgets.button("✕", {
+		size = UDim2.fromOffset(36, 36),
+		position = UDim2.new(1, -52, 0, 13),
+		color = C.Panel3,
+		textSize = 16,
+		onClick = function()
+			if o.onClose then
+				o.onClose()
+			end
+		end,
+		parent = header,
+	})
+	close.Name = "Close"
+	local right = Create("Frame", {
+		Name = "HeaderRight",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(420, 36),
+		Position = UDim2.new(1, -62, 0, 13),
+		AnchorPoint = Vector2.new(1, 0),
+		Parent = header,
+	}, { Create.list(Enum.FillDirection.Horizontal, 8, Enum.HorizontalAlignment.Right) })
+	local list = right:FindFirstChildOfClass("UIListLayout") :: UIListLayout
+	list.VerticalAlignment = Enum.VerticalAlignment.Center
+	local body = Create("Frame", {
+		Name = "Body",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -36, 1, -84),
+		Position = UDim2.fromOffset(18, 72),
+		Parent = panel,
+	})
+	return {
+		root = root,
+		scrim = scrim,
+		panel = panel,
+		body = body,
+		header = header,
+		right = right,
+		title = title,
+		subtitle = subtitle,
+		close = close,
+	}
+end
+
+-- A section heading: gold small caps on the left, an optional note on the right, a hairline under.
+function Widgets.sectionHeader(parent: Instance, text: string, note: string?, order: number?): Frame
+	local frame = Create("Frame", {
+		Name = "Section",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 22),
+		LayoutOrder = order or 0,
+		Parent = parent,
+	})
+	Widgets.label({
+		Name = "Heading",
+		Text = string.upper(text),
+		Font = Theme.Black,
+		TextSize = 12,
+		TextColor3 = C.Gold,
+		Size = UDim2.new(1, 0, 0, 18),
+		Parent = frame,
+	})
+	if note then
+		Widgets.label({
+			Name = "Note",
+			Text = note,
+			TextSize = 11,
+			TextColor3 = C.Dim,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Size = UDim2.new(1, 0, 0, 18),
+			Parent = frame,
+		})
+	end
+	local line = Create("Frame", {
+		BackgroundColor3 = C.Gold,
+		BackgroundTransparency = 0.7,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, 1),
+		Position = UDim2.fromOffset(0, 19),
+		Parent = frame,
+	})
+	Create("UIGradient", {
+		Transparency = NumberSequence.new(0, 1),
+		Parent = line,
+	})
+	return frame
+end
+
+-- A small rounded stat pill, e.g. "💧 800 +250/s".
+function Widgets.chip(parent: Instance, text: string, color: Color3?, order: number?): TextLabel
+	local chip = Widgets.label({
+		Name = "Chip",
+		Text = text,
+		Font = Theme.Bold,
+		TextSize = 11,
+		TextColor3 = color or C.Text,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.45,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 18),
+		LayoutOrder = order or 0,
+		Parent = parent,
+	})
+	Create.corner(9).Parent = chip
+	Create.padding(7, 0).Parent = chip
+	return chip
+end
+
+export type TabsHandle = { buttons: { [string]: TextButton }, set: (id: string) -> () }
+
+-- A row of tab buttons named "Tab_<id>"; the selected one is lit in the accent colour.
+function Widgets.tabs(parent: Instance, defs: { { any } }, width: number, onSelect: (id: string) -> ()): TabsHandle
+	local row = Create("Frame", {
+		Name = "Tabs",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 34),
+		Parent = parent,
+	}, { Create.list(Enum.FillDirection.Horizontal, 6) })
+	local handle: TabsHandle = { buttons = {}, set = function(_id: string) end }
+	for i, def in defs do
+		local id, label = def[1], def[2]
+		local b = Widgets.button(label, {
+			size = UDim2.fromOffset(width, 32),
+			color = C.Panel2,
+			textSize = 14,
+			layoutOrder = i,
+			onClick = function()
+				onSelect(id)
+			end,
+			parent = row,
+		})
+		b.Name = "Tab_" .. id
+		handle.buttons[id] = b
+	end
+	handle.set = function(current: string)
+		for id, b in handle.buttons do
+			local on = id == current
+			b.BackgroundColor3 = if on then C.Accent else C.Panel2
+			b.TextColor3 = if on then Color3.new(1, 1, 1) else C.Dim
+		end
+	end
+	return handle
+end
+
+export type CardOptions = {
+	name: string?,
+	width: number?,
+	icon: string?,
+	iconColor: Color3?,
+	wandColor: Color3?,
+	gemColor: Color3?,
+	rarity: string?, -- border, glow and the strip at the bottom
+	caption: string?,
+	captionColor: Color3?,
+	count: number?,
+	badge: string?, -- top-left marker (⚙ trigger, 🐾 summoned, a hotkey...)
+	empty: boolean?,
+	selected: boolean?,
+	highlight: boolean?,
+	layoutOrder: number?,
+	onClick: (() -> ())?,
+	onRightClick: (() -> ())?,
+	info: (() -> ItemInfo.Info?)?,
+	parent: Instance?,
+}
+
+-- An item card: the icon in a tinted well with its name underneath, a rarity-coloured border
+-- and strip, and an optional count. Easier to read than a bare icon tile.
+function Widgets.card(o: CardOptions): TextButton
+	local w = o.width or 78
+	local h = w + 24
+	local rarityColor = if o.rarity then Theme.rarity(o.rarity) else C.Stroke
+	local tint = o.iconColor or C.Panel3
+	local card = Create("TextButton", {
+		Name = o.name or "Card",
+		Text = "",
+		AutoButtonColor = false,
+		Size = UDim2.fromOffset(w, h),
+		BackgroundColor3 = if o.empty then C.Panel else C.Panel2,
+		LayoutOrder = o.layoutOrder or 0,
+	}, {
+		Create.corner(10),
+		Create.stroke(
+			if o.selected then C.Gold elseif o.highlight then Color3.new(1, 1, 1) else rarityColor,
+			if o.selected then 3 else 1.5,
+			if o.empty then 0.7 elseif o.selected then 0 else 0.25
+		),
+	})
+	shade(card, 0.8)
+	local well = Create("Frame", {
+		Name = "Well",
+		BackgroundColor3 = if o.empty then C.Ink else Theme.darken(tint, 0.55),
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -10, 0, w - 18),
+		Position = UDim2.fromOffset(5, 5),
+		Parent = card,
+	}, { Create.corner(8) })
+	Create("UIGradient", {
+		Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(150, 150, 160)),
+		Rotation = 90,
+		Parent = well,
+	})
+	if o.wandColor then
+		Create("Frame", {
+			Size = UDim2.new(0.11, 0, 0.72, 0),
+			Position = UDim2.fromScale(0.5, 0.55),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Rotation = 40,
+			BackgroundColor3 = o.wandColor,
+			BorderSizePixel = 0,
+			Parent = well,
+		}, { Create.corner(4) })
+		Create("Frame", {
+			Size = UDim2.fromScale(0.24, 0.24),
+			Position = UDim2.fromScale(0.68, 0.26),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			BackgroundColor3 = o.gemColor or C.Accent,
+			BorderSizePixel = 0,
+			Parent = well,
+		}, { Create.corner(100), Create.stroke(Color3.new(1, 1, 1), 1, 0.5) })
+	elseif o.icon then
+		Create("TextLabel", {
+			Name = "Icon",
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(0.66, 0.66),
+			Position = UDim2.fromScale(0.5, 0.5),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Text = o.icon,
+			TextScaled = true,
+			Font = Theme.Bold,
+			TextColor3 = Color3.new(1, 1, 1),
+			Parent = well,
+		})
+	end
+	if o.rarity and not o.empty then
+		Create("Frame", {
+			Name = "RarityStrip",
+			BackgroundColor3 = rarityColor,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, -16, 0, 2),
+			Position = UDim2.new(0, 8, 1, -3),
+			Parent = card,
+		}, { Create.corner(1) })
+	end
+	if o.caption then
+		Create("TextLabel", {
+			Name = "Caption",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -6, 0, 26),
+			Position = UDim2.new(0, 3, 1, -30),
+			Text = o.caption,
+			TextWrapped = true,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Font = Theme.Bold,
+			TextSize = 10,
+			TextColor3 = o.captionColor or (if o.empty then C.Dim else C.Text),
+			Parent = card,
+		})
+	end
+	if o.count and o.count > 1 then
+		local badge = Create("TextLabel", {
+			Name = "Count",
+			BackgroundColor3 = C.Ink,
+			BackgroundTransparency = 0.25,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 16),
+			Position = UDim2.new(1, -4, 0, 4),
+			AnchorPoint = Vector2.new(1, 0),
+			Text = "x" .. o.count,
+			Font = Theme.Black,
+			TextSize = 11,
+			TextColor3 = Color3.new(1, 1, 1),
+			ZIndex = 3,
+			Parent = card,
+		}, { Create.corner(8) })
+		Create.padding(5, 0).Parent = badge
+	end
+	if o.badge then
+		Create("TextLabel", {
+			Name = "Badge",
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(20, 20),
+			Position = UDim2.fromOffset(4, 3),
+			Text = o.badge,
+			TextScaled = true,
+			Font = Theme.Black,
+			TextColor3 = C.Gold,
+			TextStrokeTransparency = 0.4,
+			ZIndex = 3,
+			Parent = card,
+		})
+	end
+	if o.onClick then
+		card.Activated:Connect(o.onClick)
+	end
+	if o.onRightClick then
+		card.MouseButton2Click:Connect(o.onRightClick)
+	end
+	if o.info then
+		Widgets.attachTooltip(card, o.info)
+	end
+	if o.parent then
+		card.Parent = o.parent
+	end
+	return card
+end
+
+-- Grid of cards: a frame with a UIGridLayout sized for cards `width` wide.
+function Widgets.cardGrid(parent: Instance, width: number, order: number?, name: string?): Frame
+	return Create("Frame", {
+		Name = name or "Cards",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = order or 0,
+		Parent = parent,
+	}, {
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(width, width + 24),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
+end
+
+export type RowOptions = {
+	name: string?,
+	icon: string?,
+	iconColor: Color3?,
+	rarity: string?,
+	title: string,
+	subtitle: string?,
+	selected: boolean?,
+	layoutOrder: number?,
+	height: number?,
+	onClick: (() -> ())?,
+	info: (() -> ItemInfo.Info?)?,
+	parent: Instance?,
+}
+
+-- A one-line item: icon well, name in its rarity colour, a dim second line. For pick lists.
+function Widgets.itemRow(o: RowOptions): TextButton
+	local h = o.height or 46
+	local rarityColor = if o.rarity then Theme.rarity(o.rarity) else C.Stroke
+	local row = Create("TextButton", {
+		Name = o.name or "Row",
+		Text = "",
+		AutoButtonColor = false,
+		Size = UDim2.new(1, -4, 0, h),
+		BackgroundColor3 = if o.selected then C.Panel3 else C.Panel2,
+		LayoutOrder = o.layoutOrder or 0,
+	}, {
+		Create.corner(8),
+		Create.stroke(
+			if o.selected then C.Gold else rarityColor,
+			if o.selected then 2 else 1,
+			if o.selected then 0 else 0.55
+		),
+	})
+	shade(row, 0.82)
+	local well = Create("Frame", {
+		BackgroundColor3 = Theme.darken(o.iconColor or C.Panel3, 0.5),
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(h - 10, h - 10),
+		Position = UDim2.fromOffset(5, 5),
+		Parent = row,
+	}, { Create.corner(6) })
+	if o.icon then
+		Create("TextLabel", {
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(0.72, 0.72),
+			Position = UDim2.fromScale(0.5, 0.5),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Text = o.icon,
+			TextScaled = true,
+			Font = Theme.Bold,
+			TextColor3 = Color3.new(1, 1, 1),
+			Parent = well,
+		})
+	end
+	Widgets.label({
+		Text = o.title,
+		Font = Theme.Bold,
+		TextSize = 12,
+		TextColor3 = Theme.lighten(rarityColor, 0.2),
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Size = UDim2.new(1, -h - 6, 0, 16),
+		Position = UDim2.fromOffset(h + 2, if o.subtitle then 6 else (h - 16) / 2),
+		Parent = row,
+	})
+	if o.subtitle then
+		Widgets.label({
+			Text = o.subtitle,
+			TextSize = 11,
+			TextColor3 = C.Dim,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Size = UDim2.new(1, -h - 6, 0, 14),
+			Position = UDim2.fromOffset(h + 2, 24),
+			Parent = row,
+		})
+	end
+	if o.onClick then
+		row.Activated:Connect(o.onClick)
+	end
+	if o.info then
+		Widgets.attachTooltip(row, o.info)
+	end
+	if o.parent then
+		row.Parent = o.parent
+	end
+	return row
+end
+
 return Widgets
 ]]></string>
             </Properties>
@@ -30676,7 +31442,13 @@ return Widgets
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="88">
+  <Item class="TextChatService" referent="91">
+    <Properties>
+      <string name="Name">TextChatService</string>
+      <token name="ChatVersion">1</token>
+    </Properties>
+  </Item>
+  <Item class="Workspace" referent="92">
     <Properties>
       <string name="Name">Workspace</string>
       <float name="FallenPartsDestroyHeight">-150</float>

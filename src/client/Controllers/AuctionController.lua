@@ -36,7 +36,7 @@ local gui: ScreenGui
 local coinsLabel: TextLabel
 local scopeLabel: TextLabel
 local pages: { [string]: Frame } = {}
-local tabButtons: { [string]: TextButton } = {}
+local tabs: Widgets.TabsHandle
 local currentTab = "Browse"
 local isOpen = false
 local refresh: () -> ()
@@ -490,14 +490,18 @@ local function refreshSell()
 	local function add(kind: string, item: any)
 		order += 1
 		local icon, color = itemIcon(kind, item)
-		Widgets.tile({
+		Widgets.card({
 			name = "Sell_" .. item.uid,
-			size = 54,
+			width = 72,
 			icon = icon,
 			iconColor = color,
-			border = Theme.rarity(item.rarity),
+			rarity = item.rarity,
+			caption = CosmeticInfo.shortName(kind, item),
 			selected = sellSelected ~= nil and sellSelected.uid == item.uid,
-			label = if kind == "Garment" then item.kind elseif kind == "Familiar" then "Familiar" else nil,
+			badge = if kind == "Garment"
+				then (if item.kind == "Robe" then "👘" else "🎩")
+				elseif kind == "Familiar" then "🐾"
+				else nil,
 			layoutOrder = order,
 			info = function()
 				return itemInfo(kind, item)
@@ -571,7 +575,15 @@ local function buildSell(page: Frame)
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollBarThickness = 6,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(54, 8) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	sellInfo = Create("Frame", {
 		Name = "SellDetails",
 		BackgroundColor3 = C.Panel,
@@ -753,9 +765,7 @@ refresh = function()
 	if not isOpen then
 		return
 	end
-	for name, button in tabButtons do
-		button.BackgroundColor3 = if name == currentTab then C.Accent else C.Panel3
-	end
+	tabs.set(currentTab)
 	for name, page in pages do
 		page.Visible = name == currentTab
 	end
@@ -798,81 +808,54 @@ end
 local function build()
 	gui = Widgets.screen("AuctionHouse", 11)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	local panel = Widgets.panel({
-		Size = UDim2.fromOffset(1040, 620),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.03,
-		Parent = root,
+	local window = Widgets.window(gui, {
+		title = "The Gilded Gavel",
+		icon = "⚖",
+		subtitle = "",
+		size = Vector2.new(1040, 644),
+		onClose = function()
+			AuctionController.close()
+		end,
 	})
-	Widgets.label({
-		Text = "THE GILDED GAVEL",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(300, 30),
-		Position = UDim2.fromOffset(18, 10),
-		Parent = panel,
-	})
-	scopeLabel = Widgets.label({
-		Name = "Scope",
-		Text = "",
-		TextSize = 12,
-		TextColor3 = C.Dim,
-		Size = UDim2.fromOffset(340, 30),
-		Position = UDim2.fromOffset(250, 12),
-		Parent = panel,
-	})
+	scopeLabel = window.subtitle
 	coinsLabel = Widgets.label({
 		Name = "Coins",
 		Text = "",
 		Font = Theme.Black,
-		TextSize = 18,
+		TextSize = 17,
 		TextColor3 = GOLD,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(320, 30),
-		Position = UDim2.new(1, -378, 0, 10),
-		Parent = panel,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.35,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 32),
+		Parent = window.right,
 	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 8),
-		color = C.Panel3,
-		onClick = function()
-			AuctionController.close()
-		end,
-		parent = panel,
-	})
-	local tabs = Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -36, 0, 34),
-		Position = UDim2.fromOffset(18, 48),
-		Parent = panel,
-	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, def in { { "Browse", "🔍  Browse" }, { "Sell", "💰  Sell" }, { "Mine", "📜  My listings" } } do
-		local b = Widgets.button(def[2], {
-			size = UDim2.fromOffset(160, 32),
-			color = C.Panel3,
-			layoutOrder = i,
-			onClick = function()
-				Sounds.play("Click")
-				currentTab = def[1]
-				confirmId = nil
-				refresh()
-			end,
-			parent = tabs,
-		})
-		b.Name = "Tab_" .. def[1]
-		tabButtons[def[1]] = b
-		pages[def[1]] = Create("Frame", {
-			Name = "Page_" .. def[1],
+	Create.corner(16).Parent = coinsLabel
+	Create.padding(14, 0).Parent = coinsLabel
+	tabs = Widgets.tabs(
+		window.body,
+		{
+			{ "Browse", "🔍  Browse" },
+			{ "Sell", "💰  Sell" },
+			{ "Mine", "📜  My listings" },
+		},
+		160,
+		function(id)
+			Sounds.play("Click")
+			currentTab = id
+			confirmId = nil
+			refresh()
+		end
+	)
+	for _, name in { "Browse", "Sell", "Mine" } do
+		pages[name] = Create("Frame", {
+			Name = "Page_" .. name,
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -36, 1, -104),
-			Position = UDim2.fromOffset(18, 92),
+			Size = UDim2.new(1, 0, 1, -44),
+			Position = UDim2.fromOffset(0, 44),
 			Visible = false,
-			Parent = panel,
+			Parent = window.body,
 		})
 	end
 	buildBrowse(pages.Browse)

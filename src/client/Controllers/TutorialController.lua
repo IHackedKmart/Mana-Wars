@@ -242,6 +242,9 @@ local function update()
 	end
 	-- make the next thing to click glow
 	if step.highlight then
+		if InventoryController.isOpen() then
+			InventoryController.reveal(step.highlight) -- (switches the bag to the right tab)
+		end
 		local target = findTarget(step.highlight)
 		if target and (not glow or glow.Parent ~= target) then
 			clearGlow()

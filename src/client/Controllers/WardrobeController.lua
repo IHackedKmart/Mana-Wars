@@ -33,7 +33,7 @@ local action = Remotes.func("WardrobeAction")
 local gui: ScreenGui
 local coinsLabel: TextLabel
 local pages: { [string]: Frame } = {}
-local tabButtons: { [string]: TextButton } = {}
+local tabs: Widgets.TabsHandle
 local currentTab = "Coffers"
 local isOpen = false
 
@@ -439,12 +439,15 @@ local function refreshTailor()
 		for _, part in sortByRarity(State.wardrobe.parts) do
 			if part.slot == slot then
 				n += 1
-				Widgets.tile({
+				Widgets.itemRow({
 					name = "Pick_" .. part.uid,
-					size = 58,
 					icon = CosmeticInfo.icon(part),
 					iconColor = CosmeticInfo.color(part),
-					border = Theme.rarity(part.rarity),
+					rarity = part.rarity,
+					title = CosmeticInfo.shortName("Part", part),
+					subtitle = part.rarity .. "  ·  " .. (if Cosmetics.ColorById[part.color]
+						then Cosmetics.ColorById[part.color].name
+						else "") .. (if part.aura then "  ·  ✨ aura" else ""),
 					selected = draft[slot] == part.uid,
 					layoutOrder = n,
 					info = function()
@@ -544,13 +547,13 @@ local function buildTailor(page: Frame)
 			Name = "Slot" .. i,
 			BackgroundColor3 = C.Panel,
 			BorderSizePixel = 0,
-			Size = UDim2.fromOffset(212, 440),
+			Size = UDim2.fromOffset(212, 452),
 			Position = UDim2.fromOffset(x, 62),
 			CanvasSize = UDim2.new(),
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
-			ScrollBarThickness = 6,
+			ScrollBarThickness = 5,
 			Parent = page,
-		}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+		}, { Create.corner(8), Create.padding(6, 6), Create.list(Enum.FillDirection.Vertical, 6) })
 	end
 	tailorPreview = makePreview(page, UDim2.fromOffset(330, 250), UDim2.fromOffset(672, 0))
 	tailorSummary = Widgets.label({
@@ -613,13 +616,14 @@ local function refreshWardrobe()
 	Widgets.clear(partGrid, true)
 	for i, g in sortByRarity(w.garments) do
 		local isWorn = w.equipped[g.kind] == g.uid
-		Widgets.tile({
+		Widgets.card({
 			name = "Garment_" .. g.uid,
-			size = 58,
+			width = 72,
 			icon = Cosmetics.Garments[g.kind].icon,
 			iconColor = CosmeticInfo.color(g.parts[Cosmetics.Garments[g.kind].slots[1]]),
-			border = Theme.rarity(g.rarity),
-			corner = if isWorn then "✔" else nil,
+			rarity = g.rarity,
+			caption = CosmeticInfo.shortName("Garment", g),
+			badge = if isWorn then "✔" else nil,
 			selected = selected ~= nil and selected.uid == g.uid,
 			layoutOrder = i,
 			info = function()
@@ -633,12 +637,13 @@ local function refreshWardrobe()
 		})
 	end
 	for i, p in sortByRarity(w.parts) do
-		Widgets.tile({
+		Widgets.card({
 			name = "Part_" .. p.uid,
-			size = 50,
+			width = 72,
 			icon = CosmeticInfo.icon(p),
 			iconColor = CosmeticInfo.color(p),
-			border = Theme.rarity(p.rarity),
+			rarity = p.rarity,
+			caption = CosmeticInfo.shortName("Part", p),
 			selected = selected ~= nil and selected.uid == p.uid,
 			layoutOrder = i,
 			info = function()
@@ -736,33 +741,49 @@ local function buildWardrobe(page: Frame)
 		Name = "Garments",
 		BackgroundColor3 = C.Panel,
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(420, 200),
-		Position = UDim2.fromOffset(0, 20),
+		Size = UDim2.fromOffset(420, 212),
+		Position = UDim2.fromOffset(0, 22),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
+		ScrollBarThickness = 5,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	Widgets.label({
 		Text = "LOOSE PARTS",
 		Font = Theme.Black,
 		TextSize = 13,
 		TextColor3 = C.Gold,
 		Size = UDim2.fromOffset(300, 18),
-		Position = UDim2.fromOffset(0, 228),
+		Position = UDim2.fromOffset(0, 248),
 		Parent = page,
 	})
 	partGrid = Create("ScrollingFrame", {
 		Name = "Parts",
 		BackgroundColor3 = C.Panel,
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(420, 254),
-		Position = UDim2.fromOffset(0, 248),
+		Size = UDim2.fromOffset(420, 244),
+		Position = UDim2.fromOffset(0, 270),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
+		ScrollBarThickness = 5,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(50, 6) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	wardrobePreview = makePreview(page, UDim2.fromOffset(250, 300), UDim2.fromOffset(432, 0))
 	gearLabel = Widgets.label({
 		Name = "Bonuses",
@@ -814,14 +835,15 @@ local function refreshFamiliars()
 	Widgets.clear(familiarGrid, true)
 	local list = sortByRarity(w.familiars or {})
 	for i, f in list do
-		Widgets.tile({
+		Widgets.card({
 			name = "Familiar_" .. f.uid,
-			size = 58,
+			width = 72,
 			icon = CosmeticInfo.familiarIcon(f),
 			iconColor = CosmeticInfo.familiarColor(f),
-			border = Theme.rarity(f.rarity),
+			rarity = f.rarity,
+			caption = CosmeticInfo.shortName("Familiar", f),
 			selected = familiarSelected == f.uid,
-			corner = if w.equipped.Familiar == f.uid then "🐾" elseif f.shiny then "✨" else nil,
+			badge = if w.equipped.Familiar == f.uid then "🐾" elseif f.shiny then "✨" else nil,
 			layoutOrder = i,
 			info = function()
 				return CosmeticInfo.familiar(f)
@@ -889,13 +911,21 @@ local function buildFamiliars(page: Frame)
 		Name = "FamiliarGrid",
 		BackgroundColor3 = C.Panel,
 		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(420, 482),
-		Position = UDim2.fromOffset(0, 20),
+		Size = UDim2.fromOffset(420, 492),
+		Position = UDim2.fromOffset(0, 22),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 6,
+		ScrollBarThickness = 5,
 		Parent = page,
-	}, { Create.corner(8), Create.padding(6, 6), Create.grid(58, 8) })
+	}, {
+		Create.corner(8),
+		Create.padding(8, 8),
+		Create("UIGridLayout", {
+			CellSize = UDim2.fromOffset(72, 96),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
 	familiarPreview = makePreview(page, UDim2.fromOffset(250, 300), UDim2.fromOffset(432, 0))
 	Widgets.label({
 		Name = "FamiliarNote",
@@ -941,9 +971,7 @@ local function refresh()
 	if not isOpen then
 		return
 	end
-	for name, button in tabButtons do
-		button.BackgroundColor3 = if name == currentTab then C.Accent else C.Panel3
-	end
+	tabs.set(currentTab)
 	for name, page in pages do
 		page.Visible = name == currentTab
 	end
@@ -980,80 +1008,54 @@ end
 local function build()
 	gui = Widgets.screen("Wardrobe", 11)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	local panel = Widgets.panel({
-		Size = UDim2.fromOffset(1040, 620),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.03,
-		Parent = root,
-	})
-	Widgets.label({
-		Text = "THE TAILOR'S LOOM",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(400, 30),
-		Position = UDim2.fromOffset(18, 10),
-		Parent = panel,
+	local window = Widgets.window(gui, {
+		title = "The Tailor's Loom",
+		icon = "🧵",
+		subtitle = "Open coffers, stitch robes and hats, dress up and summon familiars",
+		size = Vector2.new(1040, 644),
+		onClose = function()
+			WardrobeController.close()
+		end,
 	})
 	coinsLabel = Widgets.label({
 		Name = "Coins",
 		Text = "",
 		Font = Theme.Black,
-		TextSize = 18,
-		TextColor3 = Color3.fromRGB(255, 215, 90),
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(320, 30),
-		Position = UDim2.new(1, -378, 0, 10),
-		Parent = panel,
+		TextSize = 17,
+		TextColor3 = C.Gold,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.35,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 32),
+		Parent = window.right,
 	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 8),
-		color = C.Panel3,
-		onClick = function()
-			WardrobeController.close()
-		end,
-		parent = panel,
-	})
-	local tabs = Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -36, 0, 34),
-		Position = UDim2.fromOffset(18, 48),
-		Parent = panel,
-	}, { Create.list(Enum.FillDirection.Horizontal, 8) })
-	for i, def in
+	Create.corner(16).Parent = coinsLabel
+	Create.padding(14, 0).Parent = coinsLabel
+	tabs = Widgets.tabs(
+		window.body,
 		{
 			{ "Coffers", "🎁  Coffers" },
 			{ "Tailor", "🧵  Tailor" },
 			{ "Wardrobe", "👘  Wardrobe" },
 			{ "Familiars", "🐾  Familiars" },
-		}
-	do
-		local b = Widgets.button(def[2], {
-			size = UDim2.fromOffset(160, 32),
-			color = C.Panel3,
-			layoutOrder = i,
-			onClick = function()
-				Sounds.play("Click")
-				currentTab = def[1]
-				refresh()
-			end,
-			parent = tabs,
-		})
-		b.Name = "Tab_" .. def[1]
-		tabButtons[def[1]] = b
-		local page = Create("Frame", {
-			Name = "Page_" .. def[1],
+		},
+		160,
+		function(id)
+			Sounds.play("Click")
+			currentTab = id
+			refresh()
+		end
+	)
+	for _, name in { "Coffers", "Tailor", "Wardrobe", "Familiars" } do
+		pages[name] = Create("Frame", {
+			Name = "Page_" .. name,
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, -36, 1, -104),
-			Position = UDim2.fromOffset(18, 92),
+			Size = UDim2.new(1, 0, 1, -44),
+			Position = UDim2.fromOffset(0, 44),
 			Visible = false,
-			Parent = panel,
+			Parent = window.body,
 		})
-		pages[def[1]] = page
 	end
 	buildCoffers(pages.Coffers)
 	buildTailor(pages.Tailor)

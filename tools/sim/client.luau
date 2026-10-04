@@ -16,6 +16,7 @@
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local Mock = require("./mock")
+local UIShot = require("./uishot")
 
 local Vector3 = roblox.Vector3
 local Vector2 = roblox.Vector2
@@ -316,6 +317,15 @@ local function usePrompt(action: string)
 	Mock.step(0.1, true)
 end
 
+-- UI snapshots: MANA_SHOTS=build/ui lune run tools/sim/client, then node tools/ui/render.cjs build/ui/*.json
+local SHOTS = process.env.MANA_SHOTS
+local function shot(name: string)
+	if SHOTS then
+		Mock.step(0.05, true)
+		UIShot.save(playerGui, SHOTS .. "/" .. name .. ".json", name)
+	end
+end
+
 local reported = 0
 local function checkWarnings(label: string)
 	for i = reported + 1, #Mock.warnings do
@@ -338,6 +348,7 @@ check(
 	State.inventory and State.inventory.wands[1] and State.inventory.wands[1].name == "Emberheart Rod",
 	"kit wand on client"
 )
+shot("01_hud_match")
 
 -- 2. Spellforge: Bolt + Fire + Explosive -> "Bursting Ember Bolt"
 -- (start from a known set of parts; the kit's bonus part is random)
@@ -356,6 +367,7 @@ clickNamed(book, "Part_Bolt")
 clickNamed(book, "Part_Fire")
 clickNamed(book, "Part_Explosive")
 check(book:FindFirstChild("Forge_FORM", true) ~= nil, "spellforge slots should exist")
+shot("02_spellbook_forge")
 click(book, "Forge Spell")
 checkWarnings("forge")
 local forged = nil
@@ -370,6 +382,7 @@ check(me.inventory.parts.Bolt == nil and me.inventory.parts.Explosive == nil, "f
 -- 3. Slot it: the newly forged spell is auto-selected, so clicking empty slot 3 places it.
 clickNamed(book, "Slot_1_3")
 checkWarnings("slot spell")
+shot("03_spellbook_slotted")
 check(
 	forged and me.inventory.wands[1].slots[3] and me.inventory.wands[1].slots[3].uid == forged.uid,
 	"spell should be slotted into wand slot 3"
@@ -407,6 +420,7 @@ if chestModel then
 	Mock.step(0.1, true)
 	local chestGui = gui("Chest")
 	check(chestGui and chestGui.Enabled, "chest window should open")
+	shot("04_chest")
 	local chest = ChestService.get(chestModel:GetAttribute("ChestId"))
 	local before = #chest.entries
 	click(chestGui, "Take All  [F]")
@@ -422,6 +436,7 @@ end
 -- 6. Equip and cast with the mouse; effects should be drawn and the dummy hurt.
 InventoryService.handle(player, "Equip", { index = 1 })
 holdMouse(2)
+shot("05_hud_casting")
 checkWarnings("casting")
 check((Mock.remoteCounts["CastRequest"] or 0) > 0, "holding the mouse should send cast requests")
 check((Mock.remoteCounts["FX:Cast"] or 0) > 0, "the server should accept casts")
@@ -485,6 +500,7 @@ check(string.find(joinButton.Text, "JOIN GAME", 1, true) ~= nil, "join button te
 check(not votePanel.Visible, "players in the hub should not see the vote")
 check(not VoteService.vote(player, ballot[1].id), "players in the hub can't vote")
 check(hudText("Match starting in"), "the hub HUD should say a match is starting")
+shot("06_hub")
 clickNamed(lobby, "JoinButton")
 Mock.step(0.6, true)
 check(me.queued and State.queued(), "Join Game should put the player in the queue")
@@ -498,6 +514,7 @@ end
 local pick = ballot[2]
 clickNamed(lobby, "Vote_" .. pick.id)
 check(VoteService.payload().counts[pick.id] == 1, "clicking a map card should cast a vote")
+shot("07_vote")
 -- changing your mind moves the vote
 clickNamed(lobby, "Vote_" .. ballot[1].id)
 local counts = VoteService.payload().counts
@@ -525,23 +542,25 @@ ServerConfig.Kits.StudioUnlocksAll = false -- the fake engine says it's Studio; 
 ClassService.refresh(player)
 Mock.step(0.1, true)
 usePrompt("ClassPicker")
-local kitList = lobby:FindFirstChild("KitList", true)
+local kitShop = gui("KitShop")
+shot("06b_kits")
+local kitList = kitShop:FindFirstChild("KitList", true)
 check(kitList ~= nil and kitList.Visible ~= false, "the altar should open the kit shop")
 for _, tierName in { "Novice", "Copper", "Silver", "Gold", "Arcane", "Astral", "Archmage" } do
-	check(lobby:FindFirstChild("Tier_" .. tierName, true) ~= nil, "the shop should list the " .. tierName .. " tier")
+	check(kitShop:FindFirstChild("Tier_" .. tierName, true) ~= nil, "the shop should list the " .. tierName .. " tier")
 end
 local function kitStatus(id: string): string
-	local card = lobby:FindFirstChild("Kit_" .. id, true)
+	local card = kitShop:FindFirstChild("Kit_" .. id, true)
 	local status = card and card:FindFirstChild("Status")
 	return if status then textOf(status) or "" else ""
 end
 check(string.find(kitStatus("Stormcaller"), "R$240", 1, true) ~= nil, "unowned kits show their price")
 check(string.find(kitStatus("Apprentice"), "SELECTED", 1, true) ~= nil, "the free kit starts selected")
 -- not on sale (no game pass id yet)
-clickNamed(lobby, "Kit_Archmage")
+clickNamed(kitShop, "Kit_Archmage")
 check(player:GetAttribute("Class") == "Apprentice", "an unbuyable kit can't be picked")
 -- buy one: the store prompt opens, the purchase goes through, the kit is owned and picked
-clickNamed(lobby, "Kit_Stormcaller")
+clickNamed(kitShop, "Kit_Stormcaller")
 check(promptedPass == 5555, "clicking an unowned kit should prompt its game pass")
 check(player:GetAttribute("Class") == "Apprentice", "nothing changes until the purchase finishes")
 ownedPasses[5555] = true
@@ -553,20 +572,20 @@ check(
 	"owned kits are published"
 )
 check(string.find(kitStatus("Stormcaller"), "SELECTED", 1, true) ~= nil, "the shop should show the new kit as selected")
-clickNamed(lobby, "Kit_Apprentice")
+clickNamed(kitShop, "Kit_Apprentice")
 check(player:GetAttribute("Class") == "Apprentice", "switching back to the free kit")
-clickNamed(lobby, "Kit_Stormcaller")
+clickNamed(kitShop, "Kit_Stormcaller")
 checkWarnings("kit shop")
 check(player:GetAttribute("Class") == "Stormcaller", "an owned kit can be picked again")
 -- ownership is remembered from the store on the next join
 ClassService.refresh(player)
 check(ClassService.owns(player, "Stormcaller") and not ClassService.owns(player, "Archmage"), "ownership check")
-click(lobby, "⚡  Class: Stormcaller")
+click(gui("Dock"), "⚡  Class: Stormcaller")
 
 -- 9. Spectating during a match.
 GameState.setPhase("Battle", 0)
 Mock.step(0.2, true)
-click(lobby, "👁  Spectate the match")
+click(gui("Dock"), "👁  Spectate the match")
 Mock.step(1.5, true)
 checkWarnings("spectate")
 
@@ -576,6 +595,7 @@ Mock.step(0.5, true)
 key(Enum.KeyCode.H)
 local grimoire = gui("Grimoire")
 check(grimoire and grimoire.Enabled and GrimoireController.isOpen(), "H should open the Grimoire")
+shot("08_grimoire")
 for _, chapterId in
 	{
 		"Welcome",
@@ -775,6 +795,7 @@ do
 	check(got and loom:FindFirstChild("Got_" .. got.uid, true) ~= nil, "the new part should be revealed")
 	clickNamed(loom, "Open_1")
 	check(#State.wardrobe.parts == 1 and State.wardrobe.coins == 10, "can't open a coffer without the coins")
+	shot("09_coffers")
 	checkWarnings("coffers")
 
 	-- unpick the starter robe, then stitch it back together at the Tailor
@@ -794,6 +815,7 @@ do
 			clickNamed(loom, "Pick_" .. part.uid)
 		end
 	end
+	shot("10_tailor")
 	clickNamed(loom, "CraftButton")
 	check(#State.wardrobe.garments == 2, "stitching should make a robe")
 	local newRobe = nil
@@ -809,6 +831,7 @@ do
 		clickNamed(loom, "Garment_" .. newRobe.uid)
 		clickNamed(loom, "WearButton")
 		check(State.wardrobe.equipped.Robe == newRobe.uid, "Wear should equip the robe")
+		shot("11_wardrobe")
 	end
 	-- the outfit's enchantments reach combat stats
 	check((me.gear.manaRegen or 0) > 0 and (me.gear.speed or 0) > 0, "worn enchantments should set the gear stats")
@@ -917,6 +940,7 @@ do
 	local part = givePart(player, "Rare")
 	clickNamed(house, "Tab_Sell")
 	clickNamed(house, "Sell_" .. part.uid)
+	shot("14_auction_sell")
 	local priceBox = house:FindFirstChild("PriceBox", true)
 	priceBox.Text = "120"
 	clickNamed(house, "ListButton")
@@ -928,6 +952,7 @@ do
 	clickNamed(house, "Tab_Browse")
 	Mock.step(0.2, true)
 	check(listingId and house:FindFirstChild("Listing_" .. listingId, true) ~= nil, "Browse shows it")
+	shot("13_auction_browse")
 	checkWarnings("list")
 
 	-- a second player buys it
@@ -1145,6 +1170,7 @@ do
 	local plain = give("DustBunny", "Common")
 	summon(plain)
 	check(State.wardrobe.equipped.Familiar == plain.uid, "Summon should send for the familiar")
+	shot("12_familiars")
 	check(character:GetAttribute("Familiar") == Familiars.encode(plain), "the familiar's look goes on the character")
 	check(FamiliarController.count() >= 1, "clients should build the familiar")
 	local fam = Mock.workspace:FindFirstChild("Familiars")
@@ -1197,7 +1223,7 @@ do
 	chest:SetAttribute("ChestId", "test")
 	local raven = give("StormRaven", "Epic")
 	summon(raven)
-	gui("Wardrobe").Enabled = false
+	client.load("Client/Controllers/WardrobeController").close()
 	player:SetAttribute("Alive", true)
 	Mock.step(1, true)
 	local keen = fam:FindFirstChild("KeenNose")
@@ -1210,7 +1236,7 @@ do
 	-- Night Eyes: every 12s the nearest enemy is outlined for a moment
 	local owl = give("FrostOwl", "Rare")
 	summon(owl)
-	gui("Wardrobe").Enabled = false
+	client.load("Client/Controllers/WardrobeController").close()
 	player:SetAttribute("Alive", true)
 	local bots = Mock.workspace:FindFirstChild("Bots") or Instance.new("Folder", Mock.workspace)
 	bots.Name = "Bots"
@@ -1221,9 +1247,13 @@ do
 	botRoot.CFrame = CFrame.new(30, 3, 0)
 	Instance.new("Humanoid", bot)
 	bot:SetAttribute("InMatch", true)
-	Mock.step(13, true)
 	local eyes = fam:FindFirstChild("NightEyes")
-	check(eyes and eyes.Adornee == bot, "Night Eyes should outline the nearby enemy")
+	local spotted = false
+	for _ = 1, 28 do
+		Mock.step(0.5, true)
+		spotted = spotted or (eyes ~= nil and eyes.Enabled and eyes.Adornee == bot)
+	end
+	check(spotted, "Night Eyes should outline the nearby enemy")
 	bot:Destroy()
 	player:SetAttribute("Alive", false)
 	checkWarnings("owner powers")
@@ -1269,13 +1299,15 @@ do
 	check(#State.wardrobe.familiars == n, "familiars should be saved")
 	check(State.wardrobe.equipped.Familiar == owl.uid, "the summoned familiar should be remembered")
 	check(character:GetAttribute("Familiar") == Familiars.encode(owl), "and sent for again after loading")
-	loom.Enabled = false
+	client.load("Client/Controllers/WardrobeController").close()
 	checkWarnings("familiar save")
 end
 
 -- 17. The dev panel: the ` key opens it, Unlock Everything hands out the whole collection, the
 --     switches work, test items stay off the market, and nobody but a developer can use it.
 do
+	client.load("Client/Controllers/WardrobeController").close()
+	client.load("Client/Controllers/AuctionController").close()
 	local DevService = server.load("Server/Services/DevService")
 	DevService.init()
 	local Familiars = server.load("Shared/Familiars")
@@ -1287,6 +1319,7 @@ do
 	key(Enum.KeyCode.Backquote)
 	local panel = devGui:FindFirstChild("Panel", true)
 	check(panel and panel.Visible, "` opens the dev panel")
+	shot("15_dev")
 	checkWarnings("open dev panel")
 
 	local w = State.wardrobe
@@ -1416,6 +1449,20 @@ do
 		return true
 	end
 
+	-- a full bag (the dev loadout) in the Spellbook
+	key(Enum.KeyCode.Backquote)
+	player:SetAttribute("Alive", true)
+	me.inMatch = true
+	me.alive = true
+	InventoryService.giveDevLoadout(me)
+	Mock.step(0.2, true)
+	InventoryController.open()
+	shot("16_spellbook_full")
+	InventoryController.close()
+	player:SetAttribute("Alive", false)
+	me.inMatch = false
+	key(Enum.KeyCode.Backquote)
+
 	-- reset back to a brand new mage
 	clickNamed(panel, "ResetProfile")
 	clickNamed(panel, "ResetProfile")
@@ -1426,6 +1473,53 @@ do
 	key(Enum.KeyCode.Backquote)
 	check(not panel.Visible, "` closes the panel")
 	checkWarnings("dev reset")
+end
+
+-- proximity chat: messages only reach mages close to the speaker
+do
+	local ChatService = server.load("Server/Services/ChatService")
+	local ChatController = client.load("Client/Controllers/ChatController")
+	local function mage(name: string, id: number, at: Vector3?)
+		local p = Instance.new("Player")
+		p.Name = name
+		p.DisplayName = name
+		p.UserId = id
+		if at then
+			local body = Instance.new("Model", Mock.workspace)
+			body.Name = name
+			local bodyRoot = Instance.new("Part", body)
+			bodyRoot.Name = "HumanoidRootPart"
+			bodyRoot.CFrame = CFrame.new(at)
+			p.Character = body
+		end
+		return p
+	end
+	local speaker = mage("Speaker", 31, Vector3.new(0, 3, 0))
+	local near = mage("Near", 32, Vector3.new(30, 3, 0))
+	local far = mage("Far", 33, Vector3.new(200, 3, 0))
+	local ghost = mage("Ghost", 34, nil)
+	local byId = { [31] = speaker, [32] = near, [33] = far, [34] = ghost }
+	PlayersService.GetPlayerByUserId = function(_, id)
+		return byId[id]
+	end
+	local function heard(listener): boolean
+		return ChatService.shouldDeliver({ TextSource = { UserId = 31 } }, { UserId = listener.UserId })
+	end
+	check(heard(speaker), "chat: you always see your own messages")
+	check(heard(near), "chat: a mage 30 studs away hears you")
+	check(not heard(far), "chat: a mage 200 studs away doesn't")
+	check(not heard(ghost), "chat: a player between lives doesn't")
+	check(ChatService.shouldDeliver({ TextSource = nil }, { UserId = 33 }), "chat: system messages reach everyone")
+	local ClientConfig = client.load("Shared/Config")
+	ServerConfig.Chat.Proximity = false
+	ClientConfig.Chat.Proximity = false
+	check(heard(far), "chat: with proximity off everyone hears everything")
+	check(string.find(ChatController.note(), "everyone", 1, true) ~= nil, "chat: the note says so")
+	ServerConfig.Chat.Proximity = true
+	ClientConfig.Chat.Proximity = true
+	check(string.find(ChatController.note(), "70 studs", 1, true) ~= nil, "chat: the note gives the range")
+	PlayersService.GetPlayerByUserId = nil
+	checkWarnings("chat")
 end
 
 if failures > 0 then

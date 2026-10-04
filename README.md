@@ -70,7 +70,7 @@ Swaps, pulls, rewinds and walls follow the same rules as damage: nothing works d
 
 Wands work like Noita: a wand casts its slotted spells left to right. Multicast wands fire several at once and shuffle wands fire them in random order. When a wand reaches the end of its spells, it recharges.
 
-**How to craft, step by step:** press **B** to open the Spellbook. Click a **Form** part in your bag (the middle column), then optionally an **Element** and some **Modifiers**. Check the preview, then press **Forge Spell**. The new spell lands in your bag, already selected, so just click an empty wand slot to equip it. For a trigger spell, add a Trigger part, click any spell in your bag, and press **Use as payload** before forging.
+**How to craft, step by step:** press **B** to open the Spellbook. Open the **Parts** tab of your bag (the middle column) and click a **Form** part, then optionally an **Element** and some **Modifiers**. Check the preview, then press **Forge Spell**. The new spell lands in your bag, already selected, so just click an empty wand slot to equip it. For a trigger spell, add a Trigger part, click any spell in your bag, and press **Use as payload** before forging.
 
 The full list of every part, spell, map and kit is in **[docs/CATALOG.md](docs/CATALOG.md)**.
 
@@ -92,20 +92,22 @@ Every match generates a fresh layout of the chosen map. The cornucopia holds 10 
 |---|---|---|---|
 | Cast | hold Left Mouse | **Cast** button (aims at screen centre) | R2 |
 | Switch wand | 1-4, Q to cycle | tap the hotbar | L1 / R1 |
-| Spellbook & Spellforge | **B** | **Bag** button | Y |
-| Grimoire (encyclopedia) | **H** | **📜 Grimoire** button | |
+| Spellbook & Spellforge | **B** | **📖 Spellbook** (left), or **Bag** | Y |
+| Grimoire (encyclopedia) | **H** | **📜 Grimoire** (left) | |
 | 🛠 Dev panel (Studio and the game's owner only) | **`** | **🛠 Dev** button | |
 | Join the game | walk through the Plaza's portal, or **⚔ JOIN GAME** | **⚔ JOIN GAME** | |
 | Leave the queue | the library's portal, or **↩ Leave queue** | **↩ Leave queue** | |
 | Open chest | E (hold) | tap the prompt | X |
 | Take everything from a chest | F | **Take All** | |
 | Potions | Z X C V | tap the potion | |
-| Coffers, Tailor's Loom, wardrobe | the Plaza's stalls, or **👘 Wardrobe & Coffers** | the same | |
-| Auction house | the Gilded Gavel pavilion, or **⚖ Auction House** | the same | |
+| Coffers, Tailor's Loom, wardrobe | the Plaza's stalls, or **👘 Wardrobe** (left) | the same | |
+| Auction house | the Gilded Gavel pavilion, or **⚖ Auction House** (left) | the same | |
+| Chat | **/** | the chat button | |
+| Close any window | **✕** in its corner | the same | |
 
-(Tab is left free for Roblox's player list.)
+(Tab is left free for Roblox's player list.) The menu buttons (Spellbook, Grimoire, Class, Spectate, Wardrobe, Auction House and your coins) sit in one column on the left, and they tuck away while a window is open.
 
-In the Spellbook:
+The Spellbook has three columns: your **wands** on the left (each card shows its mana, cast delay, recharge and perks as chips, and its slots underneath), your **bag** in the middle (tabs for **Spells**, **Parts** and **Potions**, grouped by type with a name under every icon), and the **Spellforge** on the right with a live preview of the spell you're building. Hover anything for its full details.
 - **Slot a spell:** click a spell in your bag, then click a wand slot.
 - **Unslot a spell:** right-click a spell in a wand, or select it and press Unslot.
 - **Craft a spell:** click parts to drop them into the Spellforge, then press **Forge Spell**.
@@ -146,6 +148,7 @@ Things to know:
 - **Server size:** set the place's **Max Players**. You'll find it in Studio under *File → Game Settings → Places* (click the place's ⋯ → Edit), or in the place's settings on the Creator Dashboard. **12** fills every pedestal. Going a little higher (e.g. 16) gives the Plaza a crowd: if more than 12 people queue, the extra players wait in the library for the next round, first come first served.
 - **DataStores and MemoryStore:** in *Game Settings → Security*, turn on **Enable Studio Access to API Services** so coins, outfits, wins, kills and tutorial progress save while you test in Studio. Published games always have access. The auction house uses MemoryStoreService for the shared market. Without API access it falls back to a market for the current server only, and nothing is saved.
 - **Kits for sale:** create one game pass per paid kit on the Creator Dashboard (*your experience → Monetization → Passes*), priced at its tier (see [Kits and tiers](#kits-and-tiers)), and paste each pass id into `src/shared/Config.lua` → `Config.Kits.GamePassIds`. A kit whose id is still `0` shows as "not on sale yet". While you test in Studio, every kit is unlocked (`StudioUnlocksAll`).
+- **Voice chat (optional):** turn it on under *Game Settings → Communication* (**Enable Microphone**). Roblox voice is spatial, so players hear mages near them and voices fade with distance. It matches proximity text chat with no extra code. Only players who have verified voice on their accounts can use it.
 - **Streaming** is turned off (`Workspace.StreamingEnabled = false` in `default.project.json`) so every client always sees the whole arena.
 - **Sounds:** the game uses sounds that ship with every Roblox client, so it works out of the box. Swap the ids in `src/client/Controllers/Sounds.lua` for Creator Store sounds to make it sound much better.
 
@@ -250,6 +253,7 @@ Mana Wars is multiplayer out of the box, like the original survival-games server
 - **When does a match start?** As soon as `Config.Bots.MinRealPlayers` players (default 1) are queued, the 30-second vote begins. Everyone else in the server can still join before it closes. On a busy server you may want to raise `MinRealPlayers` (e.g. to 4) so matches wait for a crowd.
 - **Bots are only filler.** They top a match up to `Config.Bots.FillTo` (8) participants, so a busy server plays with no bots at all. Set `Config.Bots.Enabled = false` to require real players (`Config.Match.MinPlayers`).
 - `Config.Queue.StayQueuedAfterMatch` (on by default) keeps players in the queue between matches. Turn it off to send everyone back to the Plaza after each match.
+- **Proximity chat.** Text chat only reaches mages within **70 studs** of whoever is talking (`Config.Chat.Range`), and chat bubbles fade at the same distance. Hub chatter stays in the hub, the queue in the library talks among itself, and in a match you only talk to whoever is close, so nobody can call out positions from across the map. Eliminated players respawn far from the arena, so they can't whisper to the living. Set `Config.Chat.Proximity = false` for one server-wide chat. The server applies the filter (`ChatService`), so clients can't get around it.
 - **Test multiplayer in Studio:** open the **Test** tab, pick a number of players under **Clients and Servers** (e.g. 3), and press **Start**. Studio opens a server window plus one window per player.
 
 ## Tuning the game
@@ -272,6 +276,9 @@ Almost every number lives in **`src/shared/Config.lua`**: match timings (the gra
 | add robe/hat designs, colours, materials, auras or enchantments, or change coffer prices and odds | `src/shared/Cosmetics.lua` |
 | add a familiar species or colour, change powers, familiar odds or the shiny chance | `src/shared/Familiars.lua` (and its body in `src/client/Controllers/FamiliarBuilder.lua`) |
 | change how outfits and auras are built on characters | `src/shared/OutfitBuilder.lua` |
+| change chat range, or turn proximity chat off | `Config.Chat` in `src/shared/Config.lua` |
+| re-colour the UI, or change fonts | `src/client/UI/Theme.lua` (every screen uses these colours) |
+| change the window frame, cards, tabs or buttons | `src/client/UI/Widgets.lua` |
 | change spell effects | `src/client/Controllers/FXController.lua` (what each spell draws) and `VFX.lua` (element styles and building blocks) |
 
 After changing game data, run `lune run tools/gen_docs` to refresh `docs/CATALOG.md`.
@@ -292,7 +299,7 @@ src/
                    DamageService, StatusService, InventoryService (Spellforge), ChestService,
                    PracticeService (training dummies), BotService, ClassService, MapService,
                    DevService (the 🛠 Dev panel's tools, admins only),
-                   DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
+                   ChatService (proximity chat), DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
                    outfits), FamiliarService (Nip, Last Ember), AuctionService (the cross-server auction house)
     Map/           MapDefs (the 5 maps), TerrainGen, Structures (trees, ruins, cornucopia, chests),
                    Hub (Arcanum Plaza), Lobby (the library), Props (shared building blocks)
@@ -300,9 +307,10 @@ src/
     Controllers/   HUD, Spellbook/Spellforge, Grimoire, Tutorial, chest window, lobby (join/leave queue,
                    vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom, familiars), Auction house,
                    familiars (FamiliarController + FamiliarBuilder), the 🛠 Dev panel (DevController),
-                   input, effects (FXController + VFX),
+                   chat note (ChatController), input, effects (FXController + VFX),
                    storm, weather
-    UI/            small UI toolkit (Create, Widgets, Theme, ItemInfo)
+    UI/            small UI toolkit: Theme (colours, fonts), Widgets (window frame, tabs, cards, item rows,
+                   buttons, tooltips), Dock (the menu column), Create, ItemInfo, CosmeticInfo
 ```
 
 The server is authoritative. Clients only send requests like "cast at this point", "open/take from chest", "inventory action", "join/leave the queue" and "vote", and the server validates each one (mana, cooldowns, distance, part counts). Projectiles are simulated on the server. Each client simulates the same motion locally for smooth visuals, and the server corrects anything that depends on the world, such as bounces or homing.
@@ -318,12 +326,22 @@ lune run tools/sim/client           # real client UI + real server: forge, slot,
                                     #   open coffers, stitch and wear a robe, outfits on R15/R6 bodies, sell/buy/cancel on the auction house,
                                     #   saving and rejoining, every spell effect in every element (drawn and cleaned up), and
                                     #   familiars: every species at every rarity, summoning, each kind of power, trading, saving,
-                                    #   and the dev panel (Unlock Everything, switches, strangers locked out, profile reset)
+                                    #   the dev panel (Unlock Everything, switches, strangers locked out, profile reset),
+                                    #   and proximity chat (near/far/between lives, the off switch)
 lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, two full matches with bots
                                     #   (distinct finishing places, exact coin payouts, saved profile), leave the queue, then
                                     #   start / skip / end a match from the dev panel
 lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps, checking chests, spacing and decoration
 ```
+
+**Screenshots of every screen, without opening Studio.** The client sim can save each screen it opens (HUD, Spellbook, chest, kit shop, wardrobe, coffers, Tailor's Loom, auction house, dev panel...) and a small Chromium script draws them as PNGs:
+
+```bash
+MANA_SHOTS=build/ui lune run tools/sim/client   # saves build/ui/*.json, one per screen
+node tools/ui/render.cjs build/ui/*.json        # draws build/ui/*.png (needs Node and Playwright)
+```
+
+The PNGs are approximate: they use stand-in fonts and estimate how text wraps. They're good for checking layout and colours. Check the finer details in Studio.
 
 The `tools/sim` scripts run the actual game modules on a small fake engine (`tools/sim/mock.luau`) under [Lune](https://lune-org.github.io/docs). GitHub Actions runs all of these, plus type checking and a Rojo build, on every push.
 

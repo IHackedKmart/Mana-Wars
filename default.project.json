@@ -51,6 +51,11 @@
         "FallenPartsDestroyHeight": -150,
         "StreamingEnabled": false
       }
+    },
+    "TextChatService": {
+      "$properties": {
+        "ChatVersion": "TextChatService"
+      }
     }
   }
 }

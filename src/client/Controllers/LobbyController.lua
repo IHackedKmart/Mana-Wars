@@ -18,6 +18,7 @@ local UI = script.Parent.Parent.UI
 local Create = require(UI.Create)
 local Theme = require(UI.Theme)
 local Widgets = require(UI.Widgets)
+local Dock = require(UI.Dock)
 local ItemInfo = require(UI.ItemInfo)
 local State = require(script.Parent.State)
 local Sounds = require(script.Parent.Sounds)
@@ -234,54 +235,37 @@ local function renderClasses()
 	end
 end
 
+local function setKitShop(visible: boolean)
+	classPanel.Visible = visible
+	State.setMenu("kits", visible)
+	if visible then
+		renderClasses()
+	end
+end
+
 local function buildClassPanel()
-	classPanel = Widgets.panel({
-		Size = UDim2.fromOffset(940, 540),
-		Position = UDim2.fromScale(0.5, 0.52),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.05,
-		Visible = false,
-		Parent = root,
-	})
-	Widgets.label({
-		Text = "CHOOSE YOUR KIT",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(400, 30),
-		Position = UDim2.fromOffset(20, 12),
-		Parent = classPanel,
-	})
-	Widgets.label({
-		Text = "Your kit decides the wands, spells and parts you start with, plus a random bonus part each match. Hover a kit to see everything in it.",
-		TextSize = 13,
-		TextColor3 = C.Dim,
-		TextWrapped = true,
-		Size = UDim2.new(1, -80, 0, 18),
-		Position = UDim2.fromOffset(20, 42),
-		Parent = classPanel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 10),
-		color = C.Panel3,
-		onClick = function()
-			classPanel.Visible = false
+	local kitGui = Widgets.screen("KitShop", 8)
+	local window = Widgets.window(kitGui, {
+		title = "Choose Your Kit",
+		icon = "🎓",
+		subtitle = "Your kit decides the wands, spells and parts you start with, plus a random bonus part each match. Hover a kit to see everything in it.",
+		size = Vector2.new(960, 600),
+		onClose = function()
+			setKitShop(false)
 		end,
-		parent = classPanel,
 	})
+	classPanel = window.root
+	classPanel.Visible = false
 	classGrid = Create("ScrollingFrame", {
 		Name = "KitList",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -30, 1, -110),
-		Position = UDim2.fromOffset(20, 70),
+		Size = UDim2.new(1, 0, 1, -28),
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 8,
-		Parent = classPanel,
-	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+		ScrollBarThickness = 6,
+		Parent = window.body,
+	}, { Create.list(Enum.FillDirection.Vertical, 6), Create.padding(2, 2) })
 	local premiumNote = if Config.Kits.PremiumFreeTier > 0
 		then "  ·  Roblox Premium members get every " .. Classes.tierInfo(Config.Kits.PremiumFreeTier).name .. " kit free"
 		else ""
@@ -290,9 +274,9 @@ local function buildClassPanel()
 		TextSize = 12,
 		TextColor3 = C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -40, 0, 18),
-		Position = UDim2.new(0, 20, 1, -30),
-		Parent = classPanel,
+		Size = UDim2.new(1, 0, 0, 18),
+		Position = UDim2.new(0, 0, 1, -18),
+		Parent = window.body,
 	})
 end
 
@@ -350,14 +334,14 @@ end
 
 local function buildSpectate()
 	spectateButton = Widgets.button("👁  Spectate the match", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 190),
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = C.Panel3,
+		layoutOrder = 4,
 		onClick = function()
 			setSpectate(true)
 			updateSpectate()
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
 	spectateBar = Widgets.panel({
 		Size = UDim2.fromOffset(420, 50),
@@ -653,8 +637,7 @@ function LobbyController.init()
 		if action == "Grimoire" and LobbyController.onOpenGrimoire then
 			LobbyController.onOpenGrimoire()
 		elseif action == "ClassPicker" then
-			classPanel.Visible = true
-			renderClasses()
+			setKitShop(true)
 		elseif action == "Wardrobe" and LobbyController.onOpenWardrobe then
 			LobbyController.onOpenWardrobe("Tailor")
 		elseif action == "Coffers" and LobbyController.onOpenWardrobe then
@@ -665,17 +648,15 @@ function LobbyController.init()
 	end)
 
 	classButton = Widgets.button("🎓  Class: Apprentice", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 148),
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
 		color = C.Accent,
+		layoutOrder = 3,
 		onClick = function()
-			classPanel.Visible = not classPanel.Visible
-			if classPanel.Visible then
-				renderClasses()
-			end
+			setKitShop(not classPanel.Visible)
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
+	classButton.Name = "ClassButton"
 
 	local function updateClassButton()
 		local class = Classes.ById[tostring(player:GetAttribute("Class"))]
@@ -688,27 +669,27 @@ function LobbyController.init()
 	end
 	-- the Tailor's Loom and the Auction House are only open in the Plaza
 	wardrobeButton = Widgets.button("👘  Wardrobe & Coffers", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 232),
-		color = C.Panel3,
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(120, 50, 90),
+		layoutOrder = 5,
 		onClick = function()
 			if LobbyController.onOpenWardrobe then
 				LobbyController.onOpenWardrobe(nil)
 			end
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
 	wardrobeButton.Name = "WardrobeButton"
 	auctionButton = Widgets.button("⚖  Auction House", {
-		size = UDim2.fromOffset(230, 38),
-		position = UDim2.fromOffset(16, 274),
-		color = C.Panel3,
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(46, 92, 110),
+		layoutOrder = 6,
 		onClick = function()
 			if LobbyController.onOpenAuction then
 				LobbyController.onOpenAuction()
 			end
 		end,
-		parent = root,
+		parent = Dock.get(),
 	})
 	auctionButton.Name = "AuctionButton"
 	coinsPill = Widgets.label({
@@ -716,14 +697,16 @@ function LobbyController.init()
 		Text = "🪙 0 Enchanted Coins",
 		Font = Theme.Black,
 		TextSize = 16,
-		TextColor3 = Color3.fromRGB(255, 215, 90),
-		BackgroundColor3 = C.Panel,
-		BackgroundTransparency = 0.15,
-		Size = UDim2.fromOffset(230, 30),
-		Position = UDim2.fromOffset(16, 316),
-		Parent = root,
+		TextColor3 = C.Gold,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.3,
+		Size = UDim2.fromOffset(Dock.WIDTH, 32),
+		LayoutOrder = 7,
+		Parent = Dock.get(),
 	})
-	Create.corner(15).Parent = coinsPill
+	Create.corner(16).Parent = coinsPill
+	Create.stroke(C.GoldDeep, 1.5, 0.3).Parent = coinsPill
 	local function updateCoins()
 		coinsPill.Text = "🪙 " .. tostring(player:GetAttribute("Coins") or 0) .. " Enchanted Coins"
 	end
@@ -743,8 +726,8 @@ function LobbyController.init()
 		wardrobeButton.Visible = inLobby and State.inHub()
 		auctionButton.Visible = wardrobeButton.Visible
 		coinsPill.Visible = inLobby
-		if not inLobby then
-			classPanel.Visible = false
+		if not inLobby and classPanel.Visible then
+			setKitShop(false)
 		end
 		spectateButton.Visible = inLobby and matchRunning and not spectating
 		spectateBar.Visible = spectating

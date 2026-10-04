@@ -48,9 +48,10 @@ type Selection = {
 }
 
 local gui: ScreenGui
-local panel: Frame
 local wandList: ScrollingFrame
-local bagList: ScrollingFrame
+local bagPages: { [string]: ScrollingFrame } = {}
+local bagTabs: Widgets.TabsHandle
+local bagTab = "Spells"
 local forgeFrame: Frame
 local detailsInfo: Frame
 local detailsButtons: Frame
@@ -200,36 +201,55 @@ end
 ---------------------------------------------------------------------------
 
 local function wandCard(index: number, wand: Items.WandItem | false, equipped: boolean, order: number)
+	if not wand then
+		local empty = Widgets.panel({
+			Name = "EmptyWand_" .. index,
+			Size = UDim2.new(1, -10, 0, 44),
+			BackgroundColor3 = C.Panel,
+			BackgroundTransparency = 0.4,
+			LayoutOrder = order,
+			Parent = wandList,
+		})
+		local stroke = empty:FindFirstChildOfClass("UIStroke") :: UIStroke
+		stroke.Transparency = 0.75
+		Widgets.label({
+			Text = index .. "   Empty wand slot  ·  find wands in chests",
+			TextColor3 = C.Dim,
+			TextSize = 13,
+			Size = UDim2.new(1, -24, 1, 0),
+			Position = UDim2.fromOffset(14, 0),
+			Parent = empty,
+		})
+		return
+	end
+	local rarityColor = Theme.rarity(wand.rarity)
 	local card = Widgets.panel({
-		Size = UDim2.new(1, -8, 0, if wand then 128 else 56),
+		Name = "Wand_" .. index,
+		Size = UDim2.new(1, -10, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = if equipped then C.Panel3 else C.Panel2,
 		LayoutOrder = order,
 		Parent = wandList,
 	})
+	Create.padding(10, 8).Parent = card
+	Create.list(Enum.FillDirection.Vertical, 6).Parent = card
 	local stroke = card:FindFirstChildOfClass("UIStroke") :: UIStroke
-	if not wand then
-		stroke.Transparency = 0.7
-		Widgets.label({
-			Text = index .. "   Empty wand slot - find wands in chests",
-			TextColor3 = C.Dim,
-			TextSize = 14,
-			Size = UDim2.new(1, -20, 1, 0),
-			Position = UDim2.fromOffset(12, 0),
-			Parent = card,
-		})
-		return
-	end
-	stroke.Color = if equipped
-		then C.Gold
-		elseif isSelected("Wand", index) then Color3.new(1, 1, 1)
-		else Theme.rarity(wand.rarity)
-	stroke.Transparency = 0
+	stroke.Color = if equipped then C.Gold elseif isSelected("Wand", index) then Color3.new(1, 1, 1) else rarityColor
+	stroke.Transparency = if equipped then 0 else 0.35
+	stroke.Thickness = if equipped then 2 else 1.5
 
+	-- header: the wand, its name and type, and Equip
+	local top = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 46),
+		LayoutOrder = 1,
+		Parent = card,
+	})
 	Widgets.tile({
 		size = 46,
 		wandColor = Theme.rgb(wand.color),
-		gemColor = Theme.rarity(wand.rarity),
-		border = Theme.rarity(wand.rarity),
+		gemColor = rarityColor,
+		border = rarityColor,
 		selected = isSelected("Wand", index),
 		onClick = function()
 			choose({ kind = "Wand", wand = index })
@@ -237,70 +257,94 @@ local function wandCard(index: number, wand: Items.WandItem | false, equipped: b
 		info = function()
 			return ItemInfo.wand(wand)
 		end,
-		parent = card,
-	}).Position =
-		UDim2.fromOffset(8, 8)
-
+		parent = top,
+	})
 	local s = wand.stats
-	local tags = { wand.rarity .. " " .. wand.wandType }
-	if s.spellsPerCast > 1 then
-		table.insert(tags, "casts " .. s.spellsPerCast .. " at once")
-	end
-	if s.shuffle then
-		table.insert(tags, "shuffled")
-	end
 	Widgets.label({
-		Text = index .. ". " .. wand.name,
+		Text = index .. "  " .. wand.name,
 		Font = Theme.Bold,
 		TextSize = 15,
-		TextColor3 = Theme.rarity(wand.rarity),
+		TextColor3 = rarityColor,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Size = UDim2.new(1, -180, 0, 18),
-		Position = UDim2.fromOffset(62, 6),
-		Parent = card,
+		Size = UDim2.new(1, -150, 0, 20),
+		Position = UDim2.fromOffset(56, 3),
+		Parent = top,
 	})
 	Widgets.label({
-		Text = table.concat(tags, " · "),
+		Text = wand.rarity .. " " .. wand.wandType .. "  ·  " .. s.capacity .. " slots",
 		TextSize = 12,
 		TextColor3 = C.Dim,
-		Size = UDim2.new(1, -180, 0, 14),
-		Position = UDim2.fromOffset(62, 24),
-		Parent = card,
+		Size = UDim2.new(1, -150, 0, 16),
+		Position = UDim2.fromOffset(56, 24),
+		Parent = top,
 	})
-	Widgets.label({
-		Text = string.format(
-			"Mana %d (+%d/s) · Delay %.2fs · Recharge %.2fs",
-			s.manaMax,
-			s.manaRegen,
-			s.castDelay,
-			s.rechargeTime
-		),
-		TextSize = 12,
-		Size = UDim2.new(1, -70, 0, 14),
-		Position = UDim2.fromOffset(62, 40),
+	if equipped then
+		local pill = Widgets.label({
+			Text = "EQUIPPED",
+			Font = Theme.Black,
+			TextSize = 11,
+			TextColor3 = C.Ink,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			BackgroundColor3 = C.Gold,
+			BackgroundTransparency = 0,
+			Size = UDim2.fromOffset(78, 22),
+			Position = UDim2.new(1, -78, 0, 2),
+			Parent = top,
+		})
+		Create.corner(11).Parent = pill
+	else
+		Widgets.button("Equip", {
+			size = UDim2.fromOffset(70, 26),
+			position = UDim2.new(1, -70, 0, 0),
+			textSize = 13,
+			onClick = function()
+				invoke("Equip", { index = index })
+			end,
+			parent = top,
+		})
+	end
+
+	-- stats at a glance
+	local chips = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 18),
+		LayoutOrder = 2,
 		Parent = card,
-	})
+	}, { Create.list(Enum.FillDirection.Horizontal, 5) })
+	Widgets.chip(chips, string.format("💧 %d  +%d/s", s.manaMax, s.manaRegen), C.Mana, 1)
+	Widgets.chip(chips, string.format("⏱ %.2fs", s.castDelay), nil, 2)
+	Widgets.chip(chips, string.format("🔄 %.2fs", s.rechargeTime), nil, 3)
+	if s.spellsPerCast > 1 then
+		Widgets.chip(chips, "✦ casts " .. s.spellsPerCast, C.Accent, 4)
+	end
+	if s.shuffle then
+		Widgets.chip(chips, "🔀 shuffled", C.Dim, 5)
+	end
 	local perks = {}
 	for _, perk in wand.perks do
 		table.insert(perks, "★ " .. WandGenerator.describePerk(perk))
 	end
-	Widgets.label({
-		Text = if #perks > 0 then table.concat(perks, "   ") else "",
-		TextSize = 12,
-		TextColor3 = C.Gold,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Size = UDim2.new(1, -70, 0, 14),
-		Position = UDim2.fromOffset(62, 55),
-		Parent = card,
-	})
+	if #perks > 0 then
+		Widgets.label({
+			Text = table.concat(perks, "     "),
+			TextSize = 12,
+			TextColor3 = C.Gold,
+			TextWrapped = true,
+			AutomaticSize = Enum.AutomaticSize.Y,
+			Size = UDim2.new(1, 0, 0, 14),
+			LayoutOrder = 3,
+			Parent = card,
+		})
+	end
 
+	-- the spell slots, cast left to right
 	local slots = Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -16, 0, 42),
-		Position = UDim2.fromOffset(8, 78),
+		Size = UDim2.new(1, 0, 0, 44),
+		LayoutOrder = 4,
 		Parent = card,
 	}, { Create.list(Enum.FillDirection.Horizontal, 4) })
-	local tileSize = if s.capacity > 8 then 36 else 40
+	local tileSize = if s.capacity > 8 then 38 else 44
 	for si = 1, s.capacity do
 		local spell = wand.slots[si]
 		if spell then
@@ -354,108 +398,84 @@ local function wandCard(index: number, wand: Items.WandItem | false, equipped: b
 			})
 		end
 	end
-
-	if equipped then
-		Widgets.label({
-			Text = "EQUIPPED",
-			Font = Theme.Black,
-			TextSize = 12,
-			TextColor3 = C.Gold,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			Size = UDim2.fromOffset(100, 16),
-			Position = UDim2.new(1, -108, 0, 8),
-			Parent = card,
-		})
-	else
-		Widgets.button("Equip", {
-			size = UDim2.fromOffset(64, 24),
-			position = UDim2.new(1, -72, 0, 6),
-			textSize = 13,
-			onClick = function()
-				invoke("Equip", { index = index })
-			end,
-			parent = card,
-		})
-	end
 end
 
 ---------------------------------------------------------------------------
 -- Bag column
 ---------------------------------------------------------------------------
 
-local function sectionTitle(text: string, order: number)
+local CARD = 80
+
+local function emptyNote(parent: Instance, text: string, order: number)
 	Widgets.label({
 		Text = text,
-		Font = Theme.Black,
-		TextSize = 13,
 		TextColor3 = C.Dim,
-		Size = UDim2.new(1, 0, 0, 18),
+		TextSize = 13,
+		TextWrapped = true,
+		Size = UDim2.new(1, -8, 0, 36),
 		LayoutOrder = order,
-		Parent = bagList,
+		Parent = parent,
 	})
 end
 
-local function gridFrame(order: number, count: number, cell: number): Frame
-	local perRow = 6
-	local rows = math.max(1, math.ceil(count / perRow))
-	return Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -8, 0, rows * (cell + 6)),
-		LayoutOrder = order,
-		Parent = bagList,
-	}, { Create.grid(cell, 6) })
-end
-
 local function buildBag()
-	Widgets.clear(bagList, true)
+	for _, page in bagPages do
+		Widgets.clear(page, true)
+	end
 	local inv = inventory()
 	if not inv then
 		return
 	end
-	local order = 0
-	local function nextOrder(): number
-		order += 1
-		return order
-	end
 
-	sectionTitle(string.format("SPELLS  %d/%d", #inv.spells, Config.Inventory.MaxSpells), nextOrder())
-	local spellGrid = gridFrame(nextOrder(), math.max(1, #inv.spells), 50)
+	-- Spells
+	local spellsPage = bagPages.Spells
+	Widgets.sectionHeader(
+		spellsPage,
+		string.format("Spells  %d / %d", #inv.spells, Config.Inventory.MaxSpells),
+		"click one, then a wand slot",
+		1
+	)
 	if #inv.spells == 0 then
-		Widgets.label({
-			Text = "No loose spells. Loot chests or forge some!",
-			TextColor3 = C.Dim,
-			TextSize = 13,
-			Size = UDim2.new(1, 0, 0, 20),
-			Parent = spellGrid,
-		})
-		local grid = spellGrid:FindFirstChildOfClass("UIGridLayout") :: UIGridLayout
-		grid.CellSize = UDim2.new(1, 0, 0, 20)
-	end
-	for i, spell in inv.spells do
-		local icon, color = ItemInfo.spellVisual(spell.recipe)
-		Widgets.tile({
-			name = "Spell_" .. spell.uid,
-			size = 50,
-			icon = icon,
-			iconColor = color,
-			border = Theme.rarity(spell.rarity),
-			corner = if spell.recipe.trigger then "⚙" else nil,
-			selected = isSelected("Spell", spell.uid) or draft.payloadUid == spell.uid,
-			layoutOrder = i,
-			onClick = function()
-				if isSelected("Spell", spell.uid) then
-					choose(nil)
-				else
-					choose({ kind = "Spell", uid = spell.uid })
-				end
-			end,
-			info = function()
-				return ItemInfo.spell(spell, State.equippedWand())
-			end,
-			parent = spellGrid,
-		})
+		emptyNote(spellsPage, "No loose spells. Loot chests, or forge one from parts in the Spellforge.", 2)
+	else
+		local grid = Widgets.cardGrid(spellsPage, CARD, 2, "SpellCards")
+		for i, spell in inv.spells do
+			local icon, color = ItemInfo.spellVisual(spell.recipe)
+			Widgets.card({
+				name = "Spell_" .. spell.uid,
+				width = CARD,
+				icon = icon,
+				iconColor = color,
+				rarity = spell.rarity,
+				caption = spell.name,
+				captionColor = Theme.lighten(Theme.rarity(spell.rarity), 0.35),
+				badge = if spell.recipe.trigger then "⚙" else nil,
+				selected = isSelected("Spell", spell.uid) or draft.payloadUid == spell.uid,
+				layoutOrder = i,
+				onClick = function()
+					if isSelected("Spell", spell.uid) then
+						choose(nil)
+					else
+						choose({ kind = "Spell", uid = spell.uid })
+					end
+				end,
+				info = function()
+					return ItemInfo.spell(spell, State.equippedWand())
+				end,
+				parent = grid,
+			})
+		end
 	end
 
+	-- Parts, grouped by kind
+	local partsPage = bagPages.Parts
+	local order = 0
+	local hints = {
+		Form = "what the spell is",
+		Element = "what it's made of",
+		Modifier = "how it behaves",
+		Trigger = "casts a payload spell",
+	}
 	for _, category in SpellParts.Categories do
 		local owned = {}
 		for _, part in SpellParts.ByCategory[category] do
@@ -463,62 +483,63 @@ local function buildBag()
 				table.insert(owned, part)
 			end
 		end
-		sectionTitle(string.upper(category) .. " PARTS", nextOrder())
-		local grid = gridFrame(nextOrder(), math.max(1, #owned), 50)
+		order += 1
+		Widgets.sectionHeader(partsPage, category .. " parts  " .. #owned, hints[category], order)
+		order += 1
 		if #owned == 0 then
-			local layout = grid:FindFirstChildOfClass("UIGridLayout") :: UIGridLayout
-			layout.CellSize = UDim2.new(1, 0, 0, 20)
-			Widgets.label({
-				Text = "None yet",
-				TextColor3 = C.Dim,
-				TextSize = 12,
-				Size = UDim2.new(1, 0, 0, 20),
-				Parent = grid,
-			})
-		end
-		for i, part in owned do
-			local left = available(part.id)
-			Widgets.tile({
-				name = "Part_" .. part.id,
-				size = 50,
-				icon = part.icon,
-				iconColor = Theme.CategoryColors[category],
-				border = Theme.rarity(part.rarity),
-				count = left,
-				empty = left <= 0,
-				selected = isSelected("Part", part.id),
-				layoutOrder = i,
-				onClick = function()
-					selected = { kind = "Part", id = part.id }
-					addPartToDraft(part.id)
-					refresh()
-				end,
-				info = function()
-					return ItemInfo.part(part.id)
-				end,
-				parent = grid,
-			})
+			emptyNote(partsPage, "None yet", order)
+		else
+			local grid = Widgets.cardGrid(partsPage, CARD, order, category .. "Cards")
+			for i, part in owned do
+				local left = available(part.id)
+				Widgets.card({
+					name = "Part_" .. part.id,
+					width = CARD,
+					icon = part.icon,
+					iconColor = Theme.CategoryColors[category],
+					rarity = part.rarity,
+					caption = part.name,
+					count = left,
+					empty = left <= 0,
+					selected = isSelected("Part", part.id),
+					layoutOrder = i,
+					onClick = function()
+						selected = { kind = "Part", id = part.id }
+						addPartToDraft(part.id)
+						refresh()
+					end,
+					info = function()
+						return ItemInfo.part(part.id)
+					end,
+					parent = grid,
+				})
+			end
 		end
 	end
 
+	-- Potions
+	local potionsPage = bagPages.Potions
 	local potions = {}
 	for _, c in Consumables.List do
 		if (inv.consumables[c.id] or 0) > 0 then
 			table.insert(potions, c)
 		end
 	end
-	if #potions > 0 then
-		sectionTitle("POTIONS", nextOrder())
-		local grid = gridFrame(nextOrder(), #potions, 50)
+	Widgets.sectionHeader(potionsPage, "Potions  " .. #potions, "drink with the key shown", 1)
+	if #potions == 0 then
+		emptyNote(potionsPage, "No potions. They turn up in chests.", 2)
+	else
+		local grid = Widgets.cardGrid(potionsPage, CARD, 2, "PotionCards")
 		for i, c in potions do
-			Widgets.tile({
+			Widgets.card({
 				name = "Potion_" .. c.id,
-				size = 50,
+				width = CARD,
 				icon = c.icon,
 				iconColor = Theme.rgb(c.color),
-				border = Theme.rarity(c.rarity),
+				rarity = c.rarity,
+				caption = c.name,
 				count = inv.consumables[c.id],
-				label = c.key,
+				badge = c.key,
 				selected = isSelected("Consumable", c.id),
 				layoutOrder = i,
 				onClick = function()
@@ -530,6 +551,35 @@ local function buildBag()
 				parent = grid,
 			})
 		end
+	end
+
+	-- tab labels with counts
+	local partCount = 0
+	for _, n in inv.parts do
+		if n > 0 then
+			partCount += 1
+		end
+	end
+	bagTabs.buttons.Spells.Text = "✨ Spells " .. #inv.spells
+	bagTabs.buttons.Parts.Text = "🧩 Parts " .. partCount
+	bagTabs.buttons.Potions.Text = "🧪 Potions " .. #potions
+	bagTabs.set(bagTab)
+	for name, page in bagPages do
+		page.Visible = name == bagTab
+	end
+end
+
+-- Switches the bag to the tab holding a named element ("Part_Bolt", "Spell_..."), so the tutorial
+-- can point at it.
+function InventoryController.reveal(elementName: string)
+	local tab = if string.sub(elementName, 1, 5) == "Part_"
+		then "Parts"
+		elseif string.sub(elementName, 1, 7) == "Potion_" then "Potions"
+		elseif string.sub(elementName, 1, 6) == "Spell_" then "Spells"
+		else nil
+	if tab and tab ~= bagTab then
+		bagTab = tab
+		refresh()
 	end
 end
 
@@ -548,7 +598,7 @@ local function forgeSlot(
 	local holder = Create("Frame", {
 		Name = "Forge_" .. string.gsub(title, " ", ""),
 		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(56, 66),
+		Size = UDim2.fromOffset(68, 66),
 		LayoutOrder = order,
 		Parent = parent,
 	})
@@ -567,7 +617,7 @@ local function forgeSlot(
 			else nil,
 		parent = holder,
 	}).Position =
-		UDim2.fromOffset(4, 0)
+		UDim2.fromOffset(10, 0)
 	Widgets.label({
 		Text = title,
 		TextSize = 10,
@@ -582,31 +632,16 @@ end
 
 local function buildForge()
 	Widgets.clear(forgeFrame, true)
-	Widgets.label({
-		Text = "✦ SPELLFORGE",
-		Font = Theme.Black,
-		TextSize = 16,
-		TextColor3 = C.Accent,
-		Size = UDim2.new(1, 0, 0, 20),
-		Position = UDim2.fromOffset(12, 8),
-		Parent = forgeFrame,
-	})
-	Widgets.label({
-		Text = "Click parts in your bag to add them",
-		TextSize = 11,
-		TextColor3 = C.Dim,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.new(1, -24, 0, 20),
-		Position = UDim2.fromOffset(12, 8),
-		Parent = forgeFrame,
-	})
+	local head = Widgets.sectionHeader(forgeFrame, "✦ Spellforge", "click parts to add them", 0)
+	head.Position = UDim2.fromOffset(12, 8)
+	head.Size = UDim2.new(1, -24, 0, 22)
 
 	local row1 = Create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -16, 0, 66),
-		Position = UDim2.fromOffset(8, 32),
+		Position = UDim2.fromOffset(12, 36),
 		Parent = forgeFrame,
-	}, { Create.list(Enum.FillDirection.Horizontal, 2) })
+	}, { Create.list(Enum.FillDirection.Horizontal, 6) })
 	forgeSlot(row1, "FORM", draft.form, function()
 		draft.form = nil
 		refresh()
@@ -624,7 +659,7 @@ local function buildForge()
 	local payloadHolder = Create("Frame", {
 		Name = "Forge_PAYLOAD",
 		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(56, 66),
+		Size = UDim2.fromOffset(68, 66),
 		LayoutOrder = 4,
 		Parent = row1,
 	})
@@ -659,7 +694,7 @@ local function buildForge()
 			else nil,
 		parent = payloadHolder,
 	}).Position =
-		UDim2.fromOffset(4, 0)
+		UDim2.fromOffset(10, 0)
 	Widgets.label({
 		Text = "PAYLOAD",
 		TextSize = 10,
@@ -674,9 +709,9 @@ local function buildForge()
 	local row2 = Create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -16, 0, 66),
-		Position = UDim2.fromOffset(8, 100),
+		Position = UDim2.fromOffset(12, 104),
 		Parent = forgeFrame,
-	}, { Create.list(Enum.FillDirection.Horizontal, 2) })
+	}, { Create.list(Enum.FillDirection.Horizontal, 6) })
 	for i = 1, Config.Spell.MaxModifiers do
 		local id = draft.mods[i]
 		forgeSlot(row2, "MOD " .. i, id, function()
@@ -687,11 +722,13 @@ local function buildForge()
 
 	-- preview
 	local preview = Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -24, 0, 92),
-		Position = UDim2.fromOffset(12, 170),
+		Name = "Preview",
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.5,
+		Size = UDim2.new(1, -24, 0, 96),
+		Position = UDim2.fromOffset(12, 176),
 		Parent = forgeFrame,
-	})
+	}, { Create.corner(8), Create.padding(8, 6) })
 	local recipe = draftRecipe()
 	if not recipe then
 		Widgets.label({
@@ -728,29 +765,40 @@ local function buildForge()
 				Parent = preview,
 			})
 			local lines = SpellBuilder.describe(spec)
-			local statText = {}
+			local stats = Create("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 1, -22),
+				Position = UDim2.fromOffset(0, 22),
+				Parent = preview,
+			}, {
+				Create("UIGridLayout", {
+					CellSize = UDim2.new(0.5, -4, 0, 16),
+					CellPadding = UDim2.fromOffset(6, 2),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+			})
 			for i, line in lines do
 				if i > 8 then
 					break
 				end
-				table.insert(statText, line[1] .. ": " .. line[2])
+				Widgets.label({
+					Text = "<font color='#a096b9'>" .. line[1] .. "</font>  " .. line[2],
+					RichText = true,
+					TextSize = 12,
+					TextTruncate = Enum.TextTruncate.AtEnd,
+					LayoutOrder = i,
+					Parent = stats,
+				})
 			end
-			Widgets.label({
-				Text = table.concat(statText, "   "),
-				TextWrapped = true,
-				TextSize = 12,
-				TextYAlignment = Enum.TextYAlignment.Top,
-				Size = UDim2.new(1, 0, 1, -20),
-				Position = UDim2.fromOffset(0, 20),
-				Parent = preview,
-			})
 		end
 	end
 
 	local forgeButton = Widgets.button("Forge Spell", {
-		size = UDim2.new(0.62, -16, 0, 34),
-		position = UDim2.new(0, 12, 1, -44),
-		color = if recipe then C.Accent else C.Panel3,
+		size = UDim2.new(0.66, -16, 0, 36),
+		position = UDim2.new(0, 12, 1, -46),
+		color = if recipe then C.Gold else C.Panel3,
+		textColor = if recipe then C.Ink else C.Dim,
+		textSize = 16,
 		onClick = function()
 			if not recipe then
 				State.toast("Add a Form part first", C.Bad)
@@ -771,6 +819,7 @@ local function buildForge()
 				clearDraft()
 				if type(newUid) == "string" then
 					selected = { kind = "Spell", uid = newUid }
+					bagTab = "Spells"
 				end
 				refresh()
 			end
@@ -780,8 +829,8 @@ local function buildForge()
 	forgeButton.Name = "ForgeButton"
 
 	Widgets.button("Clear", {
-		size = UDim2.new(0.38, -12, 0, 34),
-		position = UDim2.new(0.62, 0, 1, -44),
+		size = UDim2.new(0.34, -12, 0, 36),
+		position = UDim2.new(0.66, 0, 1, -46),
 		color = C.Panel3,
 		onClick = function()
 			clearDraft()
@@ -797,7 +846,7 @@ end
 
 local function detailButton(text: string, color: Color3?, fn: () -> ())
 	Widgets.button(text, {
-		size = UDim2.fromOffset(102, 30),
+		size = UDim2.fromOffset(100, 30),
 		textSize = 13,
 		color = color,
 		onClick = function()
@@ -928,119 +977,111 @@ end
 local function build()
 	gui = Widgets.screen("Spellbook", 10)
 	gui.Enabled = false
-	local root = Widgets.scaledRoot(gui)
-	panel = Widgets.panel({
-		Size = UDim2.fromOffset(1190, 630),
-		Position = UDim2.fromScale(0.5, 0.5),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = C.Background,
-		BackgroundTransparency = 0.05,
-		Parent = root,
-	})
-	Widgets.label({
-		Text = "SPELLBOOK",
-		Font = Theme.Black,
-		TextSize = 24,
-		TextColor3 = C.Gold,
-		Size = UDim2.fromOffset(300, 30),
-		Position = UDim2.fromOffset(18, 10),
-		Parent = panel,
-	})
-	Widgets.label({
-		Text = "Select a spell, then click a wand slot to equip it.  Wands cast their spells left to right.",
-		TextSize = 13,
-		TextColor3 = C.Dim,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.new(1, -400, 0, 30),
-		Position = UDim2.fromOffset(200, 10),
-		Parent = panel,
-	})
-	Widgets.button("✕", {
-		size = UDim2.fromOffset(34, 34),
-		position = UDim2.new(1, -46, 0, 8),
-		color = C.Panel3,
-		onClick = function()
+	local window = Widgets.window(gui, {
+		title = "Spellbook",
+		icon = "📖",
+		subtitle = "Pick a spell, then click a wand slot  ·  wands cast left to right  ·  right-click a slotted spell to unslot it",
+		size = Vector2.new(1210, 660),
+		onClose = function()
 			InventoryController.close()
 		end,
-		parent = panel,
 	})
+	local body = window.body
 	restockButton = Widgets.button("♻ Restock Spell Lab", {
-		size = UDim2.fromOffset(170, 34),
-		position = UDim2.new(1, -224, 0, 8),
-		color = Color3.fromRGB(60, 120, 90),
+		size = UDim2.fromOffset(170, 32),
+		color = Color3.fromRGB(56, 116, 88),
 		textSize = 13,
 		onClick = function()
 			clearDraft()
 			selected = nil
 			invoke("ResetPractice", {})
 		end,
-		parent = panel,
+		parent = window.right,
 	})
 
-	local function column(x: number, width: number, title: string): Frame
-		local col = Widgets.panel({
-			Size = UDim2.new(0, width, 1, -62),
-			Position = UDim2.fromOffset(x, 50),
+	local function column(x: number, width: number): Frame
+		return Widgets.panel({
+			Size = UDim2.new(0, width, 1, 0),
+			Position = UDim2.fromOffset(x, 0),
 			BackgroundColor3 = C.Panel,
-			Parent = panel,
+			Parent = body,
 		})
-		Widgets.label({
-			Text = title,
-			Font = Theme.Black,
-			TextSize = 14,
-			TextColor3 = C.Accent,
-			Size = UDim2.new(1, -20, 0, 22),
-			Position = UDim2.fromOffset(10, 6),
-			Parent = col,
-		})
-		return col
 	end
 
-	local wandCol = column(12, 440, "WANDS  (keys 1-4)")
+	-- wands
+	local wandCol = column(0, 440)
+	local wandHead = Widgets.sectionHeader(wandCol, "Wands", "keys 1-4 switch", 0)
+	wandHead.Position = UDim2.fromOffset(12, 8)
+	wandHead.Size = UDim2.new(1, -24, 0, 22)
 	wandList = Create("ScrollingFrame", {
 		Name = "Wands",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -12, 1, -36),
-		Position = UDim2.fromOffset(8, 30),
-		ScrollBarThickness = 6,
+		Size = UDim2.new(1, -14, 1, -42),
+		Position = UDim2.fromOffset(10, 36),
+		ScrollBarThickness = 5,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
 		Parent = wandCol,
-	}, { Create.list(Enum.FillDirection.Vertical, 8) })
+	}, { Create.list(Enum.FillDirection.Vertical, 8), Create.padding(2, 2) })
 
-	local bagCol = column(462, 370, "BAG")
-	bagList = Create("ScrollingFrame", {
-		Name = "Bag",
+	-- the bag: spells, parts and potions on separate tabs
+	local bagCol = column(450, 384)
+	local tabsHolder = Create("Frame", {
 		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Size = UDim2.new(1, -12, 1, -36),
-		Position = UDim2.fromOffset(8, 30),
-		ScrollBarThickness = 6,
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		CanvasSize = UDim2.new(),
+		Size = UDim2.new(1, -20, 0, 34),
+		Position = UDim2.fromOffset(10, 8),
 		Parent = bagCol,
-	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+	})
+	bagTabs = Widgets.tabs(
+		tabsHolder,
+		{
+			{ "Spells", "✨ Spells" },
+			{ "Parts", "🧩 Parts" },
+			{ "Potions", "🧪 Potions" },
+		},
+		116,
+		function(id)
+			Sounds.play("Click")
+			bagTab = id
+			refresh()
+		end
+	)
+	for _, name in { "Spells", "Parts", "Potions" } do
+		bagPages[name] = Create("ScrollingFrame", {
+			Name = name .. "Page",
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, -14, 1, -54),
+			Position = UDim2.fromOffset(10, 48),
+			ScrollBarThickness = 5,
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(),
+			Visible = name == bagTab,
+			Parent = bagCol,
+		}, { Create.list(Enum.FillDirection.Vertical, 8), Create.padding(2, 2) })
+	end
 
+	-- forge and details
 	forgeFrame = Widgets.panel({
 		Name = "Spellforge",
-		Size = UDim2.fromOffset(344, 316),
-		Position = UDim2.fromOffset(842, 50),
+		Size = UDim2.new(0, 330, 0, 330),
+		Position = UDim2.fromOffset(844, 0),
 		BackgroundColor3 = C.Panel,
-		Parent = panel,
+		Parent = body,
 	})
 	local details = Widgets.panel({
 		Name = "Details",
-		Size = UDim2.new(0, 344, 1, -378),
-		Position = UDim2.fromOffset(842, 372),
+		Size = UDim2.new(0, 330, 1, -340),
+		Position = UDim2.fromOffset(844, 340),
 		BackgroundColor3 = C.Panel,
-		Parent = panel,
+		Parent = body,
 	})
 	local detailsScroll = Create("ScrollingFrame", {
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Size = UDim2.new(1, -16, 1, -48),
-		Position = UDim2.fromOffset(8, 6),
+		Size = UDim2.new(1, -20, 1, -54),
+		Position = UDim2.fromOffset(12, 8),
 		ScrollBarThickness = 4,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
@@ -1054,8 +1095,8 @@ local function build()
 	})
 	detailsButtons = Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -16, 0, 32),
-		Position = UDim2.new(0, 8, 1, -38),
+		Size = UDim2.new(1, -20, 0, 32),
+		Position = UDim2.new(0, 10, 1, -40),
 		Parent = details,
 	}, { Create.list(Enum.FillDirection.Horizontal, 6) })
 end
@@ -1066,6 +1107,10 @@ function InventoryController.open()
 	end
 	isOpen = true
 	gui.Enabled = true
+	local inv = inventory()
+	if inv and #inv.spells == 0 and bagTab == "Spells" then
+		bagTab = "Parts" -- nothing to slot yet: show what you can forge with
+	end
 	State.setMenu("inventory", true)
 	refresh()
 end

@@ -156,6 +156,15 @@ Config.Economy = {
 
 Config.DataStoreName = "ManaWars_Stats_v1"
 
+-- Chat -----------------------------------------------------------------------
+-- Proximity chat: text messages only reach players within Range studs of the speaker, and chat
+-- bubbles fade out at the same distance. (Voice chat is spatial by itself once it's turned on in
+-- the experience's settings.)
+Config.Chat = {
+	Proximity = true, -- false = everyone in the server sees every message
+	Range = 70, -- studs
+}
+
 -- Developer tools ----------------------------------------------------------
 -- The 🛠 Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
 -- everyone in Studio, the experience's owner in live servers, and the user ids listed here

@@ -9,6 +9,7 @@ local Services = script:WaitForChild("Services")
 
 local order = {
 	"DataService",
+	"ChatService",
 	"MapService",
 	"StatusService",
 	"DamageService",

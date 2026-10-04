@@ -22,6 +22,7 @@ local WardrobeController = require(Controllers.WardrobeController)
 local FamiliarController = require(Controllers.FamiliarController)
 local DevController = require(Controllers.DevController)
 local AuctionController = require(Controllers.AuctionController)
+local ChatController = require(Controllers.ChatController)
 
 State.init()
 Widgets.initTooltip()
@@ -39,6 +40,7 @@ WardrobeController.init()
 FamiliarController.init()
 DevController.init()
 AuctionController.init()
+ChatController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
 InputController.onToggleGrimoire = GrimoireController.toggle
