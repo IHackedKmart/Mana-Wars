@@ -27,6 +27,7 @@ local order = {
 	"AuctionService",
 	"BotService",
 	"MatchService",
+	"DevService",
 }
 
 local loaded = {}

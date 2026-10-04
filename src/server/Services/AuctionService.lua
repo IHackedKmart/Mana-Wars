@@ -115,7 +115,7 @@ local function memoryStore(): Store?
 	end
 	local map: any
 	local probe = pcall(function()
-		map = (service :: any):GetSortedMap("ManaWars_Auction_v1")
+		map = (service :: any):GetSortedMap(DataService.storeName("ManaWars_Auction_v1"))
 		map:GetRangeAsync(Enum.SortDirection.Descending, 1)
 	end)
 	if not probe then
@@ -185,7 +185,7 @@ end
 local function dataStoreMailbox(): Mailbox?
 	local store: DataStore? = nil
 	local ok = pcall(function()
-		store = DataStoreService:GetDataStore("ManaWars_Mailbox_v1");
+		store = DataStoreService:GetDataStore(DataService.storeName("ManaWars_Mailbox_v1"));
 		(store :: DataStore):GetAsync("probe")
 	end)
 	if not ok or not store then
@@ -321,6 +321,17 @@ function AuctionService.list(player: Player, kind: any, uid: any, price: any): (
 	if not item then
 		return false, "You can't sell that (is it worn?)"
 	end
+	-- items from the dev panel stay out of the real market
+	local test = item.dev == true
+	if kind == "Garment" and type(item.parts) == "table" then
+		for _, p in item.parts do
+			test = test or p.dev == true
+		end
+	end
+	if test then
+		WardrobeService.giveItem(player, kind, item)
+		return false, "Test items from the dev panel can't be sold"
+	end
 	local t = now()
 	local listing: Listing = {
 		id = newId(player),
@@ -384,7 +395,8 @@ function AuctionService.buy(player: Player, id: any): (boolean, string)
 	-- pay the seller: the house keeps its cut
 	local proceeds = claimed.price - math.floor(claimed.price * E.AuctionFee)
 	local seller = playerById(claimed.seller)
-	local paid = seller ~= nil and creditSale(seller, id, proceeds, claimed.item.name)
+	-- (negative seller ids are the dev panel's Test Merchant: nobody to pay)
+	local paid = claimed.seller < 0 or (seller ~= nil and creditSale(seller, id, proceeds, claimed.item.name))
 	for _ = 1, 3 do
 		if paid then
 			break
@@ -493,6 +505,25 @@ function AuctionService.reconcile(player: Player)
 		DataService.markDirty(player)
 		WardrobeService.sync(player)
 	end
+end
+
+-- Dev tool: puts an item up for sale from the "Test Merchant", so buying can be tested alone.
+function AuctionService.devAddListing(kind: string, item: any, price: number): boolean
+	local t = now()
+	local listing: Listing = {
+		id = string.format("%013d_0_%04d", math.floor(t * 1000), rng:NextInteger(0, 9999)),
+		seller = -1,
+		sellerName = "Test Merchant",
+		kind = kind,
+		item = item,
+		price = math.max(1, math.floor(price)),
+		created = t,
+		expires = t + math.floor(E.AuctionHours * 3600),
+		sold = nil,
+	}
+	local ok = store.set(listing.id, listing, ttl())
+	browseCache.at = -math.huge
+	return ok
 end
 
 function AuctionService.isGlobal(): boolean

@@ -322,7 +322,9 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 	if not WardrobeService.hasRoom(player, "Familiar", box.parts) then
 		return false, "Your familiar roost is full: salvage or sell some familiars first"
 	end
-	if not WardrobeService.spendCoins(player, box.price) then
+	-- (the dev panel's "free coffers" switch; set by the server only)
+	local free = player:GetAttribute("DevFreeCoffers") == true
+	if not free and not WardrobeService.spendCoins(player, box.price) then
 		return false, "You need " .. box.price .. " Enchanted Coins"
 	end
 	local got = {}
@@ -477,6 +479,11 @@ local function giveStarter(player: Player, profile: DataService.Profile)
 		profile.wardrobe.equipped[kind] = g.uid
 	end
 	DataService.markDirty(player)
+end
+
+WardrobeService.giveStarter = giveStarter
+WardrobeService.redress = function(player: Player)
+	redress(player)
 end
 
 function WardrobeService.init()

@@ -20,6 +20,7 @@ local TutorialController = require(Controllers.TutorialController)
 local AmbienceController = require(Controllers.AmbienceController)
 local WardrobeController = require(Controllers.WardrobeController)
 local FamiliarController = require(Controllers.FamiliarController)
+local DevController = require(Controllers.DevController)
 local AuctionController = require(Controllers.AuctionController)
 
 State.init()
@@ -36,6 +37,7 @@ TutorialController.init()
 AmbienceController.init()
 WardrobeController.init()
 FamiliarController.init()
+DevController.init()
 AuctionController.init()
 
 InputController.onToggleInventory = InventoryController.toggle

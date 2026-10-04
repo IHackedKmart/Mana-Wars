@@ -156,4 +156,14 @@ Config.Economy = {
 
 Config.DataStoreName = "ManaWars_Stats_v1"
 
+-- Developer tools ----------------------------------------------------------
+-- The 🛠 Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
+-- everyone in Studio, the experience's owner in live servers, and the user ids listed here
+-- (add yours if the game belongs to a group). The server checks every request, so nobody else can use it.
+Config.Dev = {
+	Enabled = true, -- false turns the panel off in live servers (it always works in Studio)
+	AdminUserIds = {} :: { number }, -- e.g. { 12345678 } to let a friend test too
+	SeparateStudioData = true, -- Studio play tests save to their own stores, so test coins never reach the live game
+}
+
 return Config

@@ -33,6 +33,7 @@ local FUNCTIONS = {
 	"QueueAction", -- (action: "Join" | "Leave") -> (ok, message)
 	"WardrobeAction", -- (action: string, args: table) -> (ok, message, extra)
 	"AuctionAction", -- (action: string, args: table) -> (ok, message, extra)
+	"DevAction", -- (action: string, args: table) -> (ok, message, extra); admins only
 }
 
 local folder: Folder

@@ -238,6 +238,9 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 		recharge += spec.recharge
 		hpCost += spec.hpCost
 	end
+	if c.devMana then
+		mana, hpCost = 0, 0 -- dev panel: infinite mana
+	end
 	if st.mana < mana then
 		CastingService.sendState(c)
 		return false, "no mana"

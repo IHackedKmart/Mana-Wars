@@ -410,6 +410,63 @@ print("announcements: " .. (function()
 	return table.concat(parts, ", ")
 end)())
 
+-- 5. Dev panel match controls: start a match right away, skip the countdown and grace period,
+--    get the full loadout at the start, then end the match on demand.
+local Dev = Mock.Remotes.func("DevAction")
+local function dev(action: string, args: { [string]: any }?)
+	local ok, message = Dev:InvokeServer(action, args or {})
+	if not ok then
+		fail("dev action " .. action .. " failed: " .. tostring(message))
+	end
+end
+local function waitFor(phase: string, limit: number): number
+	local waited = 0
+	while Mock.repAttributes.Phase ~= phase and waited < limit do
+		step(0.5)
+		waited += 0.5
+	end
+	return waited
+end
+dev("Loadout", { on = true })
+dev("Bots", { fill = 4 })
+dev("StartMatch")
+local tLoading = waitFor("Countdown", 20)
+if Mock.repAttributes.Phase ~= "Countdown" then
+	fail("Start a match now should skip the vote, phase is " .. tostring(Mock.repAttributes.Phase))
+elseif tLoading > 10 then
+	fail("the vote wasn't skipped (" .. tLoading .. "s)")
+end
+dev("Skip")
+step(1)
+if Mock.repAttributes.Phase ~= "Grace" then
+	fail("Skip should end the countdown, phase is " .. tostring(Mock.repAttributes.Phase))
+end
+dev("Skip")
+step(1)
+if Mock.repAttributes.Phase ~= "Battle" then
+	fail("Skip should end the grace period, phase is " .. tostring(Mock.repAttributes.Phase))
+end
+local wands = 0
+for _, wand in me.inventory.wands do
+	if wand then
+		wands += 1
+	end
+end
+if wands < 3 or (me.inventory.parts.Bolt or 0) < 20 then
+	fail("the dev loadout should hand out wands and parts (" .. wands .. " wands)")
+end
+dev("Advance", { seconds = 200 })
+step(1)
+if Mock.repAttributes.StormActive ~= true then
+	fail("+time should bring the storm in")
+end
+dev("EndMatch")
+waitFor("Ended", 5)
+if Mock.repAttributes.Phase ~= "Ended" then
+	fail("End the match should end it, phase is " .. tostring(Mock.repAttributes.Phase))
+end
+print("dev panel: started, skipped and ended a match on demand")
+
 for _, w in Mock.warnings do
 	fail(w)
 end

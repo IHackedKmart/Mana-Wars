@@ -854,6 +854,16 @@ Config.Economy = {
 
 Config.DataStoreName = "ManaWars_Stats_v1"
 
+-- Developer tools ----------------------------------------------------------
+-- The 🛠 Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
+-- everyone in Studio, the experience's owner in live servers, and the user ids listed here
+-- (add yours if the game belongs to a group). The server checks every request, so nobody else can use it.
+Config.Dev = {
+	Enabled = true, -- false turns the panel off in live servers (it always works in Studio)
+	AdminUserIds = {} :: { number }, -- e.g. { 12345678 } to let a friend test too
+	SeparateStudioData = true, -- Studio play tests save to their own stores, so test coins never reach the live game
+}
+
 return Config
 ]]></string>
         </Properties>
@@ -4417,6 +4427,7 @@ local FUNCTIONS = {
 	"QueueAction", -- (action: "Join" | "Leave") -> (ok, message)
 	"WardrobeAction", -- (action: string, args: table) -> (ok, message, extra)
 	"AuctionAction", -- (action: string, args: table) -> (ok, message, extra)
+	"DevAction", -- (action: string, args: table) -> (ok, message, extra); admins only
 }
 
 local folder: Folder
@@ -7476,6 +7487,7 @@ local order = {
 	"AuctionService",
 	"BotService",
 	"MatchService",
+	"DevService",
 }
 
 local loaded = {}
@@ -11172,7 +11184,7 @@ local function memoryStore(): Store?
 	end
 	local map: any
 	local probe = pcall(function()
-		map = (service :: any):GetSortedMap("ManaWars_Auction_v1")
+		map = (service :: any):GetSortedMap(DataService.storeName("ManaWars_Auction_v1"))
 		map:GetRangeAsync(Enum.SortDirection.Descending, 1)
 	end)
 	if not probe then
@@ -11242,7 +11254,7 @@ end
 local function dataStoreMailbox(): Mailbox?
 	local store: DataStore? = nil
 	local ok = pcall(function()
-		store = DataStoreService:GetDataStore("ManaWars_Mailbox_v1");
+		store = DataStoreService:GetDataStore(DataService.storeName("ManaWars_Mailbox_v1"));
 		(store :: DataStore):GetAsync("probe")
 	end)
 	if not ok or not store then
@@ -11378,6 +11390,17 @@ function AuctionService.list(player: Player, kind: any, uid: any, price: any): (
 	if not item then
 		return false, "You can't sell that (is it worn?)"
 	end
+	-- items from the dev panel stay out of the real market
+	local test = item.dev == true
+	if kind == "Garment" and type(item.parts) == "table" then
+		for _, p in item.parts do
+			test = test or p.dev == true
+		end
+	end
+	if test then
+		WardrobeService.giveItem(player, kind, item)
+		return false, "Test items from the dev panel can't be sold"
+	end
 	local t = now()
 	local listing: Listing = {
 		id = newId(player),
@@ -11441,7 +11464,8 @@ function AuctionService.buy(player: Player, id: any): (boolean, string)
 	-- pay the seller: the house keeps its cut
 	local proceeds = claimed.price - math.floor(claimed.price * E.AuctionFee)
 	local seller = playerById(claimed.seller)
-	local paid = seller ~= nil and creditSale(seller, id, proceeds, claimed.item.name)
+	-- (negative seller ids are the dev panel's Test Merchant: nobody to pay)
+	local paid = claimed.seller < 0 or (seller ~= nil and creditSale(seller, id, proceeds, claimed.item.name))
 	for _ = 1, 3 do
 		if paid then
 			break
@@ -11550,6 +11574,25 @@ function AuctionService.reconcile(player: Player)
 		DataService.markDirty(player)
 		WardrobeService.sync(player)
 	end
+end
+
+-- Dev tool: puts an item up for sale from the "Test Merchant", so buying can be tested alone.
+function AuctionService.devAddListing(kind: string, item: any, price: number): boolean
+	local t = now()
+	local listing: Listing = {
+		id = string.format("%013d_0_%04d", math.floor(t * 1000), rng:NextInteger(0, 9999)),
+		seller = -1,
+		sellerName = "Test Merchant",
+		kind = kind,
+		item = item,
+		price = math.max(1, math.floor(price)),
+		created = t,
+		expires = t + math.floor(E.AuctionHours * 3600),
+		sold = nil,
+	}
+	local ok = store.set(listing.id, listing, ttl())
+	browseCache.at = -math.huge
+	return ok
 end
 
 function AuctionService.isGlobal(): boolean
@@ -12271,6 +12314,9 @@ function CastingService.tryCast(c: Combatant, target: Vector3): (boolean, string
 		recharge += spec.recharge
 		hpCost += spec.hpCost
 	end
+	if c.devMana then
+		mana, hpCost = 0, 0 -- dev panel: infinite mana
+	end
 	if st.mana < mana then
 		CastingService.sendState(c)
 		return false, "no mana"
@@ -12709,6 +12755,8 @@ local Classes = require(Shared.Classes)
 local ClassService = {}
 
 local owned: { [Player]: { [string]: boolean } } = setmetatable({}, { __mode = "k" }) :: any
+-- dev panel: "all" owns every kit, "locked" ignores the Studio unlock (to test the shop)
+local devMode: { [Player]: string } = setmetatable({}, { __mode = "k" }) :: any
 
 local function passFor(classId: string): number
 	return Config.Kits.GamePassIds[classId] or 0
@@ -12742,7 +12790,11 @@ function ClassService.owns(player: Player, classId: string): boolean
 		return true
 	end
 	local K = Config.Kits
-	if K.StudioUnlocksAll and RunService:IsStudio() then
+	local mode = devMode[player]
+	if mode == "all" then
+		return true
+	end
+	if K.StudioUnlocksAll and RunService:IsStudio() and mode ~= "locked" then
 		return true
 	end
 	if class.tier <= K.PremiumFreeTier and player.MembershipType == Enum.MembershipType.Premium then
@@ -12771,6 +12823,23 @@ function ClassService.refresh(player: Player)
 	if not ClassService.owns(player, tostring(player:GetAttribute("Class"))) then
 		player:SetAttribute("Class", Classes.Default)
 	end
+end
+
+-- Dev panel: "all" (own every kit), "locked" (only kits really bought) or "normal".
+function ClassService.setDevMode(player: Player, mode: string)
+	if mode == "all" or mode == "locked" then
+		devMode[player] = mode
+	else
+		devMode[player] = nil
+	end
+	publish(player)
+	if not ClassService.owns(player, tostring(player:GetAttribute("Class"))) then
+		player:SetAttribute("Class", Classes.Default)
+	end
+end
+
+function ClassService.devModeOf(player: Player): string
+	return devMode[player] or "normal"
 end
 
 -- The class this player will actually start the match with.
@@ -12893,6 +12962,8 @@ export type Combatant = {
 	gear: { [string]: number }, -- stat bonuses from the robe and hat being worn (see Cosmetics)
 	place: number?, -- finishing place in the current match (1 = winner)
 	familiar: any?, -- the familiar following them (see Familiars), for its power
+	devGod: boolean?, -- dev panel: takes no damage
+	devMana: boolean?, -- dev panel: spells cost no mana (or health)
 	bot: { [string]: any }?,
 }
 
@@ -13218,6 +13289,9 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 	if not DamageService.canHurt(target, attacker, info.isStorm) then
 		return 0, false
 	end
+	if target.devGod then
+		return 0, false -- dev panel god mode
+	end
 	local hum = target.humanoid :: Humanoid
 
 	local crit = false
@@ -13342,6 +13416,7 @@ return DamageService
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -13569,9 +13644,38 @@ function DataService.addMatch(player: Player)
 	bump(player, "matches")
 end
 
+-- The name to use for a DataStore / MemoryStore. Studio play tests get their own copies
+-- (Config.Dev.SeparateStudioData) so coins and items handed out while testing stay out of the live game.
+function DataService.storeName(base: string): string
+	local studio = false
+	pcall(function()
+		studio = RunService:IsStudio()
+	end)
+	if studio and Config.Dev.SeparateStudioData then
+		return base .. "_Studio"
+	end
+	return base
+end
+
+-- Wipes a profile back to a brand new player's (dev tool; listings on the market are kept).
+function DataService.reset(player: Player)
+	local profile = cache[player]
+	if not profile then
+		return
+	end
+	local fresh = newProfile()
+	fresh.wardrobe.listings = profile.wardrobe.listings
+	for k, v in fresh do
+		(profile :: any)[k] = v
+	end
+	leaderstats(player, profile)
+	player:SetAttribute("TutorialDone", nil)
+	dirty[player] = true
+end
+
 function DataService.init()
 	local ok, result = pcall(function()
-		return DataStoreService:GetDataStore(Config.DataStoreName)
+		return DataStoreService:GetDataStore(DataService.storeName(Config.DataStoreName))
 	end)
 	if ok then
 		store = result
@@ -13615,6 +13719,504 @@ return DataService
         </Item>
         <Item class="ModuleScript" referent="44">
           <Properties>
+            <string name="Name">DevService</string>
+            <string name="Source"><![CDATA[-- Developer tools behind the 🛠 Dev panel: free coins and coffers, every cosmetic and familiar,
+-- every kit, a full spell loadout, god mode, infinite mana and match controls, so everything can
+-- be tested without spending anything.
+-- Who gets it: everyone in Studio; in live servers the experience's owner and the user ids in
+-- Config.Dev.AdminUserIds. Every request is checked here on the server.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage.Shared
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local Rarity = require(Shared.Rarity)
+local Cosmetics = require(Shared.Cosmetics)
+local Familiars = require(Shared.Familiars)
+local PremadeSpells = require(Shared.Spells.PremadeSpells)
+local LootTables = require(Shared.LootTables)
+local WandGenerator = require(Shared.WandGenerator)
+local Combatants = require(script.Parent.Combatants)
+local DataService = require(script.Parent.DataService)
+local WardrobeService = require(script.Parent.WardrobeService)
+local AuctionService = require(script.Parent.AuctionService)
+local ClassService = require(script.Parent.ClassService)
+local InventoryService = require(script.Parent.InventoryService)
+local MatchService = require(script.Parent.MatchService)
+local QueueService = require(script.Parent.QueueService)
+local ChestService = require(script.Parent.ChestService)
+
+type Combatant = Combatants.Combatant
+
+local DevService = {}
+
+local rng = Random.new()
+
+local function studio(): boolean
+	local ok, result = pcall(function()
+		return RunService:IsStudio()
+	end)
+	return ok and result == true
+end
+
+function DevService.isDev(player: Player): boolean
+	if studio() then
+		return true
+	end
+	if not Config.Dev.Enabled then
+		return false
+	end
+	if table.find(Config.Dev.AdminUserIds, player.UserId) then
+		return true
+	end
+	-- the experience's owner (for a group-owned game, add your id to Config.Dev.AdminUserIds)
+	local ok, allowed = pcall(function()
+		return game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId
+	end)
+	return ok and allowed == true
+end
+
+---------------------------------------------------------------------------
+-- Building items
+---------------------------------------------------------------------------
+
+-- The priciest coffer whose odds include this rarity (widest choice of designs).
+local function boxFor(rarity: string): number
+	local best = 1
+	for _, box in Cosmetics.Boxes do
+		if box.odds[rarity] then
+			best = box.id
+		end
+	end
+	return best
+end
+
+local function part(slot: string, rarity: string, design: any?, aura: string?): Cosmetics.CosmeticPart
+	local box = boxFor(rarity)
+	if design and design.boxes then
+		box = design.boxes[1]
+	elseif design and design.minBox then
+		box = math.max(box, design.minBox)
+	end
+	local p = Cosmetics.rollPart(rng, box, slot, rarity)
+	if design then
+		p.design = design.id
+	end
+	if aura and (slot == "Sigil" or slot == "Gem") then
+		p.aura = aura
+	end
+	p.name = Cosmetics.partName(p)
+	return p
+end
+
+local function randomAura(rarity: string): string
+	local options = {}
+	for _, a in Cosmetics.Auras do
+		if Rarity.rank(a.minRarity) <= Rarity.rank(rarity) then
+			table.insert(options, a.id)
+		end
+	end
+	return options[rng:NextInteger(1, #options)]
+end
+
+-- A finished robe and hat of one rarity, sharing an aura (so Epic+ sets leave a trail).
+local function outfit(rarity: string, aura: string?): (Cosmetics.Garment, Cosmetics.Garment)
+	local a = aura or randomAura(rarity)
+	local function garment(kind: string): Cosmetics.Garment
+		local parts = {}
+		for _, slot in Cosmetics.Garments[kind].slots do
+			parts[slot] = part(slot, rarity, nil, a)
+		end
+		return Cosmetics.craft(kind, parts)
+	end
+	return garment("Robe"), garment("Hat")
+end
+
+local function wardrobeOf(player: Player): DataService.Wardrobe?
+	local profile = DataService.profile(player)
+	return profile and profile.wardrobe
+end
+
+local function giveAll(player: Player, kind: string, items: { any })
+	local w = wardrobeOf(player)
+	if not w then
+		return
+	end
+	local list = if kind == "Garment" then w.garments elseif kind == "Familiar" then w.familiars else w.parts
+	for _, item in items do
+		item.dev = true -- test items: kept out of the auction house
+		table.insert(list, item)
+	end
+	DataService.markDirty(player)
+	WardrobeService.sync(player)
+end
+
+local function familiarsAt(rarity: string, shiny: boolean): { Familiars.Familiar }
+	local list = {}
+	for _, s in Familiars.Species do
+		if Rarity.rank(s.minRarity) <= Rarity.rank(rarity) then
+			local f = Familiars.roll(rng, 5, rarity, s.id)
+			f.shiny = shiny
+			f.name = Familiars.familiarName(f)
+			table.insert(list, f)
+		end
+	end
+	return list
+end
+
+local function combatantOf(player: Player): Combatant?
+	return Combatants.forPlayer(player)
+end
+
+local function validRarity(r: any): string
+	return if type(r) == "string" and Rarity.Info[r] then r else "Mythic"
+end
+
+---------------------------------------------------------------------------
+-- Actions
+---------------------------------------------------------------------------
+
+-- Everything at once: kits, coins, free coffers, every cosmetic design and aura, outfits of every
+-- rarity (a Mythic one worn), every familiar species (a Mythic one summoned) and the in-match loadout.
+function DevService.unlockAll(player: Player): (boolean, string)
+	local profile = DataService.profile(player)
+	if not profile then
+		return false, "Your profile is still loading"
+	end
+	ClassService.setDevMode(player, "all")
+	player:SetAttribute("DevFreeCoffers", true)
+	player:SetAttribute("DevLoadout", true)
+	WardrobeService.addCoins(player, 100000, nil)
+	local c = combatantOf(player)
+	if c and Combatants.canAct(c) then
+		InventoryService.giveDevLoadout(c)
+	end
+	-- the collection only once (press it again and it just tops up coins); Reset clears it
+	for _, f in profile.wardrobe.familiars do
+		if f.dev then
+			return true,
+				"Every kit, +100,000 coins, free coffers and the loadout are on (you already have the full collection)"
+		end
+	end
+
+	-- one part for every design, at the rarity it first appears
+	local parts = {}
+	for _, slot in Cosmetics.SlotOrder do
+		for _, design in Cosmetics.Designs[slot] do
+			table.insert(parts, part(slot, design.minRarity, design, nil))
+		end
+	end
+	-- a Mythic sigil and gem for every aura (stitch matching pairs for trails)
+	for _, aura in Cosmetics.Auras do
+		table.insert(parts, part("Sigil", "Mythic", nil, aura.id))
+		table.insert(parts, part("Gem", "Mythic", nil, aura.id))
+	end
+	giveAll(player, "Part", parts)
+
+	-- a finished robe and hat at every rarity, and a matched Mythic set to wear
+	local garments = {}
+	for _, rarity in Rarity.Order do
+		local robe, hat = outfit(rarity, nil)
+		table.insert(garments, robe)
+		table.insert(garments, hat)
+	end
+	local robe, hat = outfit("Mythic", "Prismatic")
+	table.insert(garments, robe)
+	table.insert(garments, hat)
+	giveAll(player, "Garment", garments)
+
+	-- every species at the rarity it first appears, plus a Shiny Mythic of each
+	local familiars = {}
+	for _, s in Familiars.Species do
+		local f = Familiars.roll(rng, 5, s.minRarity, s.id)
+		f.shiny = false
+		f.name = Familiars.familiarName(f)
+		table.insert(familiars, f)
+		if s.minRarity ~= "Mythic" then
+			local m = Familiars.roll(rng, 5, "Mythic", s.id)
+			m.shiny = true
+			m.name = Familiars.familiarName(m)
+			table.insert(familiars, m)
+		end
+	end
+	local dragon = Familiars.roll(rng, 5, "Mythic", "Dragonling")
+	dragon.shiny = true
+	dragon.name = Familiars.familiarName(dragon)
+	table.insert(familiars, dragon)
+	giveAll(player, "Familiar", familiars)
+
+	local w = profile.wardrobe
+	w.equipped.Robe = robe.uid
+	w.equipped.Hat = hat.uid
+	w.equipped.Familiar = dragon.uid
+	DataService.markDirty(player)
+	WardrobeService.sync(player)
+	WardrobeService.redress(player)
+	return true,
+		string.format(
+			"Unlocked everything: every kit, 100,000 coins, free coffers, %d parts, %d outfit pieces, %d familiars, and a full loadout every match",
+			#parts,
+			#garments,
+			#familiars
+		)
+end
+
+local actions: { [string]: (Player, { [string]: any }) -> (boolean, string, any?) } = {}
+
+actions.UnlockAll = function(player)
+	return DevService.unlockAll(player)
+end
+
+actions.Status = function(player)
+	return true,
+		"",
+		{
+			kits = ClassService.devModeOf(player),
+			freeCoffers = player:GetAttribute("DevFreeCoffers") == true,
+			loadout = player:GetAttribute("DevLoadout") == true,
+			god = (combatantOf(player) or {} :: any).devGod == true,
+			mana = (combatantOf(player) or {} :: any).devMana == true,
+			bots = Config.Bots.FillTo,
+		}
+end
+
+-- Economy -------------------------------------------------------------------
+
+actions.Coins = function(player, args)
+	local amount = math.clamp(math.floor(tonumber(args.amount) or 0), 0, 10000000)
+	if amount <= 0 then
+		local profile = DataService.profile(player)
+		if profile then
+			profile.coins = 0
+			DataService.markDirty(player)
+			WardrobeService.sync(player)
+		end
+		return true, "Coins set to 0"
+	end
+	WardrobeService.addCoins(player, amount, nil)
+	return true, "+" .. amount .. " coins"
+end
+
+actions.FreeCoffers = function(player, args)
+	player:SetAttribute("DevFreeCoffers", args.on == true)
+	return true, if args.on == true then "Coffers are free for you" else "Coffers cost coins again"
+end
+
+actions.GiveParts = function(player, args)
+	local rarity = validRarity(args.rarity)
+	local parts = {}
+	for _, slot in Cosmetics.SlotOrder do
+		table.insert(parts, part(slot, rarity, nil, nil))
+	end
+	giveAll(player, "Part", parts)
+	return true, "Gave a " .. rarity .. " part for every slot"
+end
+
+actions.GiveOutfit = function(player, args)
+	local rarity = validRarity(args.rarity)
+	local robe, hat = outfit(rarity, nil)
+	giveAll(player, "Garment", { robe, hat })
+	local w = wardrobeOf(player)
+	if w then
+		w.equipped.Robe = robe.uid
+		w.equipped.Hat = hat.uid
+		WardrobeService.sync(player)
+		WardrobeService.redress(player)
+	end
+	return true, "Now wearing a " .. rarity .. " outfit"
+end
+
+actions.GiveFamiliars = function(player, args)
+	local rarity = validRarity(args.rarity)
+	local list = familiarsAt(rarity, args.shiny == true)
+	giveAll(player, "Familiar", list)
+	return true, "Gave " .. #list .. " " .. rarity .. (if args.shiny == true then " Shiny" else "") .. " familiars"
+end
+
+-- Kits and loot ---------------------------------------------------------------
+
+actions.Kits = function(player, args)
+	local mode = if args.mode == "all" or args.mode == "locked" then args.mode else "normal"
+	ClassService.setDevMode(player, mode)
+	return true,
+		if mode == "all"
+			then "Every kit unlocked"
+			elseif mode == "locked" then "Kits locked: only ones you really bought (test the shop)"
+			else "Kits back to normal"
+end
+
+actions.Loadout = function(player, args)
+	player:SetAttribute("DevLoadout", args.on == true)
+	local c = combatantOf(player)
+	if args.on == true and c and Combatants.canAct(c) then
+		InventoryService.giveDevLoadout(c)
+	end
+	return true, if args.on == true then "Full loadout now and at the start of every match" else "Loadout off"
+end
+
+actions.GiveSpell = function(player, args)
+	local c = combatantOf(player)
+	if not c or type(args.id) ~= "string" or not PremadeSpells.ById[args.id] then
+		return false, "Unknown spell"
+	end
+	local taken, reason = InventoryService.addLoot(c, { kind = "Spell", spell = LootTables.premadeSpell(args.id) })
+	InventoryService.sync(c)
+	return taken > 0, if taken > 0 then "Added " .. PremadeSpells.ById[args.id].name else (reason or "No room")
+end
+
+actions.GiveWand = function(player, args)
+	local c = combatantOf(player)
+	if not c then
+		return false, "No character"
+	end
+	local rarity = validRarity(args.rarity)
+	local taken, reason =
+		InventoryService.addLoot(c, { kind = "Wand", wand = WandGenerator.generate(rng, rarity, nil) })
+	InventoryService.sync(c)
+	return taken > 0, if taken > 0 then "Added a " .. rarity .. " wand" else (reason or "No room")
+end
+
+actions.God = function(player, args)
+	local c = combatantOf(player)
+	if c then
+		c.devGod = args.on == true
+	end
+	return true, if args.on == true then "God mode on: you take no damage" else "God mode off"
+end
+
+actions.Mana = function(player, args)
+	local c = combatantOf(player)
+	if c then
+		c.devMana = args.on == true
+	end
+	return true, if args.on == true then "Infinite mana on" else "Infinite mana off"
+end
+
+-- Match -----------------------------------------------------------------------
+
+actions.StartMatch = function(player)
+	QueueService.join(player)
+	MatchService.devSkip()
+	return true, "Joined the queue and skipped the vote"
+end
+
+actions.Skip = function()
+	MatchService.devSkip()
+	return true, "Skipping ahead (vote, countdown or grace period)"
+end
+
+actions.Advance = function(_, args)
+	local seconds = math.clamp(tonumber(args.seconds) or 60, 1, 3600)
+	MatchService.devAdvance(seconds)
+	return true, "The match clock jumped " .. seconds .. "s ahead"
+end
+
+actions.EndMatch = function()
+	MatchService.devEnd()
+	return true, "Ending the match"
+end
+
+actions.Bots = function(_, args)
+	local fill = math.clamp(math.floor(tonumber(args.fill) or 8), 1, Config.Match.MaxParticipants)
+	Config.Bots.FillTo = fill
+	return true,
+		if fill <= 1 then "No bots in the next match" else "Bots will fill the next match to " .. fill .. " mages"
+end
+
+actions.KillBots = function()
+	local n = 0
+	for _, c in Combatants.all() do
+		if c.isBot and c.alive and c.inMatch and c.humanoid then
+			(c.humanoid :: Humanoid).Health = 0
+			n += 1
+		end
+	end
+	return true, "Knocked out " .. n .. " bots"
+end
+
+actions.Refill = function()
+	ChestService.refill()
+	return true, "Every chest refilled"
+end
+
+-- Auction and profile -----------------------------------------------------------
+
+actions.FakeListings = function()
+	local n = 0
+	for i = 1, 6 do
+		local rarity = Rarity.Order[rng:NextInteger(1, #Rarity.Order)]
+		local kind, item
+		if i % 3 == 0 then
+			kind, item = "Familiar", familiarsAt(rarity, false)[1]
+		elseif i % 3 == 1 then
+			local robe = outfit(rarity, nil)
+			kind, item = "Garment", robe
+		else
+			kind, item = "Part", Cosmetics.rollPart(rng, boxFor(rarity), nil, rarity)
+		end
+		if item then
+			item.dev = true -- (bought test items can't be resold to real players)
+		end
+		if item and AuctionService.devAddListing(kind, item, 10 * Rarity.rank(rarity) ^ 2) then
+			n += 1
+		end
+	end
+	return true, n .. " items from the Test Merchant are up for sale"
+end
+
+actions.ResetProfile = function(player)
+	local profile = DataService.profile(player)
+	if not profile then
+		return false, "Your profile is still loading"
+	end
+	DataService.reset(player)
+	ClassService.setDevMode(player, "normal")
+	player:SetAttribute("DevFreeCoffers", nil)
+	player:SetAttribute("DevLoadout", nil)
+	WardrobeService.giveStarter(player, profile)
+	WardrobeService.sync(player)
+	WardrobeService.redress(player)
+	return true, "Profile reset: you're a brand new mage again"
+end
+
+function DevService.handle(player: Player, action: any, args: any): (boolean, string, any?)
+	if not DevService.isDev(player) then
+		return false, "Dev tools are for the game's owner"
+	end
+	local fn = type(action) == "string" and actions[action]
+	if not fn then
+		return false, "Unknown dev action"
+	end
+	local ok, success, message, extra = pcall(fn, player, if type(args) == "table" then args else {})
+	if not ok then
+		warn("[Dev] " .. tostring(action) .. " failed: " .. tostring(success))
+		return false, "That didn't work: " .. tostring(success)
+	end
+	return success, message, extra
+end
+
+function DevService.init()
+	Remotes.func("DevAction").OnServerInvoke = DevService.handle
+	local function mark(player: Player)
+		if DevService.isDev(player) then
+			player:SetAttribute("Dev", true)
+		end
+	end
+	Players.PlayerAdded:Connect(mark)
+	for _, player in Players:GetPlayers() do
+		mark(player)
+	end
+end
+
+return DevService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="45">
+          <Properties>
             <string name="Name">FX</string>
             <string name="Source"><![CDATA[-- Thin wrapper over the FX remote so services can say FX.all("Boom", ...) without
 -- touching remotes directly. All visuals are drawn by the client (FXController).
@@ -13653,7 +14255,7 @@ return FX
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="45">
+        <Item class="ModuleScript" referent="46">
           <Properties>
             <string name="Name">FamiliarService</string>
             <string name="Source"><![CDATA[-- Familiar powers that need the server:
@@ -13783,7 +14385,7 @@ return FamiliarService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="46">
+        <Item class="ModuleScript" referent="47">
           <Properties>
             <string name="Name">GameState</string>
             <string name="Source"><![CDATA[-- Server-wide match state that several services read. MatchService is the only writer.
@@ -13821,7 +14423,7 @@ return GameState
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="47">
+        <Item class="ModuleScript" referent="48">
           <Properties>
             <string name="Name">InventoryService</string>
             <string name="Source"><![CDATA[-- Owns every combatant's inventory: wands (with their slotted spells), the spell bag,
@@ -13842,6 +14444,7 @@ local LootTables = require(Shared.LootTables)
 local WandGenerator = require(Shared.WandGenerator)
 local SpellBuilder = require(Shared.Spells.SpellBuilder)
 local SpellParts = require(Shared.Spells.SpellParts)
+local PremadeSpells = require(Shared.Spells.PremadeSpells)
 local SpellTypes = require(Shared.Spells.SpellTypes)
 local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
@@ -14195,6 +14798,37 @@ function InventoryService.givePractice(c: Combatant)
 		addConsumable(c, potion.id, 1)
 	end
 	inv.equipped = 1
+	InventoryService.refreshTools(c)
+	InventoryService.sync(c)
+end
+
+-- Dev panel loadout: a Mythic and a Legendary wand, a bag topped up with premade spells, 20 of
+-- every spell part and a full stack of every potion (on top of whatever kit they already have).
+function InventoryService.giveDevLoadout(c: Combatant)
+	local rng = Random.new()
+	for _, rarity in { "Mythic", "Legendary" } do
+		InventoryService.addLoot(c, { kind = "Wand", wand = WandGenerator.generate(rng, rarity, nil) })
+	end
+	local premades = {}
+	for _, p in PremadeSpells.List do
+		table.insert(premades, p.id)
+	end
+	for i = #premades, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		premades[i], premades[j] = premades[j], premades[i]
+	end
+	for _, id in premades do
+		if #c.inventory.spells >= INV.MaxSpells then
+			break
+		end
+		table.insert(c.inventory.spells, LootTables.premadeSpell(id))
+	end
+	for _, part in SpellParts.List do
+		addPart(c, part.id, 20)
+	end
+	for _, potion in Consumables.List do
+		addConsumable(c, potion.id, INV.MaxConsumableStack)
+	end
 	InventoryService.refreshTools(c)
 	InventoryService.sync(c)
 end
@@ -14613,7 +15247,7 @@ return InventoryService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="48">
+        <Item class="ModuleScript" referent="49">
           <Properties>
             <string name="Name">MapService</string>
             <string name="Source"><![CDATA[-- Builds the hub (Arcanum Plaza) and the library lobby once, and a brand new arena for every
@@ -14874,7 +15508,7 @@ return MapService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="49">
+        <Item class="ModuleScript" referent="50">
           <Properties>
             <string name="Name">MatchService</string>
             <string name="Source"><![CDATA[-- The survival-games loop:
@@ -15140,6 +15774,32 @@ local function botName(used: { [string]: boolean }): string
 	return "Mage" .. rng:NextInteger(100, 999)
 end
 
+-- Dev panel controls: skip the current wait (vote, countdown or grace), jump the match clock
+-- ahead (chest refill, storm), or end the match now.
+local devSkipRequested = false
+local devEndRequested = false
+local devElapsed = 0
+
+local function consumeSkip(): boolean
+	if devSkipRequested then
+		devSkipRequested = false
+		return true
+	end
+	return false
+end
+
+function MatchService.devSkip()
+	devSkipRequested = true
+end
+
+function MatchService.devAdvance(seconds: number)
+	devElapsed += seconds
+end
+
+function MatchService.devEnd()
+	devEndRequested = true
+end
+
 local function waitPhase(seconds: number, abort: (() -> boolean)?): boolean
 	local finish = now() + seconds
 	while now() < finish do
@@ -15218,6 +15878,9 @@ local function runMatch()
 		if not canStart() then
 			completed = false
 			break
+		end
+		if consumeSkip() then
+			break -- dev panel: close the vote now
 		end
 		-- every pedestal is spoken for: no need to wait for more players
 		local fast = Config.Queue.FullQueueVoteTime
@@ -15305,6 +15968,9 @@ local function runMatch()
 	for _, c in participants do
 		local classId = if c.player then ClassService.classFor(c.player) else ClassService.randomClass(rng)
 		local bonus = InventoryService.giveKit(c, classId)
+		if c.player and c.player:GetAttribute("DevLoadout") == true then
+			InventoryService.giveDevLoadout(c) -- dev panel: everything, every match
+		end
 		local part = SpellParts.ById[bonus]
 		if c.player and part then
 			FX.announceTo(c.player, "Toast", {
@@ -15340,13 +16006,15 @@ local function runMatch()
 	GameState.setPhase("Countdown", now() + M.PedestalCountdown)
 	announceMatch({ title = "Get ready...", subtitle = "Loot the cornucopia or run for the woods!" })
 	announceHub("⚔ A match just started on " .. def.name .. ". Join the queue to play the next one")
-	waitPhase(M.PedestalCountdown)
+	waitPhase(M.PedestalCountdown, consumeSkip)
 
 	for _, c in participants do
 		c.locked = false
 		StatusService.updateMovement(c)
 	end
 	local start = now()
+	devElapsed = 0
+	devEndRequested = false
 	GameState.matchStartedAt = start
 	GameState.setPublic("MatchStartedAt", start)
 	GameState.setPhase("Grace", start + M.GracePeriod)
@@ -15364,9 +16032,15 @@ local function runMatch()
 		local t = now()
 		local dt = t - lastTick
 		lastTick = t
-		local elapsed = t - start
+		local elapsed = t - start + devElapsed
 
-		if GameState.phase == "Grace" and elapsed >= M.GracePeriod then
+		if devEndRequested then
+			devEndRequested = false
+			winner = nil
+			break
+		end
+
+		if GameState.phase == "Grace" and (elapsed >= M.GracePeriod or consumeSkip()) then
 			GameState.setPhase("Battle", 0)
 			announceMatch({ title = "Grace period over", subtitle = "Spells now hurt other mages. Good luck." })
 		end
@@ -15572,7 +16246,7 @@ return MatchService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="50">
+        <Item class="ModuleScript" referent="51">
           <Properties>
             <string name="Name">PracticeService</string>
             <string name="Source"><![CDATA[-- Training dummies on the hub's Practice Range and the library's Practice Terrace. They take
@@ -15743,7 +16417,7 @@ return PracticeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="51">
+        <Item class="ModuleScript" referent="52">
           <Properties>
             <string name="Name">ProjectileService</string>
             <string name="Source"><![CDATA[-- Authoritative projectile simulation. Every frame each projectile moves (ProjectileSim),
@@ -16293,7 +16967,7 @@ return ProjectileService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="52">
+        <Item class="ModuleScript" referent="53">
           <Properties>
             <string name="Name">QueueService</string>
             <string name="Source"><![CDATA[-- The queue between the hub and a match.
@@ -16508,7 +17182,7 @@ return QueueService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="53">
+        <Item class="ModuleScript" referent="54">
           <Properties>
             <string name="Name">SpellExecutor</string>
             <string name="Source"><![CDATA[-- Executes compiled spells: spawns projectiles, fires beams, novas, chains, meteors,
@@ -17344,7 +18018,7 @@ return SpellExecutor
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="54">
+        <Item class="ModuleScript" referent="55">
           <Properties>
             <string name="Name">StatusService</string>
             <string name="Source"><![CDATA[-- Burning, venom, chill/freeze, radiant marks, shields, haste and regeneration.
@@ -17733,7 +18407,7 @@ return StatusService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="55">
+        <Item class="ModuleScript" referent="56">
           <Properties>
             <string name="Name">VoteService</string>
             <string name="Source"><![CDATA[-- The map vote held in the library before every match. Only players in the queue can vote.
@@ -17882,7 +18556,7 @@ return VoteService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="56">
+        <Item class="ModuleScript" referent="57">
           <Properties>
             <string name="Name">WardrobeService</string>
             <string name="Source"><![CDATA[-- Enchanted Coins and the wardrobe: opening Coffers, stitching parts into robes and hats,
@@ -18209,7 +18883,9 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 	if not WardrobeService.hasRoom(player, "Familiar", box.parts) then
 		return false, "Your familiar roost is full: salvage or sell some familiars first"
 	end
-	if not WardrobeService.spendCoins(player, box.price) then
+	-- (the dev panel's "free coffers" switch; set by the server only)
+	local free = player:GetAttribute("DevFreeCoffers") == true
+	if not free and not WardrobeService.spendCoins(player, box.price) then
 		return false, "You need " .. box.price .. " Enchanted Coins"
 	end
 	local got = {}
@@ -18366,6 +19042,11 @@ local function giveStarter(player: Player, profile: DataService.Profile)
 	DataService.markDirty(player)
 end
 
+WardrobeService.giveStarter = giveStarter
+WardrobeService.redress = function(player: Player)
+	redress(player)
+end
+
 function WardrobeService.init()
 	DataService.onLoaded(function(player, profile)
 		giveStarter(player, profile)
@@ -18405,7 +19086,7 @@ return WardrobeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="57">
+        <Item class="ModuleScript" referent="58">
           <Properties>
             <string name="Name">WorldQuery</string>
             <string name="Source"><![CDATA[-- Raycasts against the world (never characters) and sweeps against combatant capsules.
@@ -18482,7 +19163,7 @@ return WorldQuery
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="58">
+        <Item class="ModuleScript" referent="59">
           <Properties>
             <string name="Name">ZoneService</string>
             <string name="Source"><![CDATA[-- Lingering ground effects left by Cloud spells and the Lingering modifier, and the solid
@@ -18663,17 +19344,17 @@ return ZoneService
       </Item>
     </Item>
   </Item>
-  <Item class="StarterPlayer" referent="59">
+  <Item class="StarterPlayer" referent="60">
     <Properties>
       <string name="Name">StarterPlayer</string>
       <float name="CameraMaxZoomDistance">60</float>
       <float name="CharacterWalkSpeed">16</float>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="60">
+    <Item class="StarterPlayerScripts" referent="61">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="61">
+      <Item class="LocalScript" referent="62">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[-- Mana Wars client entry point.
@@ -18698,6 +19379,7 @@ local TutorialController = require(Controllers.TutorialController)
 local AmbienceController = require(Controllers.AmbienceController)
 local WardrobeController = require(Controllers.WardrobeController)
 local FamiliarController = require(Controllers.FamiliarController)
+local DevController = require(Controllers.DevController)
 local AuctionController = require(Controllers.AuctionController)
 
 State.init()
@@ -18714,6 +19396,7 @@ TutorialController.init()
 AmbienceController.init()
 WardrobeController.init()
 FamiliarController.init()
+DevController.init()
 AuctionController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
@@ -18738,11 +19421,11 @@ GrimoireController.onReplayTutorial = TutorialController.start
 print("[Mana Wars] client ready")
 ]]></string>
         </Properties>
-        <Item class="Folder" referent="62">
+        <Item class="Folder" referent="63">
           <Properties>
             <string name="Name">Controllers</string>
           </Properties>
-          <Item class="ModuleScript" referent="63">
+          <Item class="ModuleScript" referent="64">
             <Properties>
               <string name="Name">AmbienceController</string>
               <string name="Source"><![CDATA[-- Per-map weather drawn around the camera while you're on the island:
@@ -18848,7 +19531,7 @@ return AmbienceController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="64">
+          <Item class="ModuleScript" referent="65">
             <Properties>
               <string name="Name">AuctionController</string>
               <string name="Source"><![CDATA[-- The Gilded Gavel: the auction house. Opened from the pavilion in the Plaza or the hub button.
@@ -19763,7 +20446,7 @@ return AuctionController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="65">
+          <Item class="ModuleScript" referent="66">
             <Properties>
               <string name="Name">ChestController</string>
               <string name="Source"><![CDATA[-- The loot window shown when you open a chest or a dead mage's satchel.
@@ -20024,7 +20707,447 @@ return ChestController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="66">
+          <Item class="ModuleScript" referent="67">
+            <Properties>
+              <string name="Name">DevController</string>
+              <string name="Source"><![CDATA[-- The 🛠 Dev panel: test everything without spending anything. It shows for players the server
+-- marks as developers (everyone in Studio, the game's owner in live servers; see Config.Dev),
+-- and the server checks every request again (DevService).
+-- Open it with the 🛠 Dev button or the ` key (backquote, left of 1).
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local Shared = ReplicatedStorage.Shared
+local Remotes = require(Shared.Remotes)
+local Rarity = require(Shared.Rarity)
+local PremadeSpells = require(Shared.Spells.PremadeSpells)
+local UI = script.Parent.Parent.UI
+local Create = require(UI.Create)
+local Theme = require(UI.Theme)
+local Widgets = require(UI.Widgets)
+local State = require(script.Parent.State)
+local Sounds = require(script.Parent.Sounds)
+
+local DevController = {}
+
+local C = Theme.Colors
+local GOLD = Color3.fromRGB(255, 205, 80)
+local action = Remotes.func("DevAction")
+local player = Players.LocalPlayer
+
+local gui: ScreenGui
+local panel: Frame
+local openButton: TextButton
+local rarity = "Mythic"
+local shiny = false
+local rarityButtons: { [string]: TextButton } = {}
+local shinyButton: TextButton
+local toggles: { [string]: { button: TextButton, label: string, on: boolean } } = {}
+local confirmReset = false
+
+local function invoke(name: string, args: { [string]: any }?): (boolean, any)
+	local ok, success, message, extra = pcall(function()
+		return action:InvokeServer(name, args or {})
+	end)
+	if not ok then
+		State.toast("Dev tools: " .. tostring(success), C.Bad)
+		return false, nil
+	end
+	if message and message ~= "" then
+		State.toast(message, if success then C.Good else C.Bad)
+	end
+	return success == true, extra
+end
+
+---------------------------------------------------------------------------
+-- Building blocks
+---------------------------------------------------------------------------
+
+local order = 0
+local function nextOrder(): number
+	order += 1
+	return order
+end
+
+local function section(parent: Instance, title: string, cellWidth: number?): Frame
+	Widgets.label({
+		Text = title,
+		Font = Theme.Black,
+		TextSize = 13,
+		TextColor3 = C.Gold,
+		Size = UDim2.new(1, 0, 0, 18),
+		LayoutOrder = nextOrder(),
+		Parent = parent,
+	})
+	local grid = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = nextOrder(),
+		Parent = parent,
+	})
+	Create("UIGridLayout", {
+		CellSize = UDim2.fromOffset(cellWidth or 146, 32),
+		CellPadding = UDim2.fromOffset(6, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = grid,
+	})
+	return grid
+end
+
+local function button(parent: Instance, name: string, text: string, onClick: () -> (), color: Color3?): TextButton
+	local b = Widgets.button(text, {
+		color = color or C.Panel3,
+		textSize = 13,
+		layoutOrder = nextOrder(),
+		onClick = function()
+			Sounds.play("Click")
+			onClick()
+		end,
+		parent = parent,
+	})
+	b.Name = name
+	return b
+end
+
+local function setToggle(key: string, on: boolean)
+	local t = toggles[key]
+	if t then
+		t.on = on
+		t.button.Text = t.label .. (if on then ": ON" else ": OFF")
+		t.button.BackgroundColor3 = if on then C.Good else C.Panel3
+	end
+end
+
+-- A button that flips a server-side switch (free coffers, god mode...).
+local function toggle(parent: Instance, key: string, label: string, actionName: string)
+	local b = button(parent, "Toggle_" .. key, label, function()
+		local t = toggles[key]
+		local want = not t.on
+		if invoke(actionName, { on = want }) then
+			setToggle(key, want)
+		end
+	end)
+	toggles[key] = { button = b, label = label, on = false }
+	setToggle(key, false)
+end
+
+local function refreshPickers()
+	for name, b in rarityButtons do
+		b.BackgroundColor3 = if name == rarity then Theme.rarity(name) else C.Panel3
+		b.TextColor3 = if name == rarity then Color3.new(0, 0, 0) else Theme.rarity(name)
+	end
+	shinyButton.Text = if shiny then "✨ Shiny: ON" else "✨ Shiny: OFF"
+	shinyButton.BackgroundColor3 = if shiny then GOLD else C.Panel3
+	shinyButton.TextColor3 = if shiny then Color3.new(0, 0, 0) else Color3.new(1, 1, 1)
+end
+
+local function syncStatus()
+	local ok, status = invoke("Status", {})
+	if ok and type(status) == "table" then
+		setToggle("FreeCoffers", status.freeCoffers == true)
+		setToggle("Loadout", status.loadout == true)
+		setToggle("God", status.god == true)
+		setToggle("Mana", status.mana == true)
+	end
+end
+
+---------------------------------------------------------------------------
+-- The panel
+---------------------------------------------------------------------------
+
+local function build()
+	gui = Widgets.screen("DevPanel", 30)
+	local root = Widgets.scaledRoot(gui)
+	openButton = Widgets.button("🛠 Dev", {
+		size = UDim2.fromOffset(84, 32),
+		position = UDim2.new(1, -16, 0, 52),
+		anchor = Vector2.new(1, 0),
+		color = Color3.fromRGB(60, 50, 30),
+		textColor = GOLD,
+		textSize = 14,
+		onClick = function()
+			DevController.toggle()
+		end,
+		parent = root,
+	})
+	openButton.Name = "DevButton"
+	openButton.Visible = false
+
+	panel = Widgets.panel({
+		Name = "Panel",
+		Size = UDim2.fromOffset(660, 600),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = C.Background,
+		BackgroundTransparency = 0.02,
+		Visible = false,
+		Parent = root,
+	})
+	local stroke = panel:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Color = GOLD
+	end
+	Widgets.label({
+		Text = "🛠 DEVELOPER TOOLS",
+		Font = Theme.Black,
+		TextSize = 22,
+		TextColor3 = GOLD,
+		Size = UDim2.fromOffset(400, 28),
+		Position = UDim2.fromOffset(16, 10),
+		Parent = panel,
+	})
+	Widgets.label({
+		Text = "Only you see this. Studio play tests save to separate test data. Press ` to open or close.",
+		TextSize = 12,
+		TextColor3 = C.Dim,
+		Size = UDim2.new(1, -80, 0, 16),
+		Position = UDim2.fromOffset(16, 38),
+		Parent = panel,
+	})
+	Widgets.button("✕", {
+		size = UDim2.fromOffset(32, 32),
+		position = UDim2.new(1, -44, 0, 10),
+		color = C.Panel3,
+		onClick = function()
+			DevController.close()
+		end,
+		parent = panel,
+	})
+
+	-- the big one
+	local unlock = Widgets.button("⭐  UNLOCK EVERYTHING  ⭐", {
+		size = UDim2.new(1, -32, 0, 46),
+		position = UDim2.fromOffset(16, 62),
+		color = GOLD,
+		textColor = Color3.fromRGB(40, 25, 0),
+		textSize = 20,
+		onClick = function()
+			Sounds.play("Crit")
+			if invoke("UnlockAll", {}) then
+				syncStatus()
+			end
+		end,
+		parent = panel,
+	})
+	unlock.Name = "UnlockAll"
+	Widgets.label({
+		Text = "Every kit, 100,000 coins, free coffers, every robe/hat design and aura, an outfit of every rarity, every familiar (plus a Shiny Mythic of each), and a full spell loadout in every match.",
+		TextSize = 12,
+		TextWrapped = true,
+		TextColor3 = C.Dim,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.new(1, -32, 0, 30),
+		Position = UDim2.fromOffset(16, 110),
+		Parent = panel,
+	})
+
+	-- rarity picker (used by the "give" buttons below)
+	local picker = Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -32, 0, 30),
+		Position = UDim2.fromOffset(16, 146),
+		Parent = panel,
+	}, { Create.list(Enum.FillDirection.Horizontal, 5) })
+	for i, name in Rarity.Order do
+		local b = Widgets.button(name, {
+			size = UDim2.fromOffset(84, 28),
+			color = C.Panel3,
+			textSize = 12,
+			layoutOrder = i,
+			onClick = function()
+				rarity = name
+				refreshPickers()
+			end,
+			parent = picker,
+		})
+		b.Name = "Rarity_" .. name
+		rarityButtons[name] = b
+	end
+	shinyButton = Widgets.button("✨ Shiny: OFF", {
+		size = UDim2.fromOffset(110, 28),
+		color = C.Panel3,
+		textSize = 12,
+		layoutOrder = 10,
+		onClick = function()
+			shiny = not shiny
+			refreshPickers()
+		end,
+		parent = picker,
+	})
+	shinyButton.Name = "Shiny"
+
+	local scroll = Create("ScrollingFrame", {
+		Name = "Tools",
+		BackgroundColor3 = C.Panel,
+		BackgroundTransparency = 0.3,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, -32, 1, -196),
+		Position = UDim2.fromOffset(16, 182),
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 6,
+		Parent = panel,
+	}, { Create.corner(8), Create.padding(10, 8), Create.list(Enum.FillDirection.Vertical, 6) })
+
+	local s = section(scroll, "COINS & COFFERS")
+	button(s, "Coins_1000", "+1,000 coins", function()
+		invoke("Coins", { amount = 1000 })
+	end)
+	button(s, "Coins_100000", "+100,000 coins", function()
+		invoke("Coins", { amount = 100000 })
+	end)
+	button(s, "Coins_0", "Coins → 0", function()
+		invoke("Coins", { amount = 0 })
+	end)
+	toggle(s, "FreeCoffers", "Free coffers", "FreeCoffers")
+
+	s = section(scroll, "COSMETICS (USE THE RARITY PICKER ABOVE)")
+	button(s, "GiveParts", "Give 6 parts", function()
+		invoke("GiveParts", { rarity = rarity })
+	end)
+	button(s, "GiveOutfit", "Wear an outfit", function()
+		invoke("GiveOutfit", { rarity = rarity })
+	end)
+	button(s, "GiveFamiliars", "Every familiar", function()
+		invoke("GiveFamiliars", { rarity = rarity, shiny = shiny })
+	end)
+
+	s = section(scroll, "KITS")
+	button(s, "Kits_all", "Unlock every kit", function()
+		invoke("Kits", { mode = "all" })
+	end)
+	button(s, "Kits_normal", "Kits: normal", function()
+		invoke("Kits", { mode = "normal" })
+	end)
+	button(s, "Kits_locked", "Lock (test the shop)", function()
+		invoke("Kits", { mode = "locked" })
+	end)
+
+	s = section(scroll, "FIGHTING")
+	toggle(s, "Loadout", "Full loadout", "Loadout")
+	toggle(s, "God", "God mode", "God")
+	toggle(s, "Mana", "Infinite mana", "Mana")
+	button(s, "GiveWand", "Give a wand", function()
+		invoke("GiveWand", { rarity = rarity })
+	end)
+
+	s = section(scroll, "MATCH")
+	button(s, "StartMatch", "Start a match now", function()
+		invoke("StartMatch", {})
+	end, C.Accent)
+	button(s, "Skip", "Skip the wait", function()
+		invoke("Skip", {})
+	end)
+	button(s, "Advance", "+60s (refill, storm)", function()
+		invoke("Advance", { seconds = 60 })
+	end)
+	button(s, "EndMatch", "End the match", function()
+		invoke("EndMatch", {})
+	end, C.Bad)
+	for _, fill in { 1, 4, 8, 12 } do
+		button(s, "Bots_" .. fill, if fill == 1 then "No bots" else "Bots: fill to " .. fill, function()
+			invoke("Bots", { fill = fill })
+		end)
+	end
+	button(s, "KillBots", "Knock out bots", function()
+		invoke("KillBots", {})
+	end)
+	button(s, "Refill", "Refill chests", function()
+		invoke("Refill", {})
+	end)
+
+	s = section(scroll, "MARKET & PROFILE")
+	button(s, "FakeListings", "Test Merchant items", function()
+		invoke("FakeListings", {})
+	end)
+	local reset: TextButton
+	reset = button(s, "ResetProfile", "Reset my profile", function()
+		if not confirmReset then
+			confirmReset = true
+			reset.Text = "Really reset?"
+			task.delay(3, function()
+				confirmReset = false
+				reset.Text = "Reset my profile"
+			end)
+			return
+		end
+		confirmReset = false
+		reset.Text = "Reset my profile"
+		if invoke("ResetProfile", {}) then
+			syncStatus()
+		end
+	end, C.Bad)
+
+	s = section(scroll, "GIVE A PREMADE SPELL (TO YOUR BAG)", 196)
+	local list = table.clone(PremadeSpells.List)
+	table.sort(list, function(a, b)
+		local ra, rb = Rarity.rank(a.rarity), Rarity.rank(b.rarity)
+		if ra ~= rb then
+			return ra < rb
+		end
+		return a.name < b.name
+	end)
+	for _, spell in list do
+		local b = button(s, "Spell_" .. spell.id, spell.name, function()
+			invoke("GiveSpell", { id = spell.id })
+		end)
+		b.TextColor3 = Theme.rarity(spell.rarity)
+	end
+	refreshPickers()
+end
+
+function DevController.open()
+	if not player:GetAttribute("Dev") then
+		return
+	end
+	panel.Visible = true
+	State.setMenu("dev", true)
+	task.spawn(syncStatus)
+end
+
+function DevController.close()
+	panel.Visible = false
+	Widgets.hideTooltip()
+	State.setMenu("dev", false)
+end
+
+function DevController.toggle()
+	if panel.Visible then
+		DevController.close()
+	else
+		DevController.open()
+	end
+end
+
+function DevController.isOpen(): boolean
+	return panel ~= nil and panel.Visible
+end
+
+function DevController.init()
+	build()
+	local function update()
+		openButton.Visible = player:GetAttribute("Dev") == true
+	end
+	player:GetAttributeChangedSignal("Dev"):Connect(update)
+	update()
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.Backquote and player:GetAttribute("Dev") then
+			DevController.toggle()
+		end
+	end)
+end
+
+return DevController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="68">
             <Properties>
               <string name="Name">FXController</string>
               <string name="Source"><![CDATA[-- Draws every spell. The server only sends compact events; all parts here are local
@@ -21150,7 +22273,7 @@ return FXController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="67">
+          <Item class="ModuleScript" referent="69">
             <Properties>
               <string name="Name">FamiliarBuilder</string>
               <string name="Source"><![CDATA[-- Builds familiar models out of parts (no meshes needed) and poses them every frame: flapping
@@ -22056,7 +23179,7 @@ return FamiliarBuilder
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="68">
+          <Item class="ModuleScript" referent="70">
             <Properties>
               <string name="Name">FamiliarController</string>
               <string name="Source"><![CDATA[-- Familiars following their mages. The server puts a "Familiar" attribute on each character
@@ -22388,7 +23511,7 @@ return FamiliarController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="69">
+          <Item class="ModuleScript" referent="71">
             <Properties>
               <string name="Name">GrimoireController</string>
               <string name="Source"><![CDATA[-- The Grimoire: an in-game encyclopedia that explains how to play and how to craft spells,
@@ -23154,7 +24277,7 @@ return GrimoireController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="70">
+          <Item class="ModuleScript" referent="72">
             <Properties>
               <string name="Name">HUDController</string>
               <string name="Source"><![CDATA[-- In-match HUD: health/shield, mana, wand hotbar with the spell deck, potions,
@@ -23928,7 +25051,7 @@ return HUDController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="71">
+          <Item class="ModuleScript" referent="73">
             <Properties>
               <string name="Name">InputController</string>
               <string name="Source"><![CDATA[-- Casting and hotkeys.
@@ -24172,7 +25295,7 @@ return InputController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="72">
+          <Item class="ModuleScript" referent="74">
             <Properties>
               <string name="Name">InventoryController</string>
               <string name="Source"><![CDATA[-- The Spellbook: manage wands, slot spells into them, and craft new spells in the Spellforge.
@@ -25303,7 +26426,7 @@ return InventoryController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="73">
+          <Item class="ModuleScript" referent="75">
             <Properties>
               <string name="Name">LobbyController</string>
               <string name="Source"><![CDATA[-- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
@@ -26089,7 +27212,7 @@ return LobbyController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="74">
+          <Item class="ModuleScript" referent="76">
             <Properties>
               <string name="Name">Sounds</string>
               <string name="Source"><![CDATA[-- Sound effects. These use sounds that ship with every Roblox client so the game works
@@ -26174,7 +27297,7 @@ return Sounds
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="75">
+          <Item class="ModuleScript" referent="77">
             <Properties>
               <string name="Name">State</string>
               <string name="Source"><![CDATA[-- Client-side cache of everything the UI shows: inventory, equipped wand state,
@@ -26325,7 +27448,7 @@ return State
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="76">
+          <Item class="ModuleScript" referent="78">
             <Properties>
               <string name="Name">StormController</string>
               <string name="Source"><![CDATA[-- Draws the shrinking Mana Storm wall locally from replicated attributes,
@@ -26436,7 +27559,7 @@ return StormController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="77">
+          <Item class="ModuleScript" referent="79">
             <Properties>
               <string name="Name">TutorialController</string>
               <string name="Source"><![CDATA[-- A hands-on tutorial in the Spell Lab (the hub on your first visit): open the Spellbook, forge a spell from parts,
@@ -26821,7 +27944,7 @@ return TutorialController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="78">
+          <Item class="ModuleScript" referent="80">
             <Properties>
               <string name="Name">VFX</string>
               <string name="Source"><![CDATA[-- Building blocks for spell effects, and how each element looks.
@@ -27445,7 +28568,7 @@ return VFX
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="79">
+          <Item class="ModuleScript" referent="81">
             <Properties>
               <string name="Name">WardrobeController</string>
               <string name="Source"><![CDATA[-- The Tailor's Loom: open Coffers with Enchanted Coins, stitch parts into robes and hats, and
@@ -28528,11 +29651,11 @@ return WardrobeController
             </Properties>
           </Item>
         </Item>
-        <Item class="Folder" referent="80">
+        <Item class="Folder" referent="82">
           <Properties>
             <string name="Name">UI</string>
           </Properties>
-          <Item class="ModuleScript" referent="81">
+          <Item class="ModuleScript" referent="83">
             <Properties>
               <string name="Name">CosmeticInfo</string>
               <string name="Source"><![CDATA[-- Tooltip / detail text for robe and hat parts, finished garments and familiars.
@@ -28729,7 +29852,7 @@ return CosmeticInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="82">
+          <Item class="ModuleScript" referent="84">
             <Properties>
               <string name="Name">Create</string>
               <string name="Source"><![CDATA[-- Declarative-ish instance builder:
@@ -28822,7 +29945,7 @@ return Create
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="83">
+          <Item class="ModuleScript" referent="85">
             <Properties>
               <string name="Name">ItemInfo</string>
               <string name="Source"><![CDATA[-- Builds tooltip / details content for every kind of item.
@@ -28990,7 +30113,7 @@ return ItemInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="84">
+          <Item class="ModuleScript" referent="86">
             <Properties>
               <string name="Name">Theme</string>
               <string name="Source"><![CDATA[-- Colours and fonts for every screen. Tweak here to re-skin the whole UI.
@@ -29050,7 +30173,7 @@ return Theme
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="85">
+          <Item class="ModuleScript" referent="87">
             <Properties>
               <string name="Name">Widgets</string>
               <string name="Source"><![CDATA[-- Reusable UI pieces: item tiles, buttons, bars, info cards, the hover tooltip,
@@ -29553,7 +30676,7 @@ return Widgets
       </Item>
     </Item>
   </Item>
-  <Item class="Workspace" referent="86">
+  <Item class="Workspace" referent="88">
     <Properties>
       <string name="Name">Workspace</string>
       <float name="FallenPartsDestroyHeight">-150</float>

@@ -9,6 +9,7 @@
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -236,9 +237,38 @@ function DataService.addMatch(player: Player)
 	bump(player, "matches")
 end
 
+-- The name to use for a DataStore / MemoryStore. Studio play tests get their own copies
+-- (Config.Dev.SeparateStudioData) so coins and items handed out while testing stay out of the live game.
+function DataService.storeName(base: string): string
+	local studio = false
+	pcall(function()
+		studio = RunService:IsStudio()
+	end)
+	if studio and Config.Dev.SeparateStudioData then
+		return base .. "_Studio"
+	end
+	return base
+end
+
+-- Wipes a profile back to a brand new player's (dev tool; listings on the market are kept).
+function DataService.reset(player: Player)
+	local profile = cache[player]
+	if not profile then
+		return
+	end
+	local fresh = newProfile()
+	fresh.wardrobe.listings = profile.wardrobe.listings
+	for k, v in fresh do
+		(profile :: any)[k] = v
+	end
+	leaderstats(player, profile)
+	player:SetAttribute("TutorialDone", nil)
+	dirty[player] = true
+end
+
 function DataService.init()
 	local ok, result = pcall(function()
-		return DataStoreService:GetDataStore(Config.DataStoreName)
+		return DataStoreService:GetDataStore(DataService.storeName(Config.DataStoreName))
 	end)
 	if ok then
 		store = result

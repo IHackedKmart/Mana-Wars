@@ -16,6 +16,7 @@ local LootTables = require(Shared.LootTables)
 local WandGenerator = require(Shared.WandGenerator)
 local SpellBuilder = require(Shared.Spells.SpellBuilder)
 local SpellParts = require(Shared.Spells.SpellParts)
+local PremadeSpells = require(Shared.Spells.PremadeSpells)
 local SpellTypes = require(Shared.Spells.SpellTypes)
 local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
@@ -369,6 +370,37 @@ function InventoryService.givePractice(c: Combatant)
 		addConsumable(c, potion.id, 1)
 	end
 	inv.equipped = 1
+	InventoryService.refreshTools(c)
+	InventoryService.sync(c)
+end
+
+-- Dev panel loadout: a Mythic and a Legendary wand, a bag topped up with premade spells, 20 of
+-- every spell part and a full stack of every potion (on top of whatever kit they already have).
+function InventoryService.giveDevLoadout(c: Combatant)
+	local rng = Random.new()
+	for _, rarity in { "Mythic", "Legendary" } do
+		InventoryService.addLoot(c, { kind = "Wand", wand = WandGenerator.generate(rng, rarity, nil) })
+	end
+	local premades = {}
+	for _, p in PremadeSpells.List do
+		table.insert(premades, p.id)
+	end
+	for i = #premades, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		premades[i], premades[j] = premades[j], premades[i]
+	end
+	for _, id in premades do
+		if #c.inventory.spells >= INV.MaxSpells then
+			break
+		end
+		table.insert(c.inventory.spells, LootTables.premadeSpell(id))
+	end
+	for _, part in SpellParts.List do
+		addPart(c, part.id, 20)
+	end
+	for _, potion in Consumables.List do
+		addConsumable(c, potion.id, INV.MaxConsumableStack)
+	end
 	InventoryService.refreshTools(c)
 	InventoryService.sync(c)
 end

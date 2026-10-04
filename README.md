@@ -94,6 +94,7 @@ Every match generates a fresh layout of the chosen map. The cornucopia holds 10 
 | Switch wand | 1-4, Q to cycle | tap the hotbar | L1 / R1 |
 | Spellbook & Spellforge | **B** | **Bag** button | Y |
 | Grimoire (encyclopedia) | **H** | **📜 Grimoire** button | |
+| 🛠 Dev panel (Studio and the game's owner only) | **`** | **🛠 Dev** button | |
 | Join the game | walk through the Plaza's portal, or **⚔ JOIN GAME** | **⚔ JOIN GAME** | |
 | Leave the queue | the library's portal, or **↩ Leave queue** | **↩ Leave queue** | |
 | Open chest | E (hold) | tap the prompt | X |
@@ -122,6 +123,24 @@ If you change the code in `src/`, rebuild the place file with `rojo build -o bui
 1. Install [Rokit](https://github.com/rojo-rbx/rokit) and run `rokit install` in this folder. This installs Rojo, StyLua, selene and luau-lsp at the pinned versions.
 2. Install the Rojo plugin in Studio.
 3. Run `rojo serve`, then click **Connect** in the Studio plugin. Edits to `src/` now sync live.
+
+### Test everything for free: the 🛠 Dev panel
+Press **`** (the backquote key, left of 1) or click **🛠 Dev** at the top right. It shows up for everyone in Studio play tests. In your published game it shows up only for you (the experience's owner) and any user ids you add to `Config.Dev.AdminUserIds` (add yours there if the game belongs to a group). The server checks every request, so nobody else can use it.
+
+- **⭐ Unlock everything** (one click): every kit, +100,000 Enchanted Coins, free coffers, one part for every robe/hat design, a Mythic sigil and gem for every aura, a finished outfit at every rarity (and a matched Mythic one put on you), every familiar species plus a Shiny Mythic of each (a Mythic Dragonling summoned), and a full loadout in every match: Mythic and Legendary wands, a bag of premade spells, 20 of every spell part and every potion. Press it again later and it just tops up the coins.
+- **Coins & coffers:** add coins, reset to 0, free coffers on or off.
+- **Cosmetics:** pick a rarity (and Shiny), then give 6 parts, wear a whole outfit, or get every familiar at that rarity.
+- **Kits:** unlock every kit, back to normal, or **lock** them to test the kit shop as a new player would see it.
+- **Fighting:** full loadout, god mode, infinite mana, a wand of any rarity, or any of the 69 premade spells into your bag.
+- **Match:** start a match right now (skips the vote), skip the countdown or grace period, jump the clock 60s ahead (chest refill, storm), end the match, choose how many bots fill it, knock out the bots, refill every chest.
+- **Market & profile:** put items up for sale from a "Test Merchant" so you can test buying on your own, or reset your profile to a brand new player's (it asks twice).
+
+Things to know:
+- **Studio play tests save to separate test data** (`Config.Dev.SeparateStudioData`), so coins and items you give yourself in Studio never show up in the live game.
+- **Items from the dev panel can't be sold** on the auction house, so test items never reach real players.
+- **Testing a kit purchase:** set the game pass ids first (see below), press **Lock (test the shop)**, then buy a kit in Studio. Studio purchases are test purchases and don't charge Robux. Note that `Config.Kits.StudioUnlocksAll` already unlocks every kit in Studio while you aren't locked.
+- **Testing with more players:** in Studio's **Test** tab, choose a number of players under **Clients and Servers** and press **Start**. Every test player gets the panel.
+- To turn the panel off in live servers entirely, set `Config.Dev.Enabled = false`. It always works in Studio.
 
 ### Before you publish
 - **Server size:** set the place's **Max Players**. You'll find it in Studio under *File → Game Settings → Places* (click the place's ⋯ → Edit), or in the place's settings on the Creator Dashboard. **12** fills every pedestal. Going a little higher (e.g. 16) gives the Plaza a crowd: if more than 12 people queue, the extra players wait in the library for the next round, first come first served.
@@ -272,6 +291,7 @@ src/
                    SpellExecutor (forms, impacts, triggers), ProjectileService, ZoneService,
                    DamageService, StatusService, InventoryService (Spellforge), ChestService,
                    PracticeService (training dummies), BotService, ClassService, MapService,
+                   DevService (the 🛠 Dev panel's tools, admins only),
                    DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
                    outfits), FamiliarService (Nip, Last Ember), AuctionService (the cross-server auction house)
     Map/           MapDefs (the 5 maps), TerrainGen, Structures (trees, ruins, cornucopia, chests),
@@ -279,7 +299,8 @@ src/
   client/        (StarterPlayerScripts.Client)
     Controllers/   HUD, Spellbook/Spellforge, Grimoire, Tutorial, chest window, lobby (join/leave queue,
                    vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom, familiars), Auction house,
-                   familiars (FamiliarController + FamiliarBuilder), input, effects (FXController + VFX),
+                   familiars (FamiliarController + FamiliarBuilder), the 🛠 Dev panel (DevController),
+                   input, effects (FXController + VFX),
                    storm, weather
     UI/            small UI toolkit (Create, Widgets, Theme, ItemInfo)
 ```
@@ -296,9 +317,11 @@ lune run tools/sim/combat           # every premade spell, the wild parts (walls
 lune run tools/sim/client           # real client UI + real server: forge, slot, loot, cast, buy a kit, join/leave the queue, vote, Grimoire, the tutorial,
                                     #   open coffers, stitch and wear a robe, outfits on R15/R6 bodies, sell/buy/cancel on the auction house,
                                     #   saving and rejoining, every spell effect in every element (drawn and cleaned up), and
-                                    #   familiars: every species at every rarity, summoning, each kind of power, trading, saving
+                                    #   familiars: every species at every rarity, summoning, each kind of power, trading, saving,
+                                    #   and the dev panel (Unlock Everything, switches, strangers locked out, profile reset)
 lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, two full matches with bots
-                                    #   (distinct finishing places, exact coin payouts, saved profile), leave the queue
+                                    #   (distinct finishing places, exact coin payouts, saved profile), leave the queue, then
+                                    #   start / skip / end a match from the dev panel
 lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps, checking chests, spacing and decoration
 ```
 

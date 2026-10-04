@@ -92,6 +92,9 @@ function DamageService.apply(target: Combatant, amount: number, info: DamageInfo
 	if not DamageService.canHurt(target, attacker, info.isStorm) then
 		return 0, false
 	end
+	if target.devGod then
+		return 0, false -- dev panel god mode
+	end
 	local hum = target.humanoid :: Humanoid
 
 	local crit = false

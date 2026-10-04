@@ -97,8 +97,9 @@ local DataStores = {
 	end,
 }
 
+local ServerRunService = Mock.runService(true)
 local server = Mock.realm({
-	RunService = Mock.runService(true),
+	RunService = ServerRunService,
 	Players = PlayersService,
 	TweenService = Mock.TweenService,
 	Lighting = Instance.new("Lighting"),
@@ -1270,6 +1271,161 @@ do
 	check(character:GetAttribute("Familiar") == Familiars.encode(owl), "and sent for again after loading")
 	loom.Enabled = false
 	checkWarnings("familiar save")
+end
+
+-- 17. The dev panel: the ` key opens it, Unlock Everything hands out the whole collection, the
+--     switches work, test items stay off the market, and nobody but a developer can use it.
+do
+	local DevService = server.load("Server/Services/DevService")
+	DevService.init()
+	local Familiars = server.load("Shared/Familiars")
+	local Classes = server.load("Shared/Classes")
+	Mock.step(0.2, true)
+	check(player:GetAttribute("Dev") == true, "Studio players are developers")
+	local devGui = gui("DevPanel")
+	check(devGui and devGui:FindFirstChild("DevButton", true).Visible, "the 🛠 Dev button shows for developers")
+	key(Enum.KeyCode.Backquote)
+	local panel = devGui:FindFirstChild("Panel", true)
+	check(panel and panel.Visible, "` opens the dev panel")
+	checkWarnings("open dev panel")
+
+	local w = State.wardrobe
+	local parts0, garments0, familiars0 = #w.parts, #w.garments, #w.familiars
+	local coins0 = w.coins
+	clickNamed(panel, "UnlockAll")
+	Mock.step(0.5, true)
+	w = State.wardrobe
+	local designs = 0
+	for _, list in Cosmetics.Designs do
+		designs += #list
+	end
+	check(w.coins >= coins0 + 100000, "Unlock Everything: +100,000 coins")
+	check(#w.parts - parts0 == designs + 2 * #Cosmetics.Auras, "every design, plus a sigil and gem per aura")
+	check(#w.garments - garments0 == 14, "an outfit at every rarity plus a Mythic one to wear")
+	local mythicOnly = 0
+	for _, sp in Familiars.Species do
+		if sp.minRarity == "Mythic" then
+			mythicOnly += 1
+		end
+	end
+	check(
+		#w.familiars - familiars0 == #Familiars.Species * 2 - mythicOnly + 1,
+		"every species, a Shiny Mythic of each, and a Dragonling to summon"
+	)
+	local owned = string.split(tostring(player:GetAttribute("OwnedKits")), ",")
+	check(#owned == #Classes.List, "every kit unlocked, got " .. #owned)
+	check(player:GetAttribute("DevFreeCoffers") == true and player:GetAttribute("DevLoadout") == true, "switches on")
+	check(character:GetAttribute("Familiar") ~= nil, "a familiar follows you")
+	local worn = nil
+	for _, g in w.garments do
+		if g.uid == w.equipped.Robe then
+			worn = g
+		end
+	end
+	check(worn and worn.rarity == "Mythic", "wearing the Mythic outfit")
+	checkWarnings("unlock everything")
+
+	-- pressing it again doesn't pile up a second collection
+	local before = #State.wardrobe.familiars
+	clickNamed(panel, "UnlockAll")
+	Mock.step(0.3, true)
+	check(#State.wardrobe.familiars == before, "the collection is only handed out once")
+
+	-- free coffers
+	local coins = State.wardrobe.coins
+	local partsBefore = #State.wardrobe.parts + #State.wardrobe.familiars
+	Remotes.func("WardrobeAction").OnServerInvoke(player, "OpenBox", { box = 5 })
+	Mock.step(0.2, true)
+	check(State.wardrobe.coins == coins, "coffers are free with the switch on")
+	check(#State.wardrobe.parts + #State.wardrobe.familiars == partsBefore + 3, "the free coffer still pays out")
+
+	-- test items stay out of the real market
+	local testPart = nil
+	for _, p in State.wardrobe.parts do
+		if p.dev then
+			testPart = p
+		end
+	end
+	local okSell = Remotes.func("AuctionAction")
+		.OnServerInvoke(player, "List", { kind = "Part", uid = testPart.uid, price = 5 })
+	check(okSell == false, "dev items can't be sold")
+	local stillThere = false
+	for _, p in State.wardrobe.parts do
+		stillThere = stillThere or p.uid == testPart.uid
+	end
+	check(stillThere, "a refused test item stays in the wardrobe")
+
+	-- god mode and infinite mana
+	clickNamed(panel, "Toggle_God")
+	clickNamed(panel, "Toggle_Mana")
+	check(me.devGod == true and me.devMana == true, "god mode and infinite mana switch on")
+	clickNamed(panel, "Toggle_God")
+	clickNamed(panel, "Toggle_Mana")
+	check(not me.devGod and not me.devMana, "and off")
+
+	-- kit shop testing: lock everything you haven't really bought
+	clickNamed(panel, "Kits_locked")
+	local lockedKits = string.split(tostring(player:GetAttribute("OwnedKits")), ",")
+	check(
+		#lockedKits < #Classes.List and table.find(lockedKits, "Apprentice") ~= nil,
+		"locked: only free and bought kits"
+	)
+	check(table.find(lockedKits, "Archmage") == nil, "locked: the $25 kit isn't owned")
+	clickNamed(panel, "Kits_all")
+	check(#string.split(tostring(player:GetAttribute("OwnedKits")), ",") == #Classes.List, "all kits again")
+
+	-- every button runs without errors
+	for _, name in
+		{
+			"Rarity_Rare",
+			"Shiny",
+			"GiveParts",
+			"GiveOutfit",
+			"GiveFamiliars",
+			"Coins_1000",
+			"GiveWand",
+			"Spell_Fireball",
+			"Bots_4",
+			"Skip",
+			"Advance",
+			"FakeListings",
+			"Refill",
+			"KillBots",
+		}
+	do
+		clickNamed(panel, name)
+	end
+	Mock.step(0.3, true)
+	checkWarnings("dev buttons")
+
+	-- only developers: in a live server a stranger is turned away
+	local stranger = Instance.new("Player")
+	stranger.Name = "Stranger"
+	stranger.UserId = 99
+	check(DevService.isDev(stranger) == true, "(in Studio everyone is a developer)")
+	ServerRunService.IsStudio = function()
+		return false
+	end
+	check(DevService.isDev(stranger) == false, "live servers: strangers aren't developers")
+	local okStranger = DevService.handle(stranger, "Coins", { amount = 1000 })
+	check(okStranger == false, "live servers: strangers can't use dev actions")
+	ServerConfig.Dev.AdminUserIds = { 99 }
+	check(DevService.isDev(stranger) == true, "listed admin ids are developers")
+	ServerConfig.Dev.AdminUserIds = {}
+	ServerRunService.IsStudio = function()
+		return true
+	end
+
+	-- reset back to a brand new mage
+	clickNamed(panel, "ResetProfile")
+	clickNamed(panel, "ResetProfile")
+	Mock.step(0.5, true)
+	check(State.wardrobe.coins == 60 and #State.wardrobe.familiars == 0, "reset: 60 coins, no familiars")
+	check(#State.wardrobe.garments == 2, "reset: the starter outfit again")
+	check(player:GetAttribute("DevFreeCoffers") == nil, "reset turns the switches off")
+	key(Enum.KeyCode.Backquote)
+	check(not panel.Visible, "` closes the panel")
+	checkWarnings("dev reset")
 end
 
 if failures > 0 then

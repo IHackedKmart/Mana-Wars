@@ -261,6 +261,32 @@ local function botName(used: { [string]: boolean }): string
 	return "Mage" .. rng:NextInteger(100, 999)
 end
 
+-- Dev panel controls: skip the current wait (vote, countdown or grace), jump the match clock
+-- ahead (chest refill, storm), or end the match now.
+local devSkipRequested = false
+local devEndRequested = false
+local devElapsed = 0
+
+local function consumeSkip(): boolean
+	if devSkipRequested then
+		devSkipRequested = false
+		return true
+	end
+	return false
+end
+
+function MatchService.devSkip()
+	devSkipRequested = true
+end
+
+function MatchService.devAdvance(seconds: number)
+	devElapsed += seconds
+end
+
+function MatchService.devEnd()
+	devEndRequested = true
+end
+
 local function waitPhase(seconds: number, abort: (() -> boolean)?): boolean
 	local finish = now() + seconds
 	while now() < finish do
@@ -339,6 +365,9 @@ local function runMatch()
 		if not canStart() then
 			completed = false
 			break
+		end
+		if consumeSkip() then
+			break -- dev panel: close the vote now
 		end
 		-- every pedestal is spoken for: no need to wait for more players
 		local fast = Config.Queue.FullQueueVoteTime
@@ -426,6 +455,9 @@ local function runMatch()
 	for _, c in participants do
 		local classId = if c.player then ClassService.classFor(c.player) else ClassService.randomClass(rng)
 		local bonus = InventoryService.giveKit(c, classId)
+		if c.player and c.player:GetAttribute("DevLoadout") == true then
+			InventoryService.giveDevLoadout(c) -- dev panel: everything, every match
+		end
 		local part = SpellParts.ById[bonus]
 		if c.player and part then
 			FX.announceTo(c.player, "Toast", {
@@ -461,13 +493,15 @@ local function runMatch()
 	GameState.setPhase("Countdown", now() + M.PedestalCountdown)
 	announceMatch({ title = "Get ready...", subtitle = "Loot the cornucopia or run for the woods!" })
 	announceHub("⚔ A match just started on " .. def.name .. ". Join the queue to play the next one")
-	waitPhase(M.PedestalCountdown)
+	waitPhase(M.PedestalCountdown, consumeSkip)
 
 	for _, c in participants do
 		c.locked = false
 		StatusService.updateMovement(c)
 	end
 	local start = now()
+	devElapsed = 0
+	devEndRequested = false
 	GameState.matchStartedAt = start
 	GameState.setPublic("MatchStartedAt", start)
 	GameState.setPhase("Grace", start + M.GracePeriod)
@@ -485,9 +519,15 @@ local function runMatch()
 		local t = now()
 		local dt = t - lastTick
 		lastTick = t
-		local elapsed = t - start
+		local elapsed = t - start + devElapsed
 
-		if GameState.phase == "Grace" and elapsed >= M.GracePeriod then
+		if devEndRequested then
+			devEndRequested = false
+			winner = nil
+			break
+		end
+
+		if GameState.phase == "Grace" and (elapsed >= M.GracePeriod or consumeSkip()) then
 			GameState.setPhase("Battle", 0)
 			announceMatch({ title = "Grace period over", subtitle = "Spells now hurt other mages. Good luck." })
 		end

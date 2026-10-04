@@ -15,6 +15,8 @@ local Classes = require(Shared.Classes)
 local ClassService = {}
 
 local owned: { [Player]: { [string]: boolean } } = setmetatable({}, { __mode = "k" }) :: any
+-- dev panel: "all" owns every kit, "locked" ignores the Studio unlock (to test the shop)
+local devMode: { [Player]: string } = setmetatable({}, { __mode = "k" }) :: any
 
 local function passFor(classId: string): number
 	return Config.Kits.GamePassIds[classId] or 0
@@ -48,7 +50,11 @@ function ClassService.owns(player: Player, classId: string): boolean
 		return true
 	end
 	local K = Config.Kits
-	if K.StudioUnlocksAll and RunService:IsStudio() then
+	local mode = devMode[player]
+	if mode == "all" then
+		return true
+	end
+	if K.StudioUnlocksAll and RunService:IsStudio() and mode ~= "locked" then
 		return true
 	end
 	if class.tier <= K.PremiumFreeTier and player.MembershipType == Enum.MembershipType.Premium then
@@ -77,6 +83,23 @@ function ClassService.refresh(player: Player)
 	if not ClassService.owns(player, tostring(player:GetAttribute("Class"))) then
 		player:SetAttribute("Class", Classes.Default)
 	end
+end
+
+-- Dev panel: "all" (own every kit), "locked" (only kits really bought) or "normal".
+function ClassService.setDevMode(player: Player, mode: string)
+	if mode == "all" or mode == "locked" then
+		devMode[player] = mode
+	else
+		devMode[player] = nil
+	end
+	publish(player)
+	if not ClassService.owns(player, tostring(player:GetAttribute("Class"))) then
+		player:SetAttribute("Class", Classes.Default)
+	end
+end
+
+function ClassService.devModeOf(player: Player): string
+	return devMode[player] or "normal"
 end
 
 -- The class this player will actually start the match with.

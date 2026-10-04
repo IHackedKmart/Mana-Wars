@@ -44,6 +44,8 @@ export type Combatant = {
 	gear: { [string]: number }, -- stat bonuses from the robe and hat being worn (see Cosmetics)
 	place: number?, -- finishing place in the current match (1 = winner)
 	familiar: any?, -- the familiar following them (see Familiars), for its power
+	devGod: boolean?, -- dev panel: takes no damage
+	devMana: boolean?, -- dev panel: spells cost no mana (or health)
 	bot: { [string]: any }?,
 }
 
