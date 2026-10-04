@@ -16,6 +16,7 @@ local Familiars = require(Shared.Familiars)
 local OutfitBuilder = require(Shared.OutfitBuilder)
 local Combatants = require(script.Parent.Combatants)
 local DataService = require(script.Parent.DataService)
+local Events = require(script.Parent.Events)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -73,13 +74,19 @@ function WardrobeService.coins(player: Player): number
 	return if profile then profile.coins else 0
 end
 
-function WardrobeService.addCoins(player: Player, amount: number, reason: string?)
+-- Where coins came from or went to, for analytics: a transaction type ("Gameplay", "Shop",
+-- "TimedReward", "Onboarding"; "Dev" is never reported) and what it was for.
+export type CoinFlow = { type: string, sku: string? }
+
+function WardrobeService.addCoins(player: Player, amount: number, reason: string?, source: CoinFlow?)
 	local profile = DataService.profile(player)
 	if not profile or amount <= 0 then
 		return
 	end
 	profile.coins += math.floor(amount)
 	changed(player)
+	local flow = source or { type = "Gameplay", sku = "Other" }
+	Events.fire("Coins", player, math.floor(amount), flow.type, flow.sku, profile.coins)
 	if reason then
 		FX.announceTo(
 			player,
@@ -89,13 +96,15 @@ function WardrobeService.addCoins(player: Player, amount: number, reason: string
 	end
 end
 
-function WardrobeService.spendCoins(player: Player, amount: number): boolean
+function WardrobeService.spendCoins(player: Player, amount: number, sink: CoinFlow?): boolean
 	local profile = DataService.profile(player)
 	if not profile or profile.coins < amount then
 		return false
 	end
 	profile.coins -= amount
 	changed(player)
+	local flow = sink or { type = "Shop", sku = "Other" }
+	Events.fire("Coins", player, -amount, flow.type, flow.sku, profile.coins)
 	return true
 end
 
@@ -118,7 +127,8 @@ function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: numb
 	WardrobeService.addCoins(
 		player,
 		base + bonus,
-		ordinal(place) .. " of " .. outOf .. (if bonus > 0 then ", +" .. bonus .. " Fortune" else "")
+		ordinal(place) .. " of " .. outOf .. (if bonus > 0 then ", +" .. bonus .. " Fortune" else ""),
+		{ type = "Gameplay", sku = "MatchPlacement" }
 	)
 end
 
@@ -324,7 +334,7 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 	end
 	-- (the dev panel's "free coffers" switch; set by the server only)
 	local free = player:GetAttribute("DevFreeCoffers") == true
-	if not free and not WardrobeService.spendCoins(player, box.price) then
+	if not free and not WardrobeService.spendCoins(player, box.price, { type = "Shop", sku = "Coffer" .. box.id }) then
 		return false, "You need " .. box.price .. " Enchanted Coins"
 	end
 	local got = {}
@@ -334,12 +344,14 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 			local familiar = Familiars.roll(rng, box.id, Cosmetics.rollRarity(rng, box), nil)
 			WardrobeService.giveItem(player, "Familiar", familiar)
 			table.insert(got, familiar)
+			Events.fire("FamiliarFound", player, familiar)
 		else
 			local part = Cosmetics.rollPart(rng, box.id)
 			WardrobeService.giveItem(player, "Part", part)
 			table.insert(got, part)
 		end
 	end
+	Events.fire("CofferOpened", player, box.id)
 	return true, "Opened " .. box.name, got
 end
 
@@ -374,6 +386,7 @@ local function craft(player: Player, kind: any, picks: any): (boolean, string, a
 	local made = Cosmetics.craft(kind, parts)
 	table.insert(w.garments, made)
 	changed(player)
+	Events.fire("Crafted", player, made)
 	return true, "Made " .. made.name, made.uid
 end
 
@@ -454,7 +467,7 @@ local function salvage(player: Player, kind: any, uid: any): (boolean, string)
 	else
 		value = Cosmetics.SalvageValue[Rarity.rank(item.rarity)] or 1
 	end
-	WardrobeService.addCoins(player, value, nil)
+	WardrobeService.addCoins(player, value, nil, { type = "Gameplay", sku = "Salvage" })
 	return true, "Salvaged " .. item.name .. " for " .. value .. " coins"
 end
 
@@ -465,6 +478,7 @@ local function giveStarter(player: Player, profile: DataService.Profile)
 	end
 	profile.starter = true
 	profile.coins += E.StarterCoins
+	Events.fire("Coins", player, E.StarterCoins, "Onboarding", "StarterCoins", profile.coins)
 	local bySlot = {}
 	for _, part in Cosmetics.starterParts() do
 		bySlot[part.slot] = part

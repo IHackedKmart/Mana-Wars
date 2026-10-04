@@ -103,7 +103,8 @@ Every match generates a fresh layout of the chosen map: hills, rivers and lakes,
 | Take everything from a chest | F | **Take All** | |
 | Potions | Z X C V | tap the potion | |
 | Coffers, Tailor's Loom, wardrobe | the Plaza's stalls, or **👘 Wardrobe** (left) | the same | |
-| Auction house | the Gilded Gavel pavilion, or **⚖ Auction House** (left) | the same | |
+| Auction house | the Gilded Gavel pavilion, or **⚖️ Auction House** (left) | the same | |
+| Achievements and daily streak | **🏆 Achievements** (left, in the Plaza or the library) | the same | |
 | Chat | **/** | the chat button | |
 | Close any window | **✕** in its corner | the same | |
 
@@ -153,6 +154,7 @@ Things to know:
 - **DataStores and MemoryStore:** in *Game Settings → Security*, turn on **Enable Studio Access to API Services** so coins, outfits, wins, kills and tutorial progress save while you test in Studio. Published games always have access. The auction house uses MemoryStoreService for the shared market. Without API access it falls back to a market for the current server only, and nothing is saved.
 - **Kits for sale:** create one game pass per paid kit on the Creator Dashboard (*your experience → Monetization → Passes*), priced at its tier (see [Kits and tiers](#kits-and-tiers)), and paste each pass id into `src/shared/Config.lua` → `Config.Kits.GamePassIds`. A kit whose id is still `0` shows as "not on sale yet". While you test in Studio, every kit is unlocked (`StudioUnlocksAll`).
 - **Voice chat (optional):** turn it on under *Game Settings → Communication* (**Enable Microphone**). Roblox voice is spatial, so players hear mages near them and voices fade with distance. It matches proximity text chat with no extra code. Only players who have verified voice on their accounts can use it.
+- **Badges (optional):** create one per achievement you want as a badge (*Engagement → Badges*) and paste the ids into `Config.Achievements.BadgeIds`. See [Daily reward, achievements and the leaderboard](#daily-reward-achievements-and-the-leaderboard).
 - **Streaming** is turned off (`Workspace.StreamingEnabled = false` in `default.project.json`) so every client always sees the whole arena.
 - **Sounds:** the game uses sounds that ship with every Roblox client, so it works out of the box. Swap the ids in `src/client/Controllers/Sounds.lua` for Creator Store sounds to make it sound much better.
 
@@ -238,6 +240,23 @@ So mixing rarities always works, but a matched set looks the best.
 - Items are held in escrow while listed, buying is atomic (two buyers can never get the same item), and sellers who are offline or in another server are paid through a DataStore mailbox the next time they play.
 - Profiles (coins, wardrobe, listings, stats) are saved with a session lock, so joining two servers at once can't duplicate items.
 
+## Daily reward, achievements and the leaderboard
+
+- **Daily reward.** The first time you play each day (days start at midnight UTC) you get **3 Enchanted Coins** (`Config.Rewards.DailyCoins`). Come back on consecutive days to build a streak. If you're still online at midnight, the next day's reward arrives without rejoining.
+- **Achievements.** 17 lifetime goals, each paying coins once (315 in all): first kill, 25 and 100 kills, first win, 10 and 50 wins, a top-3 finish, 25 matches, forging 10 spells, opening 100 chests and 10 coffers, stitching a robe or hat, finding 5 familiars or a Shiny one, a first auction sale and a 7-day streak. Open them with **🏆 Achievements** in the Plaza or the library to see your progress bars. The full list is in [docs/CATALOG.md](docs/CATALOG.md#achievements). Stats players had before this update count, so veterans unlock theirs the first time they join.
+- **Roblox badges (optional).** Every achievement can also award a real badge that shows on players' profiles. Create the badges on the Creator Dashboard (*your experience → Engagement → Badges*) and paste each id into `Config.Achievements.BadgeIds` under the achievement's id (e.g. `Victor = 2150000001`). Players who already unlocked the achievement get the badge the next time they join.
+- **The Hall of Champions.** A gilded board behind the spawn in the Plaza lists the **top 10 by wins and by kills across every server, all time**. Scores are saved after each match and when a player leaves, and each server re-reads the lists every 2 minutes (`Config.Leaderboard`). It needs DataStores, so turn on API access to see it in Studio.
+
+### Analytics
+
+The game reports to Roblox's built-in analytics (*Creator Dashboard → your experience → Analytics*), so you can see where new players drop off and how coins flow:
+
+- **Onboarding funnel:** Joined → Finished the tutorial → Joined the queue → Finished a match → Opened a coffer. Each step is logged once per player. Players from before this update aren't counted as new.
+- **Economy:** every Enchanted Coin earned (placements, daily reward, achievements, salvage, auction sales) and spent (each coffer, auction purchases), with the balance after it. Coins from the Dev panel are left out.
+- **Custom events:** `MatchFinished` (value = finishing place, broken down by map and kit), `MatchKills`, `KitPicked`, `KitPurchased`, `AchievementUnlocked` and `DailyStreak`.
+
+Set `Config.Analytics.Enabled = false` to turn it all off. Analytics can never break the game: every call is wrapped so a failure is just skipped.
+
 ## Spell effects
 
 Every spell is drawn on each client from small server events (`src/client/Controllers/FXController.lua`, with the building blocks in `VFX.lua`), and each element has its own look:
@@ -276,6 +295,9 @@ Almost every number lives in **`src/shared/Config.lua`**: match timings (the gra
 | change or add landmarks (ruins, the windmill, the pyramid...) | `src/server/Map/Landmarks.lua` (list a new one in a map's `pois`) |
 | change bridges, the volcano's smoke or the aurora | `src/server/Map/Scenery.lua` |
 | change the cornucopia, chests or satchels | `src/server/Map/Structures.lua` (and the spawn ring's size in `Config.Arena`) |
+| change the daily reward | `Config.Rewards.DailyCoins` |
+| add or change achievements (goals, coin rewards, icons) | `src/shared/Achievements.lua` (and badge ids in `Config.Achievements`) |
+| change the leaderboard's size or refresh rate | `Config.Leaderboard` |
 | change spell damage overall | `Config.Combat.SpellDamageMultiplier` |
 | change how much is in a chest, or the healing potion odds | `Tiers` in `src/shared/LootTables.lua` |
 | change the hub (Arcanum Plaza) | `src/server/Map/Hub.lua` (shared pieces such as portals, lecterns and signs are in `Props.lua`) |
@@ -308,6 +330,8 @@ src/
                    DamageService, StatusService, InventoryService (Spellforge), ChestService,
                    PracticeService (training dummies), BotService, ClassService, MapService,
                    DevService (the 🛠 Dev panel's tools, admins only),
+                   AchievementService, DailyRewardService, LeaderboardService (the Hall of Champions),
+                   AnalyticsTracker (Roblox analytics), Events (the bus they all listen on),
                    ChatService (proximity chat), DataService (session-locked profiles), WardrobeService (coins, coffers, crafting,
                    outfits), FamiliarService (Nip, Last Ember), AuctionService (the cross-server auction house)
     Map/           MapDefs (the 5 maps), TerrainGen (hills, rivers, mesas, volcano, roads), Decor (trees,
@@ -317,7 +341,7 @@ src/
     Controllers/   HUD, Spellbook/Spellforge, Grimoire, Tutorial, chest window, lobby (join/leave queue,
                    vote, kit shop, spectate), Wardrobe (coffers, Tailor's Loom, familiars), Auction house,
                    familiars (FamiliarController + FamiliarBuilder), the 🛠 Dev panel (DevController),
-                   chat note (ChatController), input, effects (FXController + VFX),
+                   Achievements window (AchievementsController), chat note (ChatController), input, effects (FXController + VFX),
                    storm, weather
     UI/            small UI toolkit: Theme (colours, fonts), Widgets (window frame, tabs, cards, item rows,
                    buttons, tooltips), Dock (the menu column), Create, ItemInfo, CosmeticInfo
@@ -337,10 +361,11 @@ lune run tools/sim/client           # real client UI + real server: forge, slot,
                                     #   saving and rejoining, every spell effect in every element (drawn and cleaned up), and
                                     #   familiars: every species at every rarity, summoning, each kind of power, trading, saving,
                                     #   the dev panel (Unlock Everything, switches, strangers locked out, profile reset),
-                                    #   and proximity chat (near/far/between lives, the off switch)
+                                    #   proximity chat (near/far/between lives, the off switch), and the daily reward streak,
+                                    #   achievements (unlocks, coins, badges, the window), the global leaderboard and analytics events
 lune run tools/sim/match            # boots the real server: spawn in the hub, walk through the portal, two full matches with bots
                                     #   (distinct finishing places, exact coin payouts, saved profile), leave the queue, then
-                                    #   start / skip / end a match from the dev panel
+                                    #   start / skip / end a match from the dev panel, and the Hall of Champions board
 lune run tools/sim/maps             # builds the hub and the library and generates all 5 maps, checking chests, spacing and decoration
 lune run tools/sim/glyphs           # fails on any symbol or emoji Roblox would draw as a square (✦, ✕, ⚔ without U+FE0F, 💰...)
 ```

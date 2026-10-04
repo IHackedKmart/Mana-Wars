@@ -20,11 +20,13 @@ local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local DataService = require(script.Parent.DataService)
 local WardrobeService = require(script.Parent.WardrobeService)
+local Events = require(script.Parent.Events)
 
 local AuctionService = {}
 
 local E = Config.Economy
 local rng = Random.new()
+local SALE = { type = "Shop", sku = "AuctionSale" } -- how sales show up in analytics
 
 export type Listing = {
 	id: string,
@@ -278,8 +280,10 @@ local function creditSale(seller: Player, id: string, coins: number, itemName: s
 	WardrobeService.addCoins(
 		seller,
 		coins,
-		"sold " .. (itemName or (if record and record.item then record.item.name else "an item"))
+		"sold " .. (itemName or (if record and record.item then record.item.name else "an item")),
+		SALE
 	)
+	Events.fire("AuctionSold", seller, coins)
 	task.spawn(DataService.save, seller)
 	return true
 end
@@ -374,7 +378,7 @@ function AuctionService.buy(player: Player, id: any): (boolean, string)
 	if not WardrobeService.hasRoom(player, listing.kind) then
 		return false, "Your wardrobe is full"
 	end
-	if not WardrobeService.spendCoins(player, listing.price) then
+	if not WardrobeService.spendCoins(player, listing.price, { type = "Shop", sku = "AuctionPurchase" }) then
 		return false, "You need " .. listing.price .. " Enchanted Coins"
 	end
 	local claimed = store.claim(id, function(current)
@@ -386,11 +390,12 @@ function AuctionService.buy(player: Player, id: any): (boolean, string)
 		return nil
 	end, ttl())
 	if not claimed then
-		WardrobeService.addCoins(player, listing.price, nil) -- refund
+		WardrobeService.addCoins(player, listing.price, nil, { type = "Shop", sku = "AuctionRefund" }) -- refund
 		browseCache.at = -math.huge
 		return false, "Someone beat you to it"
 	end
 	WardrobeService.giveItem(player, claimed.kind, claimed.item)
+	Events.fire("AuctionBought", player, claimed.price)
 	task.spawn(DataService.save, player)
 	-- pay the seller: the house keeps its cut
 	local proceeds = claimed.price - math.floor(claimed.price * E.AuctionFee)
@@ -475,8 +480,10 @@ function AuctionService.reconcile(player: Player)
 		WardrobeService.addCoins(
 			player,
 			coins,
-			"sold " .. (if record and record.item then record.item.name else "an item")
+			"sold " .. (if record and record.item then record.item.name else "an item"),
+			SALE
 		)
+		Events.fire("AuctionSold", player, coins)
 		changed = true
 	end
 	-- 3. loose ends: sold listings whose payment never arrived, and listings that vanished
@@ -488,8 +495,10 @@ function AuctionService.reconcile(player: Player)
 			WardrobeService.addCoins(
 				player,
 				current.price - math.floor(current.price * E.AuctionFee),
-				"sold " .. record.item.name
+				"sold " .. record.item.name,
+				SALE
 			)
+			Events.fire("AuctionSold", player, current.price)
 			store.remove(id)
 			changed = true
 		elseif current == nil and record.expires <= t then

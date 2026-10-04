@@ -17,6 +17,7 @@ local Rarity = shared.load("Shared/Rarity")
 local Config = shared.load("Shared/Config")
 local MapDefs = shared.load("Server/Map/MapDefs")
 local Cosmetics = shared.load("Shared/Cosmetics")
+local Achievements = shared.load("Shared/Achievements")
 local Familiars = shared.load("Shared/Familiars")
 
 local out = {}
@@ -395,6 +396,23 @@ for _, power in Familiars.Powers do
 			table.concat(values, " / ")
 		)
 	)
+end
+line()
+
+line("## Achievements")
+line()
+line(
+	string.format(
+		"Each pays its Enchanted Coins once (%d in all). Players also get **%d coins a day** for logging in (days start at midnight UTC).",
+		Achievements.totalReward(),
+		Config.Rewards.DailyCoins
+	)
+)
+line()
+line("| | Achievement | Goal | Reward |")
+line("|---|---|---|---|")
+for _, a in Achievements.List do
+	line(string.format("| %s | **%s** | %s | %d 💰 |", a.icon, a.name, a.description, a.reward))
 end
 line()
 

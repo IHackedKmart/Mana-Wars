@@ -114,6 +114,10 @@ else
 	if parts > 3000 then
 		fail("hub is too heavy: " .. parts .. " parts")
 	end
+	local hall = hub:FindFirstChild("Leaderboard", true)
+	if not hall or not hall:FindFirstChild("BoardFace", true) then
+		fail("the hub needs the Hall of Champions leaderboard")
+	end
 	if not hub:FindFirstChild("ClassAltar", true) or not hub:FindFirstChild("Lectern", true) then
 		fail("the hub needs a class altar and Grimoire lecterns")
 	end

@@ -29,6 +29,7 @@ local VoteService = require(script.Parent.VoteService)
 local QueueService = require(script.Parent.QueueService)
 local WardrobeService = require(script.Parent.WardrobeService)
 local FamiliarService = require(script.Parent.FamiliarService)
+local Events = require(script.Parent.Events)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -630,6 +631,15 @@ local function runMatch()
 	for _, c in participants do
 		if c.player and c.player.Parent then
 			DataService.addMatch(c.player)
+			Events.fire(
+				"MatchFinished",
+				c.player,
+				c.place or initialCount,
+				initialCount,
+				c.kills,
+				def.id,
+				tostring(c.player:GetAttribute("Class"))
+			)
 			task.spawn(DataService.save, c.player)
 		end
 	end

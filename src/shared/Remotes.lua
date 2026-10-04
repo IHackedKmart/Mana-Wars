@@ -18,6 +18,7 @@ local EVENTS = {
 	"VoteState", -- server -> client: (vote payload)
 	"TutorialDone", -- client -> server: the player finished (or skipped) the tutorial
 	"WardrobeUpdated", -- server -> client: (wardrobe snapshot: coins, parts, garments, equipped, listings)
+	"AchievementsUpdated", -- server -> client: (stats, unlocked achievements, daily reward streak)
 }
 
 local UNRELIABLE = {

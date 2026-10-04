@@ -38,6 +38,9 @@ State.WandChanged = Signal.new()
 State.Toast = Signal.new()
 State.MenusChanged = Signal.new()
 State.WardrobeChanged = Signal.new()
+State.AchievementsChanged = Signal.new()
+-- achievement progress and the daily reward streak (see AchievementService.snapshot)
+State.achievements = nil :: { stats: { [string]: number }, unlocked: { [string]: number }, daily: { [string]: any } }?
 
 function State.now(): number
 	return workspace:GetServerTimeNow()
@@ -133,6 +136,12 @@ function State.init()
 			snapshot.familiars = snapshot.familiars or {}
 			State.wardrobe = snapshot
 			State.WardrobeChanged:Fire()
+		end
+	end)
+	Remotes.event("AchievementsUpdated").OnClientEvent:Connect(function(snapshot)
+		if type(snapshot) == "table" then
+			State.achievements = snapshot
+			State.AchievementsChanged:Fire()
 		end
 	end)
 	Remotes.event("Announce").OnClientEvent:Connect(function(kind, data)

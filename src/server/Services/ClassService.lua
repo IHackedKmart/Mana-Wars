@@ -11,6 +11,7 @@ local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local Classes = require(Shared.Classes)
+local Events = require(script.Parent.Events)
 
 local ClassService = {}
 
@@ -134,6 +135,7 @@ function ClassService.init()
 			set[classId] = true
 			publish(player)
 			player:SetAttribute("Class", classId)
+			Events.fire("PassPurchased", player, classId)
 		end
 	end)
 
@@ -150,6 +152,7 @@ function ClassService.init()
 				return false, "You don't own the " .. class.name .. " kit yet"
 			end
 			player:SetAttribute("Class", class.id)
+			Events.fire("KitPicked", player, class.id)
 			return true, class.name .. " selected"
 		elseif action == "Buy" then
 			if ClassService.owns(player, class.id) then

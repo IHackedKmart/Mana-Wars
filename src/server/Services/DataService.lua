@@ -13,6 +13,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Events = require(script.Parent.Events)
 
 local DataService = {}
 
@@ -32,6 +33,10 @@ export type Profile = {
 	coins: number,
 	starter: boolean, -- has received the starter outfit
 	wardrobe: Wardrobe,
+	counters: { [string]: number }, -- lifetime counts for achievements (chests, forged, coffers...)
+	achievements: { [string]: number }, -- achievement id -> when it was unlocked (os.time)
+	daily: { last: number, streak: number, best: number }, -- daily reward: last day claimed (UTC day number)
+	onboarding: { [string]: boolean }, -- analytics onboarding steps already logged
 }
 
 local cache: { [Player]: Profile } = {}
@@ -62,7 +67,24 @@ local function newProfile(): Profile
 		coins = 0,
 		starter = false,
 		wardrobe = { parts = {}, garments = {}, familiars = {}, equipped = {}, listings = {} },
+		counters = {},
+		achievements = {},
+		daily = { last = 0, streak = 0, best = 0 },
+		onboarding = {},
 	}
+end
+
+-- A table of string -> number (or boolean) from saved data, dropping anything malformed.
+local function cleanMap(data: any, valueType: string): { [string]: any }
+	local out = {}
+	if type(data) == "table" then
+		for k, v in data do
+			if type(k) == "string" and type(v) == valueType then
+				out[k] = v
+			end
+		end
+	end
+	return out
 end
 
 local function fromSaved(data: any): Profile
@@ -76,6 +98,14 @@ local function fromSaved(data: any): Profile
 	p.tutorial = data.tutorial == true
 	p.coins = math.max(0, math.floor(tonumber(data.coins) or 0))
 	p.starter = data.starter == true
+	p.counters = cleanMap(data.counters, "number")
+	p.achievements = cleanMap(data.achievements, "number")
+	p.onboarding = cleanMap(data.onboarding, "boolean")
+	if type(data.daily) == "table" then
+		p.daily.last = tonumber(data.daily.last) or 0
+		p.daily.streak = tonumber(data.daily.streak) or 0
+		p.daily.best = tonumber(data.daily.best) or 0
+	end
 	local w = data.wardrobe
 	if type(w) == "table" then
 		p.wardrobe.parts = if type(w.parts) == "table" then w.parts else {}
@@ -96,6 +126,10 @@ local function toSaved(p: Profile, session: { job: string, t: number }?): { [str
 		coins = p.coins,
 		starter = p.starter,
 		wardrobe = p.wardrobe,
+		counters = p.counters,
+		achievements = p.achievements,
+		daily = p.daily,
+		onboarding = p.onboarding,
 		session = session,
 	}
 end
@@ -227,14 +261,26 @@ end
 
 function DataService.addKill(player: Player)
 	bump(player, "kills")
+	Events.fire("Kill", player)
 end
 
 function DataService.addWin(player: Player)
 	bump(player, "wins")
+	Events.fire("Win", player)
 end
 
 function DataService.addMatch(player: Player)
 	bump(player, "matches")
+end
+
+-- Adds to one of the lifetime counters achievements look at ("chests", "forged"...).
+function DataService.count(player: Player, counter: string, amount: number?)
+	local profile = cache[player]
+	if not profile then
+		return
+	end
+	profile.counters[counter] = (profile.counters[counter] or 0) + (amount or 1)
+	dirty[player] = true
 end
 
 -- The name to use for a DataStore / MemoryStore. Studio play tests get their own copies
@@ -281,6 +327,7 @@ function DataService.init()
 		if stats and not stats.tutorial then
 			stats.tutorial = true
 			task.spawn(DataService.save, player)
+			Events.fire("TutorialDone", player)
 		end
 	end)
 	Players.PlayerRemoving:Connect(function(player)

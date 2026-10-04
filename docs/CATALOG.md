@@ -325,3 +325,27 @@ Every item a coffer hands out can turn out to be a **familiar** instead (Tattere
 | **Night Eyes** | Every 12s, outlines the nearest enemy within 50 to 80 studs (only you see it) | 50 / 60 / 70 / 80 |
 | **Nip** | Every 8s, darts at an enemy within 14 studs for 2 to 5 damage | 2 / 3 / 4 / 5 |
 | **Last Ember** | When you fall, it bursts for 8 to 20 fire damage around you | 8 / 12 / 16 / 20 |
+
+## Achievements
+
+Each pays its Enchanted Coins once (315 in all). Players also get **3 coins a day** for logging in (days start at midnight UTC).
+
+| | Achievement | Goal | Reward |
+|---|---|---|---|
+| 📖 | **Apprentice No More** | Finish the tutorial. | 5 💰 |
+| ⚔️ | **First Blood** | Defeat another mage. | 5 💰 |
+| 🗡️ | **Duelist** | Defeat 25 mages. | 15 💰 |
+| 💀 | **Archmage of Ruin** | Defeat 100 mages. | 40 💰 |
+| 🏆 | **Victor** | Win a match. | 10 💰 |
+| 👑 | **Champion** | Win 10 matches. | 30 💰 |
+| 🌟 | **Living Legend** | Win 50 matches. | 100 💰 |
+| 🥉 | **Survivor** | Finish a match in the top 3. | 5 💰 |
+| 🎮 | **Regular** | Play 25 matches. | 15 💰 |
+| 🔮 | **Spellwright** | Forge 10 spells in the Spellforge. | 10 💰 |
+| 📦 | **Treasure Hunter** | Open 100 chests in matches. | 15 💰 |
+| 🎁 | **Coffer Collector** | Open 10 coffers. | 10 💰 |
+| 🧵 | **Tailor** | Stitch your own robe or hat at the Tailor's Loom. | 5 💰 |
+| 🐾 | **Beast Friend** | Find 5 familiars. | 10 💰 |
+| ✨ | **Something Shiny** | Find a Shiny familiar. | 20 💰 |
+| ⚖️ | **Merchant** | Sell something at the auction house. | 5 💰 |
+| 📅 | **Devoted** | Claim the daily reward 7 days in a row. | 15 💰 |

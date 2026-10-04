@@ -56,6 +56,12 @@ local PlayersService = {
 	GetPlayers = function()
 		return { player }
 	end,
+	GetPlayerByUserId = function(_, id)
+		return if id == player.UserId then player else nil
+	end,
+	GetNameFromUserIdAsync = function(_, id)
+		return "Player" .. id
+	end,
 }
 
 ---------------------------------------------------------------------------
@@ -79,7 +85,36 @@ local Marketplace = {
 -- an in-memory DataStore (profiles and the auction mailbox); no MemoryStore, so the auction
 -- house runs its in-server fallback
 local dataStores: { [string]: { [string]: any } } = {}
+-- ordered stores (the global leaderboard): key -> number, sorted on read
+local orderedStores: { [string]: { [string]: number } } = {}
 local DataStores = {
+	GetOrderedDataStore = function(_, name)
+		orderedStores[name] = orderedStores[name] or {}
+		local data = orderedStores[name]
+		return {
+			SetAsync = function(_, key, value)
+				data[key] = value
+			end,
+			GetSortedAsync = function(_, ascending, pageSize)
+				local items = {}
+				for key, value in data do
+					table.insert(items, { key = key, value = value })
+				end
+				table.sort(items, function(a, b)
+					return if ascending then a.value < b.value else a.value > b.value
+				end)
+				local page = {}
+				for i = 1, math.min(pageSize, #items) do
+					page[i] = items[i]
+				end
+				return {
+					GetCurrentPage = function()
+						return page
+					end,
+				}
+			end,
+		}
+	end,
 	GetDataStore = function(_, name)
 		dataStores[name] = dataStores[name] or {}
 		local data = dataStores[name]
@@ -98,6 +133,23 @@ local DataStores = {
 	end,
 }
 
+-- Roblox's analytics and badges, recording every call
+local analyticsLog: { { any } } = {}
+local AnalyticsMock = setmetatable({}, {
+	__index = function(_, method)
+		return function(_, ...)
+			table.insert(analyticsLog, { method, ... })
+		end
+	end,
+})
+local awardedBadges: { [number]: number } = {}
+local BadgeMock = {
+	AwardBadge = function(_, userId, badgeId)
+		awardedBadges[badgeId] = userId
+		return true
+	end,
+}
+
 local ServerRunService = Mock.runService(true)
 local server = Mock.realm({
 	RunService = ServerRunService,
@@ -106,6 +158,8 @@ local server = Mock.realm({
 	Lighting = Instance.new("Lighting"),
 	MarketplaceService = Marketplace,
 	DataStoreService = DataStores,
+	AnalyticsService = AnalyticsMock,
+	BadgeService = BadgeMock,
 }, true)
 
 local Combatants = server.load("Server/Services/Combatants")
@@ -132,6 +186,10 @@ for _, name in
 		"DataService",
 		"WardrobeService",
 		"AuctionService",
+		"AnalyticsTracker",
+		"AchievementService",
+		"DailyRewardService",
+		"LeaderboardService",
 	}
 do
 	local module = server.load("Server/Services/" .. name)
@@ -968,7 +1026,13 @@ do
 	Mock.step(0.1, true)
 	check(okBuy == true, "the buyer should get the part")
 	check(WardrobeService.coins(buyer) == 60 + 500 - 120, "the buyer pays the price")
-	check(State.wardrobe.coins == sellerCoins + 108, "the seller gets the price minus the 10% fee")
+	-- (their first sale also unlocks the Merchant achievement)
+	local merchant = server.load("Shared/Achievements").ById.Merchant.reward
+	check(
+		State.wardrobe.coins == sellerCoins + 108 + merchant,
+		"the seller gets the price minus the 10% fee (plus the Merchant achievement)"
+	)
+	check(State.achievements ~= nil and State.achievements.unlocked.Merchant ~= nil, "first sale: Merchant unlocked")
 	check(next(State.wardrobe.listings) == nil, "a sold listing is cleared")
 	local again = AuctionService.buy(buyer, listingId)
 	check(again == false, "a listing can only be bought once")
@@ -1499,6 +1563,7 @@ do
 	local far = mage("Far", 33, Vector3.new(200, 3, 0))
 	local ghost = mage("Ghost", 34, nil)
 	local byId = { [31] = speaker, [32] = near, [33] = far, [34] = ghost }
+	local realLookup = PlayersService.GetPlayerByUserId
 	PlayersService.GetPlayerByUserId = function(_, id)
 		return byId[id]
 	end
@@ -1518,8 +1583,169 @@ do
 	ServerConfig.Chat.Proximity = true
 	ClientConfig.Chat.Proximity = true
 	check(string.find(ChatController.note(), "70 studs", 1, true) ~= nil, "chat: the note gives the range")
-	PlayersService.GetPlayerByUserId = nil
+	PlayersService.GetPlayerByUserId = realLookup
 	checkWarnings("chat")
+end
+
+-- the daily reward, achievements, the global leaderboard and analytics
+do
+	local Events = server.load("Server/Services/Events")
+	local DailyRewardService = server.load("Server/Services/DailyRewardService")
+	local LeaderboardService = server.load("Server/Services/LeaderboardService")
+	local Defs = server.load("Shared/Achievements").ById
+	local AchievementsController = client.load("Client/Controllers/AchievementsController")
+	local profile = DataService.profile(player)
+	local realToday = DailyRewardService.today
+	local day = 20000
+	DailyRewardService.today = function()
+		return day
+	end
+
+	-- daily reward: 3 coins a day, and a 7-day streak unlocks Devoted on top
+	profile.daily = { last = day - 1, streak = 6, best = 6 }
+	profile.achievements.Devoted = nil
+	local before = WardrobeService.coins(player)
+	check(DailyRewardService.claim(player), "daily: the first visit of the day gets the reward")
+	Mock.step(0.2, true)
+	check(profile.daily.streak == 7 and profile.daily.best == 7, "daily: coming back the next day grows the streak")
+	check(
+		WardrobeService.coins(player) == before + ServerConfig.Rewards.DailyCoins + Defs.Devoted.reward,
+		"daily: +3 coins, and 7 days in a row unlocks Devoted"
+	)
+	check(not DailyRewardService.claim(player), "daily: only once a day")
+	day += 2
+	check(DailyRewardService.claim(player) and profile.daily.streak == 1, "daily: missing a day restarts the streak")
+	check(profile.daily.best == 7, "daily: the best streak is kept")
+	Mock.step(0.2, true)
+	check(
+		State.achievements and State.achievements.daily.claimedToday == true,
+		"daily: the client knows it's collected"
+	)
+
+	-- achievements: unlocks pay coins once and award badges that are set up
+	ServerConfig.Achievements.BadgeIds.Victor = 777
+	profile.achievements.FirstBlood = nil
+	profile.achievements.Victor = nil
+	profile.kills, profile.wins = 0, 0
+	before = WardrobeService.coins(player)
+	DataService.addKill(player)
+	DataService.addWin(player)
+	Mock.step(0.2, true)
+	check(profile.achievements.FirstBlood and profile.achievements.Victor, "achievements: first kill and first win")
+	check(
+		WardrobeService.coins(player) == before + Defs.FirstBlood.reward + Defs.Victor.reward,
+		"achievements: each pays its coins"
+	)
+	check(awardedBadges[777] == player.UserId, "achievements: the Victor badge is awarded")
+	DataService.addKill(player)
+	Mock.step(0.2, true)
+	check(
+		WardrobeService.coins(player) == before + Defs.FirstBlood.reward + Defs.Victor.reward,
+		"achievements: only pay once"
+	)
+	profile.counters.forged = nil
+	profile.achievements.Spellwright = nil
+	for _ = 1, 9 do
+		Events.fire("Forged", player)
+	end
+	Mock.step(0.2, true)
+	check(State.achievements.stats.forged == 9 and not profile.achievements.Spellwright, "achievements: 9 of 10")
+	Events.fire("Forged", player)
+	Events.fire("FamiliarFound", player, { shiny = true })
+	Mock.step(0.2, true)
+	check(profile.achievements.Spellwright ~= nil, "achievements: forging 10 spells unlocks Spellwright")
+	check(profile.achievements.Shiny ~= nil, "achievements: a shiny familiar unlocks Something Shiny")
+
+	-- the window, from the Dock
+	clickNamed(gui("Dock"), "AchievementsButton")
+	local window = gui("Achievements")
+	check(window.Enabled and AchievementsController.isOpen(), "achievements: the Dock button opens the window")
+	local victor = window:FindFirstChild("Achievement_Victor", true)
+	check(
+		victor and string.find(textOf(victor:FindFirstChild("Status")) or "", "Unlocked", 1, true),
+		"achievements: unlocked ones say so"
+	)
+	local regular = window:FindFirstChild("Achievement_Regular", true)
+	local progress = regular and regular:FindFirstChild("Progress")
+	check(
+		progress and string.find(textOf(progress:FindFirstChildOfClass("TextLabel")) or "", "/ 25", 1, true),
+		"achievements: locked ones show progress"
+	)
+	check(
+		string.find(textOf(window:FindFirstChild("DailyText", true)) or "", "Streak: 1", 1, true),
+		"achievements: the daily streak banner"
+	)
+	shot("17_achievements")
+	AchievementsController.close()
+	check(not window.Enabled, "achievements: the window closes")
+
+	-- the global leaderboard: scores are written after a match and read back for the board
+	Events.fire("MatchFinished", player, 1, 12, 2, "Verdant", "Apprentice")
+	Mock.step(0.2, true)
+	LeaderboardService.refresh()
+	local top = LeaderboardService.top.wins
+	check(
+		top[1] ~= nil and top[1].userId == player.UserId and top[1].value == profile.wins,
+		"leaderboard: wins go up and come back down"
+	)
+	check(string.find(LeaderboardService.columnText(top), "🥇", 1, true) ~= nil, "leaderboard: medals")
+	check(
+		string.find(LeaderboardService.columnText({}), "Nobody yet", 1, true) ~= nil,
+		"leaderboard: an empty list says so"
+	)
+
+	-- analytics
+	local function logged(method: string, match: ((any) -> boolean)?): boolean
+		for _, call in analyticsLog do
+			if call[1] == method and (match == nil or match(call)) then
+				return true
+			end
+		end
+		return false
+	end
+	check(
+		logged("LogOnboardingFunnelStepEvent", function(c)
+			return c[3] == 1
+		end),
+		"analytics: onboarding step 1 (joined)"
+	)
+	check(
+		logged("LogOnboardingFunnelStepEvent", function(c)
+			return c[3] == 4
+		end),
+		"analytics: onboarding step 4 (finished a match)"
+	)
+	check(
+		logged("LogEconomyEvent", function(c)
+			return c[7] == "TimedReward" and c[8] == "DailyLogin" and c[5] == ServerConfig.Rewards.DailyCoins
+		end),
+		"analytics: the daily reward is a TimedReward coin source"
+	)
+	check(
+		logged("LogEconomyEvent", function(c)
+			return c[8] == "Coffer1" or c[8] == "Coffer2"
+		end),
+		"analytics: coffers are logged as coin sinks"
+	)
+	check(not logged("LogEconomyEvent", function(c)
+		return c[5] == 100000
+	end), "analytics: dev panel coins are left out")
+	check(
+		logged("LogCustomEvent", function(c)
+			return c[3] == "AchievementUnlocked"
+		end),
+		"analytics: achievements"
+	)
+	check(
+		logged("LogCustomEvent", function(c)
+			return c[3] == "MatchFinished" and c[4] == 1
+		end),
+		"analytics: match results"
+	)
+
+	DailyRewardService.today = realToday
+	ServerConfig.Achievements.BadgeIds.Victor = nil
+	checkWarnings("retention")
 end
 
 if failures > 0 then

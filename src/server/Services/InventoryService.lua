@@ -23,6 +23,7 @@ local GameState = require(script.Parent.GameState)
 local CastingService = require(script.Parent.CastingService)
 local StatusService = require(script.Parent.StatusService)
 local FX = require(script.Parent.FX)
+local Events = require(script.Parent.Events)
 
 type Combatant = Combatants.Combatant
 type WandItem = Items.WandItem
@@ -661,6 +662,9 @@ actions.Forge = function(c, args)
 	end
 	local spell = Items.newSpell(recipe, nil, Items.rarityOfRecipe(recipe, LootTables.partRarity))
 	table.insert(inv.spells, spell)
+	if c.player then
+		Events.fire("Forged", c.player)
+	end
 	return true, "Forged " .. spell.name, spell.uid
 end
 

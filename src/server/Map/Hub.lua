@@ -35,8 +35,11 @@ export type HubInfo = {
 	dummySpots: { DummySpot },
 	joinPortal: BasePart,
 	boardText: TextLabel, -- the live "next match" board
+	leaderboard: Leaderboard, -- the Hall of Champions (filled in by LeaderboardService)
 	floorY: number,
 }
+
+export type Leaderboard = { wins: TextLabel, kills: TextLabel, footer: TextLabel }
 
 -- Far enough from the arena and the library that they never get in each other's way.
 Hub.CENTER_Z = 700
@@ -100,6 +103,94 @@ local function board(
 		TextYAlignment = Enum.TextYAlignment.Top,
 		TextColor3 = Color3.fromRGB(255, 235, 190),
 	}, gui)
+end
+
+-- The Hall of Champions: a tall gilded board with two columns, most wins and most kills.
+local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): Leaderboard
+	local model = Build.model("Leaderboard", parent)
+	local size = Vector2.new(30, 17)
+	local face = part(model, "BoardFace", Vector3.new(size.X, size.Y, 0.6), cf, M.WoodPlanks, Props.DARK_WOOD)
+	part(
+		model,
+		"BoardTrim",
+		Vector3.new(size.X + 1.2, size.Y + 1.2, 0.4),
+		cf * CFrame.new(0, 0, 0.3),
+		M.Metal,
+		Props.GOLD
+	)
+	-- a crest on top and pillars at the sides
+	part(model, "Crest", Vector3.new(8, 3, 0.8), cf * CFrame.new(0, size.Y / 2 + 1.6, 0.1), M.Metal, Props.GOLD)
+	local gem = part(
+		model,
+		"CrestGem",
+		Vector3.new(1.6, 1.6, 0.4),
+		cf * CFrame.new(0, size.Y / 2 + 1.6, -0.4) * CFrame.Angles(0, 0, math.rad(45)),
+		M.Neon,
+		Props.ARCANE,
+		{ CanCollide = false }
+	)
+	Build.make("PointLight", { Color = Props.ARCANE, Range = 16, Brightness = 1.5 }, gem)
+	local postH = cf.Position.Y + size.Y / 2 - groundY
+	for side = -1, 1, 2 do
+		part(
+			model,
+			"BoardPillar",
+			Vector3.new(1.6, postH + 2, 1.6),
+			cf * CFrame.new(side * (size.X / 2 + 1.2), groundY + (postH + 2) / 2 - cf.Position.Y, 0.2),
+			M.Marble,
+			Props.MARBLE
+		)
+		Props.lantern(model, (cf * CFrame.new(side * (size.X / 2 + 1.2), size.Y / 2 + 2, 0.2)).Position, 1)
+	end
+	local gui = Build.make("SurfaceGui", { Face = Enum.NormalId.Front, PixelsPerStud = 24, LightInfluence = 0 }, face)
+	Build.make("TextLabel", {
+		Name = "Title",
+		Size = UDim2.fromScale(1, 0.14),
+		Position = UDim2.fromScale(0, 0.02),
+		BackgroundTransparency = 1,
+		Text = "🏆 Hall of Champions",
+		Font = Enum.Font.Fantasy,
+		TextScaled = true,
+		TextColor3 = Color3.fromRGB(255, 215, 110),
+	}, gui)
+	local function column(x: number, heading: string): TextLabel
+		Build.make("TextLabel", {
+			Name = "Heading",
+			Size = UDim2.fromScale(0.44, 0.08),
+			Position = UDim2.fromScale(x, 0.17),
+			BackgroundTransparency = 1,
+			Text = heading,
+			Font = Enum.Font.GothamBlack,
+			TextScaled = true,
+			TextColor3 = Color3.fromRGB(230, 205, 255),
+		}, gui)
+		return Build.make("TextLabel", {
+			Name = "Column",
+			Size = UDim2.fromScale(0.44, 0.66),
+			Position = UDim2.fromScale(x, 0.26),
+			BackgroundTransparency = 1,
+			Text = "Loading...",
+			RichText = true,
+			Font = Enum.Font.GothamBold,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			TextColor3 = Color3.fromRGB(255, 235, 190),
+		}, gui)
+	end
+	local wins = column(0.04, "⚔️ MOST WINS")
+	local kills = column(0.52, "💀 MOST KILLS")
+	local footer = Build.make("TextLabel", {
+		Name = "Footer",
+		Size = UDim2.fromScale(0.92, 0.05),
+		Position = UDim2.fromScale(0.04, 0.93),
+		BackgroundTransparency = 1,
+		Text = "All servers, all time",
+		Font = Enum.Font.Gotham,
+		TextScaled = true,
+		TextColor3 = Color3.fromRGB(170, 160, 190),
+	}, gui)
+	return { wins = wins, kills = kills, footer = footer }
 end
 
 local function fountain(parent: Instance, animated: Instance, c: Vector3)
@@ -760,7 +851,7 @@ function Hub.build(): HubInfo
 		local deg = math.deg(a) % 360
 		-- keep the portal, the range gate and the towers clear
 		local blocked = deg < 32 or deg > 328 or (deg > 248 and deg < 292)
-		for _, t in { 150, 210, 305, 59 } do
+		for _, t in { 150, 210, 305, 59, 90 } do
 			if math.abs(deg - t) < 9 then
 				blocked = true
 			end
@@ -828,6 +919,9 @@ function Hub.build(): HubInfo
 		"Waiting for players"
 	)
 
+	-- behind the spawn, facing the plaza: the global leaderboard
+	local leaderboard = hallOfChampions(model, CFrame.lookAt(at(0, 99, 10.5), at(0, 0, 10.5)), y + 0.1)
+
 	---------------------------------------------------------------- containment + the rock underneath
 	local segments = 48
 	for i = 1, segments do
@@ -880,6 +974,7 @@ function Hub.build(): HubInfo
 		dummySpots = dummySpots,
 		joinPortal = joinPortal,
 		boardText = boardText,
+		leaderboard = leaderboard,
 		floorY = y,
 	}
 end

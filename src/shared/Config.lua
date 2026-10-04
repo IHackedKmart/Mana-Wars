@@ -166,6 +166,28 @@ Config.Chat = {
 	Range = 70, -- studs
 }
 
+-- Daily reward, achievements, leaderboard, analytics -----------------------------
+Config.Rewards = {
+	DailyCoins = 3, -- Enchanted Coins for the first visit of each day (days start at midnight UTC)
+}
+
+Config.Achievements = {
+	-- achievement id -> Roblox badge id. Create badges on the Creator Dashboard (your experience ->
+	-- Engagement -> Badges) and paste their ids here, e.g. { Victor = 2150000001 }. Achievements work
+	-- without badges; ones with an id here also award the badge (including to players who unlocked
+	-- them before you added it).
+	BadgeIds = {} :: { [string]: number },
+}
+
+Config.Leaderboard = {
+	Size = 10, -- names shown per column on the Hall of Champions board
+	RefreshSeconds = 120, -- how often each server re-reads the global top lists
+}
+
+Config.Analytics = {
+	Enabled = true, -- send events to Roblox's analytics (Creator Dashboard -> Analytics)
+}
+
 -- Developer tools ----------------------------------------------------------
 -- The 🛠️ Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
 -- everyone in Studio, the experience's owner in live servers, and the user ids listed here

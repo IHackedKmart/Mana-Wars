@@ -75,12 +75,16 @@ local Players = {
 	GetPlayerFromCharacter = function(_, model)
 		return if model == player.Character then player else nil
 	end,
+	GetPlayerByUserId = function(_, id)
+		return if id == player.UserId then player else nil
+	end,
 	CreateHumanoidModelFromDescription = function(_, _desc, _rig)
 		return makeBody("Bot")
 	end,
 }
 
 local savedStats = {}
+local leaderboards: { [string]: { [string]: number } } = {}
 local server = Mock.realm({
 	RunService = Mock.runService(true),
 	Players = Players,
@@ -96,6 +100,31 @@ local server = Mock.realm({
 		PromptPremiumPurchase = function() end,
 	},
 	DataStoreService = {
+		-- the global leaderboard: remembers scores, reads them back highest first
+		GetOrderedDataStore = function(_, name)
+			leaderboards[name] = leaderboards[name] or {}
+			local data = leaderboards[name]
+			return {
+				SetAsync = function(_, key, value)
+					data[key] = value
+				end,
+				GetSortedAsync = function(_, _ascending, size)
+					local items = {}
+					for key, value in data do
+						table.insert(items, { key = key, value = value })
+					end
+					table.sort(items, function(a, b)
+						return a.value > b.value
+					end)
+					local page = table.move(items, 1, math.min(size, #items), 1, {})
+					return {
+						GetCurrentPage = function()
+							return page
+						end,
+					}
+				end,
+			}
+		end,
 		GetDataStore = function()
 			return {
 				GetAsync = function(_, key)
@@ -388,9 +417,38 @@ end
 local DataService = server.load("Server/Services/DataService")
 local profile = DataService.profile(player)
 local coins = if profile then profile.coins else -1
-print(string.format("coins: %d (60 to start + %d from placements)", coins, expectedCoins))
-if coins ~= 60 + expectedCoins then
-	fail(string.format("coins should be 60 + %d from placements, got %d", expectedCoins, coins))
+-- the Hall of Champions in the Plaza lists the scores written after each match
+local coinsBeforeBoard = if profile then profile.coins else -1
+local achievementsBeforeBoard = if profile then table.clone(profile.achievements) else {}
+do
+	local LeaderboardService = server.load("Server/Services/LeaderboardService")
+	local MapService = server.load("Server/Services/MapService")
+	if profile and profile.wins == 0 then
+		DataService.addWin(player) -- (bots won both matches: give the board something to show)
+		Mock.step(0.2)
+	end
+	LeaderboardService.push(player)
+	LeaderboardService.refresh()
+	local board = MapService.hub and MapService.hub.leaderboard
+	if not board or string.find(board.footer.Text, "All servers", 1, true) == nil then
+		fail("the leaderboard board should be online")
+	elseif string.find(board.wins.Text, player.Name, 1, true) == nil then
+		fail("the leaderboard should list the player's wins: " .. board.wins.Text)
+	end
+	print("leaderboard: " .. string.gsub(board and board.wins.Text or "", "\n", " | "))
+end
+
+-- plus today's daily reward and any achievements the matches unlocked
+local Achievements = server.load("Shared/Achievements")
+local extra = server.load("Shared/Config").Rewards.DailyCoins
+for id in achievementsBeforeBoard do
+	extra += Achievements.ById[id].reward
+end
+print(
+	string.format("coins: %d (60 to start + %d from placements + %d daily/achievements)", coins, expectedCoins, extra)
+)
+if coins ~= 60 + expectedCoins + extra then
+	fail(string.format("coins should be 60 + %d from placements + %d, got %d", expectedCoins, extra, coins))
 end
 if not stats or stats.coins ~= coins then
 	fail("coins should be saved with the profile")

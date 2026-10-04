@@ -167,7 +167,7 @@ function DevService.unlockAll(player: Player): (boolean, string)
 	ClassService.setDevMode(player, "all")
 	player:SetAttribute("DevFreeCoffers", true)
 	player:SetAttribute("DevLoadout", true)
-	WardrobeService.addCoins(player, 100000, nil)
+	WardrobeService.addCoins(player, 100000, nil, { type = "Dev" })
 	local c = combatantOf(player)
 	if c and Combatants.canAct(c) then
 		InventoryService.giveDevLoadout(c)
@@ -274,7 +274,7 @@ actions.Coins = function(player, args)
 		end
 		return true, "Coins set to 0"
 	end
-	WardrobeService.addCoins(player, amount, nil)
+	WardrobeService.addCoins(player, amount, nil, { type = "Dev" })
 	return true, "+" .. amount .. " coins"
 end
 

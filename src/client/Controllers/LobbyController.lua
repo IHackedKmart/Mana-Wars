@@ -28,6 +28,7 @@ local LobbyController = {}
 LobbyController.onOpenGrimoire = nil :: (() -> ())?
 LobbyController.onOpenWardrobe = nil :: ((tab: string?) -> ())?
 LobbyController.onOpenAuction = nil :: (() -> ())?
+LobbyController.onOpenAchievements = nil :: (() -> ())?
 
 local C = Theme.Colors
 local player = Players.LocalPlayer
@@ -40,6 +41,7 @@ local classGrid: ScrollingFrame
 local classButton: TextButton
 local wardrobeButton: TextButton
 local auctionButton: TextButton
+local achievementsButton: TextButton
 local coinsPill: TextLabel
 local spectateBar: Frame
 local spectateName: TextLabel
@@ -692,6 +694,18 @@ function LobbyController.init()
 		parent = Dock.get(),
 	})
 	auctionButton.Name = "AuctionButton"
+	achievementsButton = Widgets.button("🏆  Achievements", {
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(150, 110, 30),
+		layoutOrder = 7,
+		onClick = function()
+			if LobbyController.onOpenAchievements then
+				LobbyController.onOpenAchievements()
+			end
+		end,
+		parent = Dock.get(),
+	})
+	achievementsButton.Name = "AchievementsButton"
 	coinsPill = Widgets.label({
 		Name = "CoinsPill",
 		Text = "💰 0 Enchanted Coins",
@@ -702,7 +716,7 @@ function LobbyController.init()
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.3,
 		Size = UDim2.fromOffset(Dock.WIDTH, 32),
-		LayoutOrder = 7,
+		LayoutOrder = 8,
 		Parent = Dock.get(),
 	})
 	Create.corner(16).Parent = coinsPill
@@ -725,6 +739,7 @@ function LobbyController.init()
 		classButton.Visible = inLobby
 		wardrobeButton.Visible = inLobby and State.inHub()
 		auctionButton.Visible = wardrobeButton.Visible
+		achievementsButton.Visible = inLobby
 		coinsPill.Visible = inLobby
 		if not inLobby and classPanel.Visible then
 			setKitShop(false)

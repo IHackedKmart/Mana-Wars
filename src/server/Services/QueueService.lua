@@ -16,6 +16,7 @@ local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
 local MapService = require(script.Parent.MapService)
 local VoteService = require(script.Parent.VoteService)
+local Events = require(script.Parent.Events)
 
 type Combatant = Combatants.Combatant
 
@@ -82,6 +83,7 @@ function QueueService.join(player: Player): (boolean, string)
 	end
 	setQueued(c, true)
 	moveToRest(c)
+	Events.fire("QueueJoined", player)
 	return true, "You joined the queue! Vote for the next map."
 end
 

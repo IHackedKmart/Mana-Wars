@@ -37,6 +37,211 @@
       </Properties>
       <Item class="ModuleScript" referent="4">
         <Properties>
+          <string name="Name">Achievements</string>
+          <string name="Source"><![CDATA[--!strict
+-- Achievements: lifetime goals that pay out Enchanted Coins once. Progress comes from the
+-- player's saved stats (see AchievementService.statOf). To also hand out a Roblox badge, create
+-- one on the Creator Dashboard and put its id in Config.Achievements.BadgeIds under the same id.
+
+export type Achievement = {
+	id: string,
+	name: string,
+	icon: string,
+	description: string,
+	stat: string, -- which lifetime stat counts toward it
+	goal: number,
+	reward: number, -- Enchanted Coins
+}
+
+local Achievements = {}
+
+Achievements.List = {
+	{
+		id = "Graduate",
+		name = "Apprentice No More",
+		icon = "📖",
+		description = "Finish the tutorial.",
+		stat = "tutorial",
+		goal = 1,
+		reward = 5,
+	},
+	{
+		id = "FirstBlood",
+		name = "First Blood",
+		icon = "⚔️",
+		description = "Defeat another mage.",
+		stat = "kills",
+		goal = 1,
+		reward = 5,
+	},
+	{
+		id = "Duelist",
+		name = "Duelist",
+		icon = "🗡️",
+		description = "Defeat 25 mages.",
+		stat = "kills",
+		goal = 25,
+		reward = 15,
+	},
+	{
+		id = "Ruin",
+		name = "Archmage of Ruin",
+		icon = "💀",
+		description = "Defeat 100 mages.",
+		stat = "kills",
+		goal = 100,
+		reward = 40,
+	},
+	{
+		id = "Victor",
+		name = "Victor",
+		icon = "🏆",
+		description = "Win a match.",
+		stat = "wins",
+		goal = 1,
+		reward = 10,
+	},
+	{
+		id = "Champion",
+		name = "Champion",
+		icon = "👑",
+		description = "Win 10 matches.",
+		stat = "wins",
+		goal = 10,
+		reward = 30,
+	},
+	{
+		id = "Legend",
+		name = "Living Legend",
+		icon = "🌟",
+		description = "Win 50 matches.",
+		stat = "wins",
+		goal = 50,
+		reward = 100,
+	},
+	{
+		id = "Survivor",
+		name = "Survivor",
+		icon = "🥉",
+		description = "Finish a match in the top 3.",
+		stat = "top3",
+		goal = 1,
+		reward = 5,
+	},
+	{
+		id = "Regular",
+		name = "Regular",
+		icon = "🎮",
+		description = "Play 25 matches.",
+		stat = "matches",
+		goal = 25,
+		reward = 15,
+	},
+	{
+		id = "Spellwright",
+		name = "Spellwright",
+		icon = "🔮",
+		description = "Forge 10 spells in the Spellforge.",
+		stat = "forged",
+		goal = 10,
+		reward = 10,
+	},
+	{
+		id = "TreasureHunter",
+		name = "Treasure Hunter",
+		icon = "📦",
+		description = "Open 100 chests in matches.",
+		stat = "chests",
+		goal = 100,
+		reward = 15,
+	},
+	{
+		id = "CofferCollector",
+		name = "Coffer Collector",
+		icon = "🎁",
+		description = "Open 10 coffers.",
+		stat = "coffers",
+		goal = 10,
+		reward = 10,
+	},
+	{
+		id = "Tailor",
+		name = "Tailor",
+		icon = "🧵",
+		description = "Stitch your own robe or hat at the Tailor's Loom.",
+		stat = "crafted",
+		goal = 1,
+		reward = 5,
+	},
+	{
+		id = "BeastFriend",
+		name = "Beast Friend",
+		icon = "🐾",
+		description = "Find 5 familiars.",
+		stat = "familiars",
+		goal = 5,
+		reward = 10,
+	},
+	{
+		id = "Shiny",
+		name = "Something Shiny",
+		icon = "✨",
+		description = "Find a Shiny familiar.",
+		stat = "shiny",
+		goal = 1,
+		reward = 20,
+	},
+	{
+		id = "Merchant",
+		name = "Merchant",
+		icon = "⚖️",
+		description = "Sell something at the auction house.",
+		stat = "sold",
+		goal = 1,
+		reward = 5,
+	},
+	{
+		id = "Devoted",
+		name = "Devoted",
+		icon = "📅",
+		description = "Claim the daily reward 7 days in a row.",
+		stat = "streak",
+		goal = 7,
+		reward = 15,
+	},
+} :: { Achievement }
+
+Achievements.ById = {} :: { [string]: Achievement }
+for _, a in Achievements.List do
+	Achievements.ById[a.id] = a
+end
+
+-- Every stat any achievement counts.
+Achievements.Stats = {} :: { string }
+do
+	local seen = {}
+	for _, a in Achievements.List do
+		if not seen[a.stat] then
+			seen[a.stat] = true
+			table.insert(Achievements.Stats, a.stat)
+		end
+	end
+end
+
+function Achievements.totalReward(): number
+	local total = 0
+	for _, a in Achievements.List do
+		total += a.reward
+	end
+	return total
+end
+
+return Achievements
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="5">
+        <Properties>
           <string name="Name">Classes</string>
           <string name="Source"><![CDATA[--!strict
 -- Starting kits, sold in tiers from a free Apprentice up to $25 Archmage kits.
@@ -696,7 +901,7 @@ return Classes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="5">
+      <Item class="ModuleScript" referent="6">
         <Properties>
           <string name="Name">Config</string>
           <string name="Source"><![CDATA[--!strict
@@ -867,6 +1072,28 @@ Config.Chat = {
 	Range = 70, -- studs
 }
 
+-- Daily reward, achievements, leaderboard, analytics -----------------------------
+Config.Rewards = {
+	DailyCoins = 3, -- Enchanted Coins for the first visit of each day (days start at midnight UTC)
+}
+
+Config.Achievements = {
+	-- achievement id -> Roblox badge id. Create badges on the Creator Dashboard (your experience ->
+	-- Engagement -> Badges) and paste their ids here, e.g. { Victor = 2150000001 }. Achievements work
+	-- without badges; ones with an id here also award the badge (including to players who unlocked
+	-- them before you added it).
+	BadgeIds = {} :: { [string]: number },
+}
+
+Config.Leaderboard = {
+	Size = 10, -- names shown per column on the Hall of Champions board
+	RefreshSeconds = 120, -- how often each server re-reads the global top lists
+}
+
+Config.Analytics = {
+	Enabled = true, -- send events to Roblox's analytics (Creator Dashboard -> Analytics)
+}
+
 -- Developer tools ----------------------------------------------------------
 -- The 🛠️ Dev panel (free coins, every item and familiar, kit unlocks, match controls) opens for:
 -- everyone in Studio, the experience's owner in live servers, and the user ids listed here
@@ -881,7 +1108,7 @@ return Config
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="6">
+      <Item class="ModuleScript" referent="7">
         <Properties>
           <string name="Name">Consumables</string>
           <string name="Source"><![CDATA[--!strict
@@ -947,7 +1174,7 @@ return Consumables
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="7">
+      <Item class="ModuleScript" referent="8">
         <Properties>
           <string name="Name">Cosmetics</string>
           <string name="Source"><![CDATA[--!strict
@@ -2049,7 +2276,7 @@ return Cosmetics
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="8">
+      <Item class="ModuleScript" referent="9">
         <Properties>
           <string name="Name">Familiars</string>
           <string name="Source"><![CDATA[--!strict
@@ -2792,7 +3019,7 @@ return Familiars
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="9">
+      <Item class="ModuleScript" referent="10">
         <Properties>
           <string name="Name">Items</string>
           <string name="Source"><![CDATA[--!strict
@@ -2955,7 +3182,7 @@ return Items
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="10">
+      <Item class="ModuleScript" referent="11">
         <Properties>
           <string name="Name">LootTables</string>
           <string name="Source"><![CDATA[--!strict
@@ -3196,7 +3423,7 @@ return LootTables
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="11">
+      <Item class="ModuleScript" referent="12">
         <Properties>
           <string name="Name">OutfitBuilder</string>
           <string name="Source"><![CDATA[--!strict
@@ -4382,7 +4609,7 @@ return OutfitBuilder
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="12">
+      <Item class="ModuleScript" referent="13">
         <Properties>
           <string name="Name">ProjectileSim</string>
           <string name="Source"><![CDATA[--!strict
@@ -4526,7 +4753,7 @@ return ProjectileSim
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="13">
+      <Item class="ModuleScript" referent="14">
         <Properties>
           <string name="Name">Rarity</string>
           <string name="Source"><![CDATA[--!strict
@@ -4596,7 +4823,7 @@ return Rarity
 ]]></string>
         </Properties>
       </Item>
-      <Item class="ModuleScript" referent="14">
+      <Item class="ModuleScript" referent="15">
         <Properties>
           <string name="Name">Remotes</string>
           <string name="Source"><![CDATA[-- Creates (server) or waits for (client) every RemoteEvent / RemoteFunction the game uses.
@@ -4619,6 +4846,7 @@ local EVENTS = {
 	"VoteState", -- server -> client: (vote payload)
 	"TutorialDone", -- client -> server: the player finished (or skipped) the tutorial
 	"WardrobeUpdated", -- server -> client: (wardrobe snapshot: coins, parts, garments, equipped, listings)
+	"AchievementsUpdated", -- server -> client: (stats, unlocked achievements, daily reward streak)
 }
 
 local UNRELIABLE = {
@@ -4683,11 +4911,11 @@ return Remotes
 ]]></string>
         </Properties>
       </Item>
-      <Item class="Folder" referent="15">
+      <Item class="Folder" referent="16">
         <Properties>
           <string name="Name">Spells</string>
         </Properties>
-        <Item class="ModuleScript" referent="16">
+        <Item class="ModuleScript" referent="17">
           <Properties>
             <string name="Name">PremadeSpells</string>
             <string name="Source"><![CDATA[--!strict
@@ -5282,7 +5510,7 @@ return PremadeSpells
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="17">
+        <Item class="ModuleScript" referent="18">
           <Properties>
             <string name="Name">SpellBuilder</string>
             <string name="Source"><![CDATA[--!strict
@@ -5788,7 +6016,7 @@ return SpellBuilder
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="18">
+        <Item class="ModuleScript" referent="19">
           <Properties>
             <string name="Name">SpellNames</string>
             <string name="Source"><![CDATA[--!strict
@@ -5847,7 +6075,7 @@ return SpellNames
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="19">
+        <Item class="ModuleScript" referent="20">
           <Properties>
             <string name="Name">SpellParts</string>
             <string name="Source"><![CDATA[--!strict
@@ -6987,7 +7215,7 @@ return SpellParts
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="20">
+        <Item class="ModuleScript" referent="21">
           <Properties>
             <string name="Name">SpellTypes</string>
             <string name="Source"><![CDATA[--!strict
@@ -7130,11 +7358,11 @@ return {}
           </Properties>
         </Item>
       </Item>
-      <Item class="Folder" referent="21">
+      <Item class="Folder" referent="22">
         <Properties>
           <string name="Name">Util</string>
         </Properties>
-        <Item class="ModuleScript" referent="22">
+        <Item class="ModuleScript" referent="23">
           <Properties>
             <string name="Name">Geometry</string>
             <string name="Source"><![CDATA[--!strict
@@ -7224,7 +7452,7 @@ return Geometry
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="23">
+        <Item class="ModuleScript" referent="24">
           <Properties>
             <string name="Name">Signal</string>
             <string name="Source"><![CDATA[--!strict
@@ -7269,7 +7497,7 @@ return Signal
           </Properties>
         </Item>
       </Item>
-      <Item class="ModuleScript" referent="24">
+      <Item class="ModuleScript" referent="25">
         <Properties>
           <string name="Name">WandGenerator</string>
           <string name="Source"><![CDATA[--!strict
@@ -7658,11 +7886,11 @@ return WandGenerator
       </Item>
     </Item>
   </Item>
-  <Item class="ServerScriptService" referent="25">
+  <Item class="ServerScriptService" referent="26">
     <Properties>
       <string name="Name">ServerScriptService</string>
     </Properties>
-    <Item class="Script" referent="26">
+    <Item class="Script" referent="27">
       <Properties>
         <string name="Name">Server</string>
         <token name="RunContext">0</token>
@@ -7694,6 +7922,10 @@ local order = {
 	"WardrobeService",
 	"FamiliarService",
 	"AuctionService",
+	"AnalyticsTracker",
+	"AchievementService",
+	"DailyRewardService",
+	"LeaderboardService",
 	"BotService",
 	"MatchService",
 	"DevService",
@@ -7712,11 +7944,11 @@ loaded.MatchService.start()
 print("[Mana Wars] server ready")
 ]]></string>
       </Properties>
-      <Item class="Folder" referent="27">
+      <Item class="Folder" referent="28">
         <Properties>
           <string name="Name">Map</string>
         </Properties>
-        <Item class="ModuleScript" referent="28">
+        <Item class="ModuleScript" referent="29">
           <Properties>
             <string name="Name">Build</string>
             <string name="Source"><![CDATA[-- Tiny helpers for building anchored geometry from code.
@@ -7800,7 +8032,7 @@ return Build
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="29">
+        <Item class="ModuleScript" referent="30">
           <Properties>
             <string name="Name">Decor</string>
             <string name="Source"><![CDATA[-- Decoration scattered over the arenas: trees, rocks, flowers and ground clutter for every biome.
@@ -8919,7 +9151,7 @@ return Decor
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="30">
+        <Item class="ModuleScript" referent="31">
           <Properties>
             <string name="Name">Hub</string>
             <string name="Source"><![CDATA[-- Arcanum Plaza: the hub every player spawns in. Hang out, practise as long as you like, and walk
@@ -8959,8 +9191,11 @@ export type HubInfo = {
 	dummySpots: { DummySpot },
 	joinPortal: BasePart,
 	boardText: TextLabel, -- the live "next match" board
+	leaderboard: Leaderboard, -- the Hall of Champions (filled in by LeaderboardService)
 	floorY: number,
 }
+
+export type Leaderboard = { wins: TextLabel, kills: TextLabel, footer: TextLabel }
 
 -- Far enough from the arena and the library that they never get in each other's way.
 Hub.CENTER_Z = 700
@@ -9024,6 +9259,94 @@ local function board(
 		TextYAlignment = Enum.TextYAlignment.Top,
 		TextColor3 = Color3.fromRGB(255, 235, 190),
 	}, gui)
+end
+
+-- The Hall of Champions: a tall gilded board with two columns, most wins and most kills.
+local function hallOfChampions(parent: Instance, cf: CFrame, groundY: number): Leaderboard
+	local model = Build.model("Leaderboard", parent)
+	local size = Vector2.new(30, 17)
+	local face = part(model, "BoardFace", Vector3.new(size.X, size.Y, 0.6), cf, M.WoodPlanks, Props.DARK_WOOD)
+	part(
+		model,
+		"BoardTrim",
+		Vector3.new(size.X + 1.2, size.Y + 1.2, 0.4),
+		cf * CFrame.new(0, 0, 0.3),
+		M.Metal,
+		Props.GOLD
+	)
+	-- a crest on top and pillars at the sides
+	part(model, "Crest", Vector3.new(8, 3, 0.8), cf * CFrame.new(0, size.Y / 2 + 1.6, 0.1), M.Metal, Props.GOLD)
+	local gem = part(
+		model,
+		"CrestGem",
+		Vector3.new(1.6, 1.6, 0.4),
+		cf * CFrame.new(0, size.Y / 2 + 1.6, -0.4) * CFrame.Angles(0, 0, math.rad(45)),
+		M.Neon,
+		Props.ARCANE,
+		{ CanCollide = false }
+	)
+	Build.make("PointLight", { Color = Props.ARCANE, Range = 16, Brightness = 1.5 }, gem)
+	local postH = cf.Position.Y + size.Y / 2 - groundY
+	for side = -1, 1, 2 do
+		part(
+			model,
+			"BoardPillar",
+			Vector3.new(1.6, postH + 2, 1.6),
+			cf * CFrame.new(side * (size.X / 2 + 1.2), groundY + (postH + 2) / 2 - cf.Position.Y, 0.2),
+			M.Marble,
+			Props.MARBLE
+		)
+		Props.lantern(model, (cf * CFrame.new(side * (size.X / 2 + 1.2), size.Y / 2 + 2, 0.2)).Position, 1)
+	end
+	local gui = Build.make("SurfaceGui", { Face = Enum.NormalId.Front, PixelsPerStud = 24, LightInfluence = 0 }, face)
+	Build.make("TextLabel", {
+		Name = "Title",
+		Size = UDim2.fromScale(1, 0.14),
+		Position = UDim2.fromScale(0, 0.02),
+		BackgroundTransparency = 1,
+		Text = "🏆 Hall of Champions",
+		Font = Enum.Font.Fantasy,
+		TextScaled = true,
+		TextColor3 = Color3.fromRGB(255, 215, 110),
+	}, gui)
+	local function column(x: number, heading: string): TextLabel
+		Build.make("TextLabel", {
+			Name = "Heading",
+			Size = UDim2.fromScale(0.44, 0.08),
+			Position = UDim2.fromScale(x, 0.17),
+			BackgroundTransparency = 1,
+			Text = heading,
+			Font = Enum.Font.GothamBlack,
+			TextScaled = true,
+			TextColor3 = Color3.fromRGB(230, 205, 255),
+		}, gui)
+		return Build.make("TextLabel", {
+			Name = "Column",
+			Size = UDim2.fromScale(0.44, 0.66),
+			Position = UDim2.fromScale(x, 0.26),
+			BackgroundTransparency = 1,
+			Text = "Loading...",
+			RichText = true,
+			Font = Enum.Font.GothamBold,
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			TextColor3 = Color3.fromRGB(255, 235, 190),
+		}, gui)
+	end
+	local wins = column(0.04, "⚔️ MOST WINS")
+	local kills = column(0.52, "💀 MOST KILLS")
+	local footer = Build.make("TextLabel", {
+		Name = "Footer",
+		Size = UDim2.fromScale(0.92, 0.05),
+		Position = UDim2.fromScale(0.04, 0.93),
+		BackgroundTransparency = 1,
+		Text = "All servers, all time",
+		Font = Enum.Font.Gotham,
+		TextScaled = true,
+		TextColor3 = Color3.fromRGB(170, 160, 190),
+	}, gui)
+	return { wins = wins, kills = kills, footer = footer }
 end
 
 local function fountain(parent: Instance, animated: Instance, c: Vector3)
@@ -9684,7 +10007,7 @@ function Hub.build(): HubInfo
 		local deg = math.deg(a) % 360
 		-- keep the portal, the range gate and the towers clear
 		local blocked = deg < 32 or deg > 328 or (deg > 248 and deg < 292)
-		for _, t in { 150, 210, 305, 59 } do
+		for _, t in { 150, 210, 305, 59, 90 } do
 			if math.abs(deg - t) < 9 then
 				blocked = true
 			end
@@ -9752,6 +10075,9 @@ function Hub.build(): HubInfo
 		"Waiting for players"
 	)
 
+	-- behind the spawn, facing the plaza: the global leaderboard
+	local leaderboard = hallOfChampions(model, CFrame.lookAt(at(0, 99, 10.5), at(0, 0, 10.5)), y + 0.1)
+
 	---------------------------------------------------------------- containment + the rock underneath
 	local segments = 48
 	for i = 1, segments do
@@ -9804,6 +10130,7 @@ function Hub.build(): HubInfo
 		dummySpots = dummySpots,
 		joinPortal = joinPortal,
 		boardText = boardText,
+		leaderboard = leaderboard,
 		floorY = y,
 	}
 end
@@ -9812,7 +10139,7 @@ return Hub
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="31">
+        <Item class="ModuleScript" referent="32">
           <Properties>
             <string name="Name">Landmarks</string>
             <string name="Source"><![CDATA[-- Points of interest on the arenas. Each builder makes one landmark at `center` (the y is ignored: it
@@ -11127,7 +11454,7 @@ return Landmarks
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="32">
+        <Item class="ModuleScript" referent="33">
           <Properties>
             <string name="Name">Lobby</string>
             <string name="Source"><![CDATA[-- The Arcane Athenaeum: a floating library where players wait between matches.
@@ -11859,7 +12186,7 @@ return Lobby
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="33">
+        <Item class="ModuleScript" referent="34">
           <Properties>
             <string name="Name">MapDefs</string>
             <string name="Source"><![CDATA[-- Every arena players can vote for. Each entry controls the island's size, terrain shape and features
@@ -12546,7 +12873,7 @@ return MapDefs
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="34">
+        <Item class="ModuleScript" referent="35">
           <Properties>
             <string name="Name">Props</string>
             <string name="Source"><![CDATA[-- Building blocks shared by the hub (Arcanum Plaza) and the library (Arcane Athenaeum):
@@ -12860,7 +13187,7 @@ return Props
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="35">
+        <Item class="ModuleScript" referent="36">
           <Properties>
             <string name="Name">Scenery</string>
             <string name="Source"><![CDATA[-- Big set dressing that isn't a landmark: bridges where roads cross rivers, the volcano's smoking
@@ -13075,7 +13402,7 @@ return Scenery
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="36">
+        <Item class="ModuleScript" referent="37">
           <Properties>
             <string name="Name">Structures</string>
             <string name="Source"><![CDATA[-- The cornucopia (the plaza, dais, Mana Spire and pedestals in the middle of every arena), chests
@@ -13521,7 +13848,7 @@ return Structures
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="37">
+        <Item class="ModuleScript" referent="38">
           <Properties>
             <string name="Name">TerrainGen</string>
             <string name="Source"><![CDATA[-- Generates a fresh island arena with Roblox smooth terrain: hills, lakes (water, ice or lava), winding
@@ -13896,11 +14223,341 @@ return TerrainGen
           </Properties>
         </Item>
       </Item>
-      <Item class="Folder" referent="38">
+      <Item class="Folder" referent="39">
         <Properties>
           <string name="Name">Services</string>
         </Properties>
-        <Item class="ModuleScript" referent="39">
+        <Item class="ModuleScript" referent="40">
+          <Properties>
+            <string name="Name">AchievementService</string>
+            <string name="Source"><![CDATA[-- Achievements (defined in Shared/Achievements): counts what players do (through the Events bus),
+-- unlocks achievements once their stat reaches the goal, pays out their Enchanted Coins, awards the
+-- matching Roblox badge if one is set up (Config.Achievements.BadgeIds), and keeps the client's
+-- Achievements window up to date. Stats players already had count too, so veterans unlock theirs
+-- the first time they join after this was added.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage.Shared
+local Achievements = require(Shared.Achievements)
+local Config = require(Shared.Config)
+local Remotes = require(Shared.Remotes)
+local DataService = require(script.Parent.DataService)
+local WardrobeService = require(script.Parent.WardrobeService)
+local DailyRewardService = require(script.Parent.DailyRewardService)
+local Events = require(script.Parent.Events)
+local FX = require(script.Parent.FX)
+
+type Achievement = Achievements.Achievement
+
+local AchievementService = {}
+
+local updated = Remotes.event("AchievementsUpdated")
+local badges: BadgeService? = nil
+
+-- How far along a player is on one of the stats achievements count.
+function AchievementService.statOf(profile: DataService.Profile, stat: string): number
+	if stat == "wins" then
+		return profile.wins
+	elseif stat == "kills" then
+		return profile.kills
+	elseif stat == "matches" then
+		return profile.matches
+	elseif stat == "tutorial" then
+		return if profile.tutorial then 1 else 0
+	elseif stat == "streak" then
+		return profile.daily.best
+	end
+	return profile.counters[stat] or 0
+end
+
+-- Everything the Achievements window shows.
+function AchievementService.snapshot(player: Player): { [string]: any }?
+	local profile = DataService.profile(player)
+	if not profile then
+		return nil
+	end
+	local stats = {}
+	for _, stat in Achievements.Stats do
+		stats[stat] = AchievementService.statOf(profile, stat)
+	end
+	local day = DailyRewardService.today()
+	return {
+		stats = stats,
+		unlocked = table.clone(profile.achievements),
+		daily = {
+			streak = profile.daily.streak,
+			best = profile.daily.best,
+			claimedToday = profile.daily.last >= day,
+			coins = Config.Rewards.DailyCoins,
+			nextIn = math.max(0, (os.time() // 86400 + 1) * 86400 - os.time()), -- seconds until midnight UTC
+		},
+	}
+end
+
+function AchievementService.sync(player: Player)
+	local snapshot = AchievementService.snapshot(player)
+	if snapshot then
+		updated:FireClient(player, snapshot)
+	end
+end
+
+local function awardBadge(player: Player, id: string)
+	local badgeId = Config.Achievements.BadgeIds[id]
+	if badges and type(badgeId) == "number" and badgeId > 0 then
+		local service = badges :: BadgeService
+		local ok, err = pcall(function()
+			service:AwardBadge(player.UserId, badgeId)
+		end)
+		if not ok then
+			warn("[Achievements] couldn't award badge " .. id .. ": " .. tostring(err))
+		end
+	end
+end
+
+-- Unlocks (and pays for) every achievement the player has reached, then updates their window.
+-- Returns the achievements unlocked just now.
+function AchievementService.check(player: Player): { Achievement }
+	local profile = DataService.profile(player)
+	if not profile then
+		return {}
+	end
+	local newly: { Achievement } = {}
+	for _, a in Achievements.List do
+		if not profile.achievements[a.id] and AchievementService.statOf(profile, a.stat) >= a.goal then
+			profile.achievements[a.id] = os.time()
+			table.insert(newly, a)
+		end
+	end
+	if #newly > 0 then
+		local coins = 0
+		for _, a in newly do
+			coins += a.reward
+			awardBadge(player, a.id)
+			Events.fire("AchievementUnlocked", player, a)
+		end
+		WardrobeService.addCoins(player, coins, nil, { type = "Gameplay", sku = "Achievement" })
+		local text = if #newly == 1
+			then string.format("🏆 Achievement unlocked: %s %s  (+%d 💰)", newly[1].icon, newly[1].name, coins)
+			else string.format("🏆 %d achievements unlocked!  (+%d 💰)", #newly, coins)
+		FX.announceTo(player, "Toast", { text = text })
+		DataService.markDirty(player)
+	end
+	AchievementService.sync(player)
+	return newly
+end
+
+-- Adds to a lifetime counter ("chests", "forged"...) and checks for unlocks.
+function AchievementService.count(player: Player, counter: string, amount: number?)
+	DataService.count(player, counter, amount)
+	AchievementService.check(player)
+end
+
+function AchievementService.init()
+	local ok, service = pcall(function()
+		return game:GetService("BadgeService")
+	end)
+	badges = if ok then service else nil
+
+	local function check(player: Player)
+		AchievementService.check(player)
+	end
+	for _, name in { "Kill", "Win", "TutorialDone", "DailyClaimed" } do
+		Events.on(name, check)
+	end
+	Events.on("MatchFinished", function(player: Player, place: number)
+		if place <= 3 then
+			AchievementService.count(player, "top3")
+		else
+			AchievementService.check(player)
+		end
+	end)
+	local counters = {
+		ChestOpened = "chests",
+		Forged = "forged",
+		CofferOpened = "coffers",
+		Crafted = "crafted",
+		AuctionSold = "sold",
+	}
+	for event, counter in counters do
+		Events.on(event, function(player: Player)
+			AchievementService.count(player, counter)
+		end)
+	end
+	Events.on("FamiliarFound", function(player: Player, familiar: any)
+		DataService.count(player, "familiars")
+		if type(familiar) == "table" and familiar.shiny then
+			DataService.count(player, "shiny")
+		end
+		AchievementService.check(player)
+	end)
+
+	DataService.onLoaded(function(player, profile)
+		AchievementService.check(player)
+		-- badges set up after players unlocked the achievement: hand them out now
+		for id in profile.achievements do
+			awardBadge(player, id)
+		end
+	end)
+end
+
+return AchievementService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="41">
+          <Properties>
+            <string name="Name">AnalyticsTracker</string>
+            <string name="Source"><![CDATA[-- Sends gameplay events to Roblox's built-in analytics (Creator Dashboard -> your experience ->
+-- Analytics), so you can see where new players drop off and how coins flow:
+-- * Onboarding funnel: 1 Joined -> 2 Finished the tutorial -> 3 Joined the queue -> 4 Finished a
+--   match -> 5 Opened a coffer. Each step is logged once per player, ever.
+-- * Economy: every Enchanted Coin earned (match placement, daily reward, achievements, salvage,
+--   auction sales) and spent (coffers, auction purchases), with the balance after it.
+-- * Custom events: MatchFinished (value = finishing place, by map and kit), MatchKills, KitPicked,
+--   KitPurchased, AchievementUnlocked, DailyStreak.
+-- Everything goes through pcall: analytics must never break the game. Config.Analytics.Enabled
+-- turns it all off.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local DataService = require(script.Parent.DataService)
+local Events = require(script.Parent.Events)
+
+local AnalyticsTracker = {}
+
+AnalyticsTracker.OnboardingSteps = {
+	"Joined",
+	"Finished the tutorial",
+	"Joined the queue",
+	"Finished a match",
+	"Opened a coffer",
+}
+
+local service: any = nil
+local warned = false
+
+-- Enum items by name, falling back to the plain name (keeps working if an enum is renamed).
+local function enumItem(enumName: string, itemName: string): any
+	local ok, item = pcall(function()
+		return (Enum :: any)[enumName][itemName]
+	end)
+	return if ok and item then item else itemName
+end
+
+local function fieldKey(n: number): string
+	local item = enumItem("AnalyticsCustomFieldKeys", "CustomField0" .. n)
+	return if type(item) == "string" then item else item.Name
+end
+
+local function call(method: string, ...: any)
+	if not service or not Config.Analytics.Enabled then
+		return
+	end
+	local ok, err = pcall(service[method], service, ...)
+	if not ok and not warned then
+		warned = true -- once per server is plenty
+		warn("[Analytics] " .. method .. " failed: " .. tostring(err))
+	end
+end
+
+-- Logs onboarding step `step` for this player unless it was logged before.
+function AnalyticsTracker.onboard(player: Player, step: number)
+	local profile = DataService.profile(player)
+	if not profile then
+		return
+	end
+	local key = tostring(step)
+	if profile.onboarding[key] then
+		return
+	end
+	profile.onboarding[key] = true
+	DataService.markDirty(player)
+	call("LogOnboardingFunnelStepEvent", player, step, AnalyticsTracker.OnboardingSteps[step])
+end
+
+function AnalyticsTracker.custom(player: Player, name: string, value: number?, fields: { string }?)
+	local custom = nil
+	if fields then
+		custom = {}
+		for i, v in fields do
+			custom[fieldKey(i)] = v
+		end
+	end
+	call("LogCustomEvent", player, name, value or 1, custom)
+end
+
+function AnalyticsTracker.init()
+	local ok, result = pcall(function()
+		return game:GetService("AnalyticsService")
+	end)
+	service = if ok then result else nil
+
+	DataService.onLoaded(function(player, profile)
+		if next(profile.onboarding) == nil and (profile.matches > 0 or profile.tutorial) then
+			-- they played before analytics existed: they aren't new, don't count them as onboarding
+			for step in AnalyticsTracker.OnboardingSteps do
+				profile.onboarding[tostring(step)] = true
+			end
+			DataService.markDirty(player)
+			return
+		end
+		AnalyticsTracker.onboard(player, 1)
+	end)
+	Events.on("TutorialDone", function(player: Player)
+		AnalyticsTracker.onboard(player, 2)
+	end)
+	Events.on("QueueJoined", function(player: Player)
+		AnalyticsTracker.onboard(player, 3)
+	end)
+	Events.on(
+		"MatchFinished",
+		function(player: Player, place: number, _outOf: number, kills: number, mapId: string, classId: string)
+			AnalyticsTracker.onboard(player, 4)
+			AnalyticsTracker.custom(player, "MatchFinished", place, { mapId, classId })
+			AnalyticsTracker.custom(player, "MatchKills", kills, { mapId })
+		end
+	)
+	Events.on("CofferOpened", function(player: Player)
+		AnalyticsTracker.onboard(player, 5)
+	end)
+
+	Events.on("Coins", function(player: Player, delta: number, kind: string, sku: string?, balance: number)
+		if kind == "Dev" or delta == 0 then
+			return -- dev panel handouts aren't real economy
+		end
+		local transaction = enumItem("AnalyticsEconomyTransactionType", kind)
+		call(
+			"LogEconomyEvent",
+			player,
+			enumItem("AnalyticsEconomyFlowType", if delta > 0 then "Source" else "Sink"),
+			"EnchantedCoins",
+			math.abs(delta),
+			balance,
+			if type(transaction) == "string" then transaction else transaction.Name,
+			sku
+		)
+	end)
+	Events.on("KitPicked", function(player: Player, classId: string)
+		AnalyticsTracker.custom(player, "KitPicked", 1, { classId })
+	end)
+	Events.on("PassPurchased", function(player: Player, classId: string)
+		AnalyticsTracker.custom(player, "KitPurchased", 1, { classId })
+	end)
+	Events.on("AchievementUnlocked", function(player: Player, achievement: any)
+		AnalyticsTracker.custom(player, "AchievementUnlocked", 1, { achievement.id })
+	end)
+	Events.on("DailyClaimed", function(player: Player, streak: number)
+		AnalyticsTracker.custom(player, "DailyStreak", streak)
+	end)
+end
+
+return AnalyticsTracker
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="42">
           <Properties>
             <string name="Name">AuctionService</string>
             <string name="Source"><![CDATA[-- The auction house: players sell cosmetic parts, finished robes / hats and familiars for
@@ -13925,11 +14582,13 @@ local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local DataService = require(script.Parent.DataService)
 local WardrobeService = require(script.Parent.WardrobeService)
+local Events = require(script.Parent.Events)
 
 local AuctionService = {}
 
 local E = Config.Economy
 local rng = Random.new()
+local SALE = { type = "Shop", sku = "AuctionSale" } -- how sales show up in analytics
 
 export type Listing = {
 	id: string,
@@ -14183,8 +14842,10 @@ local function creditSale(seller: Player, id: string, coins: number, itemName: s
 	WardrobeService.addCoins(
 		seller,
 		coins,
-		"sold " .. (itemName or (if record and record.item then record.item.name else "an item"))
+		"sold " .. (itemName or (if record and record.item then record.item.name else "an item")),
+		SALE
 	)
+	Events.fire("AuctionSold", seller, coins)
 	task.spawn(DataService.save, seller)
 	return true
 end
@@ -14279,7 +14940,7 @@ function AuctionService.buy(player: Player, id: any): (boolean, string)
 	if not WardrobeService.hasRoom(player, listing.kind) then
 		return false, "Your wardrobe is full"
 	end
-	if not WardrobeService.spendCoins(player, listing.price) then
+	if not WardrobeService.spendCoins(player, listing.price, { type = "Shop", sku = "AuctionPurchase" }) then
 		return false, "You need " .. listing.price .. " Enchanted Coins"
 	end
 	local claimed = store.claim(id, function(current)
@@ -14291,11 +14952,12 @@ function AuctionService.buy(player: Player, id: any): (boolean, string)
 		return nil
 	end, ttl())
 	if not claimed then
-		WardrobeService.addCoins(player, listing.price, nil) -- refund
+		WardrobeService.addCoins(player, listing.price, nil, { type = "Shop", sku = "AuctionRefund" }) -- refund
 		browseCache.at = -math.huge
 		return false, "Someone beat you to it"
 	end
 	WardrobeService.giveItem(player, claimed.kind, claimed.item)
+	Events.fire("AuctionBought", player, claimed.price)
 	task.spawn(DataService.save, player)
 	-- pay the seller: the house keeps its cut
 	local proceeds = claimed.price - math.floor(claimed.price * E.AuctionFee)
@@ -14380,8 +15042,10 @@ function AuctionService.reconcile(player: Player)
 		WardrobeService.addCoins(
 			player,
 			coins,
-			"sold " .. (if record and record.item then record.item.name else "an item")
+			"sold " .. (if record and record.item then record.item.name else "an item"),
+			SALE
 		)
+		Events.fire("AuctionSold", player, coins)
 		changed = true
 	end
 	-- 3. loose ends: sold listings whose payment never arrived, and listings that vanished
@@ -14393,8 +15057,10 @@ function AuctionService.reconcile(player: Player)
 			WardrobeService.addCoins(
 				player,
 				current.price - math.floor(current.price * E.AuctionFee),
-				"sold " .. record.item.name
+				"sold " .. record.item.name,
+				SALE
 			)
+			Events.fire("AuctionSold", player, current.price)
 			store.remove(id)
 			changed = true
 		elseif current == nil and record.expires <= t then
@@ -14486,7 +15152,7 @@ return AuctionService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="40">
+        <Item class="ModuleScript" referent="43">
           <Properties>
             <string name="Name">BotService</string>
             <string name="Source"><![CDATA[-- AI mages that fill empty slots. They loot chests, slot spells into their wands,
@@ -14916,7 +15582,7 @@ return BotService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="41">
+        <Item class="ModuleScript" referent="44">
           <Properties>
             <string name="Name">CastingService</string>
             <string name="Source"><![CDATA[-- Wand casting rules, Noita style: each wand is a deck of spells that it cycles
@@ -15242,7 +15908,7 @@ return CastingService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="42">
+        <Item class="ModuleScript" referent="45">
           <Properties>
             <string name="Name">ChatService</string>
             <string name="Source"><![CDATA[-- Proximity chat. The server decides who each text message reaches: only players within
@@ -15314,7 +15980,7 @@ return ChatService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="43">
+        <Item class="ModuleScript" referent="46">
           <Properties>
             <string name="Name">ChestService</string>
             <string name="Source"><![CDATA[-- Chests and loot satchels: spawning, rolling loot, opening, taking items,
@@ -15332,6 +15998,7 @@ local Structures = require(script.Parent.Parent.Map.Structures)
 local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
 local InventoryService = require(script.Parent.InventoryService)
+local Events = require(script.Parent.Events)
 
 type Combatant = Combatants.Combatant
 type LootEntry = Items.LootEntry
@@ -15426,6 +16093,9 @@ local function open(player: Player, chest: Chest)
 		chest.opened = true
 		swingLid(chest, true)
 		chest.prompt.ActionText = if chest.isSatchel then "Loot" else "Search"
+	end
+	if not chest.viewers[player] and not chest.isSatchel then
+		Events.fire("ChestOpened", player, chest.tier)
 	end
 	chest.viewers[player] = true
 	sendContents(player, chest)
@@ -15652,7 +16322,7 @@ return ChestService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="44">
+        <Item class="ModuleScript" referent="47">
           <Properties>
             <string name="Name">ClassService</string>
             <string name="Source"><![CDATA[-- Kit (class) selection and ownership. Every paid kit is its own game pass (Config.Kits);
@@ -15668,6 +16338,7 @@ local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Config)
 local Remotes = require(Shared.Remotes)
 local Classes = require(Shared.Classes)
+local Events = require(script.Parent.Events)
 
 local ClassService = {}
 
@@ -15791,6 +16462,7 @@ function ClassService.init()
 			set[classId] = true
 			publish(player)
 			player:SetAttribute("Class", classId)
+			Events.fire("PassPurchased", player, classId)
 		end
 	end)
 
@@ -15807,6 +16479,7 @@ function ClassService.init()
 				return false, "You don't own the " .. class.name .. " kit yet"
 			end
 			player:SetAttribute("Class", class.id)
+			Events.fire("KitPicked", player, class.id)
 			return true, class.name .. " selected"
 		elseif action == "Buy" then
 			if ClassService.owns(player, class.id) then
@@ -15830,7 +16503,7 @@ return ClassService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="45">
+        <Item class="ModuleScript" referent="48">
           <Properties>
             <string name="Name">Combatants</string>
             <string name="Source"><![CDATA[-- Registry of everything that can fight: real players and bots share one shape,
@@ -16109,7 +16782,80 @@ return Combatants
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="46">
+        <Item class="ModuleScript" referent="49">
+          <Properties>
+            <string name="Name">DailyRewardService</string>
+            <string name="Source"><![CDATA[-- The daily login reward: the first time a player shows up each day (days start at midnight UTC)
+-- they get Config.Rewards.DailyCoins Enchanted Coins. Coming back on consecutive days builds a
+-- streak (the "Devoted" achievement wants 7). Players who stay online past midnight get the next
+-- day's reward without rejoining.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local DataService = require(script.Parent.DataService)
+local WardrobeService = require(script.Parent.WardrobeService)
+local Events = require(script.Parent.Events)
+local FX = require(script.Parent.FX)
+
+local DailyRewardService = {}
+
+local CHECK_EVERY = 60
+
+-- Today's day number (UTC). Tests swap this out to travel in time.
+DailyRewardService.today = function(): number
+	return os.time() // 86400
+end
+
+-- Gives today's reward if the player hasn't had it yet. Returns whether it was given.
+function DailyRewardService.claim(player: Player): boolean
+	local profile = DataService.profile(player)
+	if not profile then
+		return false
+	end
+	local d = profile.daily
+	local day = DailyRewardService.today()
+	if d.last >= day then
+		return false
+	end
+	d.streak = if d.last == day - 1 then d.streak + 1 else 1
+	d.best = math.max(d.best, d.streak)
+	d.last = day
+	local coins = Config.Rewards.DailyCoins
+	WardrobeService.addCoins(player, coins, nil, { type = "TimedReward", sku = "DailyLogin" })
+	FX.announceTo(player, "Toast", {
+		text = if d.streak > 1
+			then string.format("📅 Daily reward: +%d 💰  ·  %d days in a row!", coins, d.streak)
+			else string.format("📅 Daily reward: +%d 💰  ·  come back tomorrow for more", coins),
+	})
+	DataService.markDirty(player)
+	Events.fire("DailyClaimed", player, d.streak, coins)
+	return true
+end
+
+function DailyRewardService.init()
+	DataService.onLoaded(function(player)
+		task.wait(2) -- let them see the Plaza before the toast pops up
+		if player.Parent then
+			DailyRewardService.claim(player)
+		end
+	end)
+	task.spawn(function()
+		while true do
+			task.wait(CHECK_EVERY)
+			for _, player in Players:GetPlayers() do
+				task.spawn(DailyRewardService.claim, player)
+			end
+		end
+	end)
+end
+
+return DailyRewardService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="50">
           <Properties>
             <string name="Name">DamageService</string>
             <string name="Source"><![CDATA[-- The single place damage is dealt: grace period, self-damage, crits, marks, shields,
@@ -16319,7 +17065,7 @@ return DamageService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="47">
+        <Item class="ModuleScript" referent="51">
           <Properties>
             <string name="Name">DataService</string>
             <string name="Source"><![CDATA[-- Player profiles saved with DataStores: lifetime stats (wins / kills / matches, shown on the
@@ -16337,6 +17083,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Events = require(script.Parent.Events)
 
 local DataService = {}
 
@@ -16356,6 +17103,10 @@ export type Profile = {
 	coins: number,
 	starter: boolean, -- has received the starter outfit
 	wardrobe: Wardrobe,
+	counters: { [string]: number }, -- lifetime counts for achievements (chests, forged, coffers...)
+	achievements: { [string]: number }, -- achievement id -> when it was unlocked (os.time)
+	daily: { last: number, streak: number, best: number }, -- daily reward: last day claimed (UTC day number)
+	onboarding: { [string]: boolean }, -- analytics onboarding steps already logged
 }
 
 local cache: { [Player]: Profile } = {}
@@ -16386,7 +17137,24 @@ local function newProfile(): Profile
 		coins = 0,
 		starter = false,
 		wardrobe = { parts = {}, garments = {}, familiars = {}, equipped = {}, listings = {} },
+		counters = {},
+		achievements = {},
+		daily = { last = 0, streak = 0, best = 0 },
+		onboarding = {},
 	}
+end
+
+-- A table of string -> number (or boolean) from saved data, dropping anything malformed.
+local function cleanMap(data: any, valueType: string): { [string]: any }
+	local out = {}
+	if type(data) == "table" then
+		for k, v in data do
+			if type(k) == "string" and type(v) == valueType then
+				out[k] = v
+			end
+		end
+	end
+	return out
 end
 
 local function fromSaved(data: any): Profile
@@ -16400,6 +17168,14 @@ local function fromSaved(data: any): Profile
 	p.tutorial = data.tutorial == true
 	p.coins = math.max(0, math.floor(tonumber(data.coins) or 0))
 	p.starter = data.starter == true
+	p.counters = cleanMap(data.counters, "number")
+	p.achievements = cleanMap(data.achievements, "number")
+	p.onboarding = cleanMap(data.onboarding, "boolean")
+	if type(data.daily) == "table" then
+		p.daily.last = tonumber(data.daily.last) or 0
+		p.daily.streak = tonumber(data.daily.streak) or 0
+		p.daily.best = tonumber(data.daily.best) or 0
+	end
 	local w = data.wardrobe
 	if type(w) == "table" then
 		p.wardrobe.parts = if type(w.parts) == "table" then w.parts else {}
@@ -16420,6 +17196,10 @@ local function toSaved(p: Profile, session: { job: string, t: number }?): { [str
 		coins = p.coins,
 		starter = p.starter,
 		wardrobe = p.wardrobe,
+		counters = p.counters,
+		achievements = p.achievements,
+		daily = p.daily,
+		onboarding = p.onboarding,
 		session = session,
 	}
 end
@@ -16551,14 +17331,26 @@ end
 
 function DataService.addKill(player: Player)
 	bump(player, "kills")
+	Events.fire("Kill", player)
 end
 
 function DataService.addWin(player: Player)
 	bump(player, "wins")
+	Events.fire("Win", player)
 end
 
 function DataService.addMatch(player: Player)
 	bump(player, "matches")
+end
+
+-- Adds to one of the lifetime counters achievements look at ("chests", "forged"...).
+function DataService.count(player: Player, counter: string, amount: number?)
+	local profile = cache[player]
+	if not profile then
+		return
+	end
+	profile.counters[counter] = (profile.counters[counter] or 0) + (amount or 1)
+	dirty[player] = true
 end
 
 -- The name to use for a DataStore / MemoryStore. Studio play tests get their own copies
@@ -16605,6 +17397,7 @@ function DataService.init()
 		if stats and not stats.tutorial then
 			stats.tutorial = true
 			task.spawn(DataService.save, player)
+			Events.fire("TutorialDone", player)
 		end
 	end)
 	Players.PlayerRemoving:Connect(function(player)
@@ -16634,7 +17427,7 @@ return DataService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="48">
+        <Item class="ModuleScript" referent="52">
           <Properties>
             <string name="Name">DevService</string>
             <string name="Source"><![CDATA[-- Developer tools behind the 🛠️ Dev panel: free coins and coffers, every cosmetic and familiar,
@@ -16806,7 +17599,7 @@ function DevService.unlockAll(player: Player): (boolean, string)
 	ClassService.setDevMode(player, "all")
 	player:SetAttribute("DevFreeCoffers", true)
 	player:SetAttribute("DevLoadout", true)
-	WardrobeService.addCoins(player, 100000, nil)
+	WardrobeService.addCoins(player, 100000, nil, { type = "Dev" })
 	local c = combatantOf(player)
 	if c and Combatants.canAct(c) then
 		InventoryService.giveDevLoadout(c)
@@ -16913,7 +17706,7 @@ actions.Coins = function(player, args)
 		end
 		return true, "Coins set to 0"
 	end
-	WardrobeService.addCoins(player, amount, nil)
+	WardrobeService.addCoins(player, amount, nil, { type = "Dev" })
 	return true, "+" .. amount .. " coins"
 end
 
@@ -17132,7 +17925,49 @@ return DevService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="49">
+        <Item class="ModuleScript" referent="53">
+          <Properties>
+            <string name="Name">Events</string>
+            <string name="Source"><![CDATA[-- A tiny server-side event bus. Game services announce what happened ("Kill", "ChestOpened",
+-- "Coins"...) and the achievement, leaderboard and analytics services listen, so the game code
+-- doesn't have to know about any of them (and nothing ends up requiring itself in a loop).
+--
+-- Events (all start with the player they're about):
+--   Kill(player)                            Win(player)
+--   MatchFinished(player, place, outOf, kills, mapId, classId)
+--   ChestOpened(player, tier)               Forged(player)
+--   CofferOpened(player, boxId)             FamiliarFound(player, familiar)
+--   Crafted(player, garment)                AuctionSold(player, price)   AuctionBought(player, price)
+--   TutorialDone(player)                    QueueJoined(player)
+--   KitPicked(player, classId)              PassPurchased(player, classId)
+--   Coins(player, delta, transactionType, sku, balance)   (delta < 0 when spending)
+--   DailyClaimed(player, streak, coins)     AchievementUnlocked(player, achievement)
+
+local Events = {}
+
+local listeners: { [string]: { (...any) -> () } } = {}
+
+function Events.on(name: string, callback: (...any) -> ())
+	listeners[name] = listeners[name] or {}
+	table.insert(listeners[name], callback)
+end
+
+-- Calls every listener in its own thread, so a slow or broken one can't hold up the game.
+function Events.fire(name: string, ...: any)
+	local list = listeners[name]
+	if not list then
+		return
+	end
+	for _, callback in list do
+		task.spawn(callback, ...)
+	end
+end
+
+return Events
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="54">
           <Properties>
             <string name="Name">FX</string>
             <string name="Source"><![CDATA[-- Thin wrapper over the FX remote so services can say FX.all("Boom", ...) without
@@ -17172,7 +18007,7 @@ return FX
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="50">
+        <Item class="ModuleScript" referent="55">
           <Properties>
             <string name="Name">FamiliarService</string>
             <string name="Source"><![CDATA[-- Familiar powers that need the server:
@@ -17302,7 +18137,7 @@ return FamiliarService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="51">
+        <Item class="ModuleScript" referent="56">
           <Properties>
             <string name="Name">GameState</string>
             <string name="Source"><![CDATA[-- Server-wide match state that several services read. MatchService is the only writer.
@@ -17340,7 +18175,7 @@ return GameState
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="52">
+        <Item class="ModuleScript" referent="57">
           <Properties>
             <string name="Name">InventoryService</string>
             <string name="Source"><![CDATA[-- Owns every combatant's inventory: wands (with their slotted spells), the spell bag,
@@ -17368,6 +18203,7 @@ local GameState = require(script.Parent.GameState)
 local CastingService = require(script.Parent.CastingService)
 local StatusService = require(script.Parent.StatusService)
 local FX = require(script.Parent.FX)
+local Events = require(script.Parent.Events)
 
 type Combatant = Combatants.Combatant
 type WandItem = Items.WandItem
@@ -18006,6 +18842,9 @@ actions.Forge = function(c, args)
 	end
 	local spell = Items.newSpell(recipe, nil, Items.rarityOfRecipe(recipe, LootTables.partRarity))
 	table.insert(inv.spells, spell)
+	if c.player then
+		Events.fire("Forged", c.player)
+	end
 	return true, "Forged " .. spell.name, spell.uid
 end
 
@@ -18164,7 +19003,175 @@ return InventoryService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="53">
+        <Item class="ModuleScript" referent="58">
+          <Properties>
+            <string name="Name">LeaderboardService</string>
+            <string name="Source"><![CDATA[-- The global leaderboard: everyone's lifetime wins and kills go into two OrderedDataStores (shared
+-- by every server), and the Hall of Champions board in the Plaza shows the top players of each,
+-- refreshed every Config.Leaderboard.RefreshSeconds. Scores are written after each match and when
+-- a player leaves. (The player list's Wins / Kills columns are the per-player leaderstats.)
+
+local DataStoreService = game:GetService("DataStoreService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local DataService = require(script.Parent.DataService)
+local MapService = require(script.Parent.MapService)
+local Events = require(script.Parent.Events)
+
+local LeaderboardService = {}
+
+export type Entry = { userId: number, name: string, value: number }
+
+local STATS = { "wins", "kills" }
+local stores: { [string]: OrderedDataStore } = {}
+local pushed: { [Player]: { [string]: number } } = {}
+local names: { [number]: string } = {}
+
+LeaderboardService.top = { wins = {}, kills = {} } :: { [string]: { Entry } }
+LeaderboardService.online = false
+
+local function nameOf(userId: number): string
+	local cached = names[userId]
+	if cached then
+		return cached
+	end
+	local okPlayer, player = pcall(function()
+		return Players:GetPlayerByUserId(userId)
+	end)
+	local name = if okPlayer and player then player.Name else nil
+	if not name then
+		local ok, result = pcall(function()
+			return Players:GetNameFromUserIdAsync(userId)
+		end)
+		name = if ok and type(result) == "string" then result else "Mage #" .. userId
+	end
+	names[userId] = name
+	return name :: string
+end
+
+local MEDALS = { "🥇", "🥈", "🥉" }
+
+local function escape(text: string): string
+	return (string.gsub(text, "[<>&]", { ["<"] = "&lt;", [">"] = "&gt;", ["&"] = "&amp;" }))
+end
+
+-- The text of one column of the board.
+function LeaderboardService.columnText(entries: { Entry }): string
+	if #entries == 0 then
+		return "<i>Nobody yet. Win a match to claim the first spot!</i>"
+	end
+	local lines = {}
+	for rank, e in entries do
+		local place = MEDALS[rank] or (rank .. ".")
+		table.insert(
+			lines,
+			string.format('%s  %s  <font color="#FFD86B"><b>%d</b></font>', place, escape(e.name), e.value)
+		)
+	end
+	return table.concat(lines, "\n")
+end
+
+local function render()
+	local hub = MapService.hub
+	if not hub then
+		return
+	end
+	local board = hub.leaderboard
+	if not LeaderboardService.online then
+		board.wins.Text = "<i>Offline</i>"
+		board.kills.Text = "<i>Offline</i>"
+		board.footer.Text = "The leaderboard needs DataStores: turn on API access in Game Settings » Security"
+		return
+	end
+	board.wins.Text = LeaderboardService.columnText(LeaderboardService.top.wins)
+	board.kills.Text = LeaderboardService.columnText(LeaderboardService.top.kills)
+	board.footer.Text = "All servers, all time  ·  updates every few minutes"
+end
+
+-- Writes a player's wins and kills to the global lists (only what changed since last time).
+function LeaderboardService.push(player: Player)
+	local profile = DataService.profile(player)
+	if not profile or not LeaderboardService.online then
+		return
+	end
+	local last = pushed[player] or {}
+	pushed[player] = last
+	for _, stat in STATS do
+		local value = (profile :: any)[stat] :: number
+		if value > 0 and last[stat] ~= value then
+			local store = stores[stat]
+			local ok, err = pcall(function()
+				store:SetAsync("u" .. player.UserId, value)
+			end)
+			if ok then
+				last[stat] = value
+			else
+				warn("[Leaderboard] couldn't save " .. stat .. " for " .. player.Name .. ": " .. tostring(err))
+			end
+		end
+	end
+end
+
+-- Reads the top of each list and redraws the board.
+function LeaderboardService.refresh()
+	if LeaderboardService.online then
+		for _, stat in STATS do
+			local store = stores[stat]
+			local ok, page = pcall(function()
+				return store:GetSortedAsync(false, Config.Leaderboard.Size):GetCurrentPage()
+			end)
+			if ok and type(page) == "table" then
+				local entries: { Entry } = {}
+				for _, item in page do
+					local userId = tonumber(string.match(tostring(item.key), "^u(%d+)$"))
+					if userId then
+						table.insert(entries, { userId = userId, name = nameOf(userId), value = item.value })
+					end
+				end
+				LeaderboardService.top[stat] = entries
+			end
+		end
+	end
+	render()
+end
+
+function LeaderboardService.init()
+	local ok, err = pcall(function()
+		for _, stat in STATS do
+			stores[stat] = DataStoreService:GetOrderedDataStore(DataService.storeName("Leaderboard_" .. stat))
+		end
+	end)
+	LeaderboardService.online = ok and stores.wins ~= nil and stores.kills ~= nil
+	if not LeaderboardService.online then
+		warn("[Leaderboard] DataStores unavailable, the Hall of Champions stays empty: " .. tostring(err))
+	end
+
+	Events.on("MatchFinished", function(player: Player)
+		LeaderboardService.push(player)
+	end)
+	DataService.onLoaded(function(player)
+		LeaderboardService.push(player)
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		LeaderboardService.push(player)
+		pushed[player] = nil
+	end)
+	task.spawn(function()
+		task.wait(5)
+		while true do
+			LeaderboardService.refresh()
+			task.wait(Config.Leaderboard.RefreshSeconds)
+		end
+	end)
+end
+
+return LeaderboardService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="59">
           <Properties>
             <string name="Name">MapService</string>
             <string name="Source"><![CDATA[-- Builds the hub (Arcanum Plaza) and the library lobby once, and a brand new arena for every
@@ -18586,7 +19593,7 @@ return MapService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="54">
+        <Item class="ModuleScript" referent="60">
           <Properties>
             <string name="Name">MatchService</string>
             <string name="Source"><![CDATA[-- The survival-games loop:
@@ -18620,6 +19627,7 @@ local VoteService = require(script.Parent.VoteService)
 local QueueService = require(script.Parent.QueueService)
 local WardrobeService = require(script.Parent.WardrobeService)
 local FamiliarService = require(script.Parent.FamiliarService)
+local Events = require(script.Parent.Events)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -19221,6 +20229,15 @@ local function runMatch()
 	for _, c in participants do
 		if c.player and c.player.Parent then
 			DataService.addMatch(c.player)
+			Events.fire(
+				"MatchFinished",
+				c.player,
+				c.place or initialCount,
+				initialCount,
+				c.kills,
+				def.id,
+				tostring(c.player:GetAttribute("Class"))
+			)
 			task.spawn(DataService.save, c.player)
 		end
 	end
@@ -19324,7 +20341,7 @@ return MatchService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="55">
+        <Item class="ModuleScript" referent="61">
           <Properties>
             <string name="Name">PracticeService</string>
             <string name="Source"><![CDATA[-- Training dummies on the hub's Practice Range and the library's Practice Terrace. They take
@@ -19495,7 +20512,7 @@ return PracticeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="56">
+        <Item class="ModuleScript" referent="62">
           <Properties>
             <string name="Name">ProjectileService</string>
             <string name="Source"><![CDATA[-- Authoritative projectile simulation. Every frame each projectile moves (ProjectileSim),
@@ -20045,7 +21062,7 @@ return ProjectileService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="57">
+        <Item class="ModuleScript" referent="63">
           <Properties>
             <string name="Name">QueueService</string>
             <string name="Source"><![CDATA[-- The queue between the hub and a match.
@@ -20066,6 +21083,7 @@ local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
 local MapService = require(script.Parent.MapService)
 local VoteService = require(script.Parent.VoteService)
+local Events = require(script.Parent.Events)
 
 type Combatant = Combatants.Combatant
 
@@ -20132,6 +21150,7 @@ function QueueService.join(player: Player): (boolean, string)
 	end
 	setQueued(c, true)
 	moveToRest(c)
+	Events.fire("QueueJoined", player)
 	return true, "You joined the queue! Vote for the next map."
 end
 
@@ -20260,7 +21279,7 @@ return QueueService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="58">
+        <Item class="ModuleScript" referent="64">
           <Properties>
             <string name="Name">SpellExecutor</string>
             <string name="Source"><![CDATA[-- Executes compiled spells: spawns projectiles, fires beams, novas, chains, meteors,
@@ -21096,7 +22115,7 @@ return SpellExecutor
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="59">
+        <Item class="ModuleScript" referent="65">
           <Properties>
             <string name="Name">StatusService</string>
             <string name="Source"><![CDATA[-- Burning, venom, chill/freeze, radiant marks, shields, haste and regeneration.
@@ -21485,7 +22504,7 @@ return StatusService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="60">
+        <Item class="ModuleScript" referent="66">
           <Properties>
             <string name="Name">VoteService</string>
             <string name="Source"><![CDATA[-- The map vote held in the library before every match. Only players in the queue can vote.
@@ -21634,7 +22653,7 @@ return VoteService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="61">
+        <Item class="ModuleScript" referent="67">
           <Properties>
             <string name="Name">WardrobeService</string>
             <string name="Source"><![CDATA[-- Enchanted Coins and the wardrobe: opening Coffers, stitching parts into robes and hats,
@@ -21655,6 +22674,7 @@ local Familiars = require(Shared.Familiars)
 local OutfitBuilder = require(Shared.OutfitBuilder)
 local Combatants = require(script.Parent.Combatants)
 local DataService = require(script.Parent.DataService)
+local Events = require(script.Parent.Events)
 local FX = require(script.Parent.FX)
 
 type Combatant = Combatants.Combatant
@@ -21712,13 +22732,19 @@ function WardrobeService.coins(player: Player): number
 	return if profile then profile.coins else 0
 end
 
-function WardrobeService.addCoins(player: Player, amount: number, reason: string?)
+-- Where coins came from or went to, for analytics: a transaction type ("Gameplay", "Shop",
+-- "TimedReward", "Onboarding"; "Dev" is never reported) and what it was for.
+export type CoinFlow = { type: string, sku: string? }
+
+function WardrobeService.addCoins(player: Player, amount: number, reason: string?, source: CoinFlow?)
 	local profile = DataService.profile(player)
 	if not profile or amount <= 0 then
 		return
 	end
 	profile.coins += math.floor(amount)
 	changed(player)
+	local flow = source or { type = "Gameplay", sku = "Other" }
+	Events.fire("Coins", player, math.floor(amount), flow.type, flow.sku, profile.coins)
 	if reason then
 		FX.announceTo(
 			player,
@@ -21728,13 +22754,15 @@ function WardrobeService.addCoins(player: Player, amount: number, reason: string
 	end
 end
 
-function WardrobeService.spendCoins(player: Player, amount: number): boolean
+function WardrobeService.spendCoins(player: Player, amount: number, sink: CoinFlow?): boolean
 	local profile = DataService.profile(player)
 	if not profile or profile.coins < amount then
 		return false
 	end
 	profile.coins -= amount
 	changed(player)
+	local flow = sink or { type = "Shop", sku = "Other" }
+	Events.fire("Coins", player, -amount, flow.type, flow.sku, profile.coins)
 	return true
 end
 
@@ -21757,7 +22785,8 @@ function WardrobeService.awardPlacement(c: Combatant, place: number, outOf: numb
 	WardrobeService.addCoins(
 		player,
 		base + bonus,
-		ordinal(place) .. " of " .. outOf .. (if bonus > 0 then ", +" .. bonus .. " Fortune" else "")
+		ordinal(place) .. " of " .. outOf .. (if bonus > 0 then ", +" .. bonus .. " Fortune" else ""),
+		{ type = "Gameplay", sku = "MatchPlacement" }
 	)
 end
 
@@ -21963,7 +22992,7 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 	end
 	-- (the dev panel's "free coffers" switch; set by the server only)
 	local free = player:GetAttribute("DevFreeCoffers") == true
-	if not free and not WardrobeService.spendCoins(player, box.price) then
+	if not free and not WardrobeService.spendCoins(player, box.price, { type = "Shop", sku = "Coffer" .. box.id }) then
 		return false, "You need " .. box.price .. " Enchanted Coins"
 	end
 	local got = {}
@@ -21973,12 +23002,14 @@ local function openBox(player: Player, boxId: any): (boolean, string, any?)
 			local familiar = Familiars.roll(rng, box.id, Cosmetics.rollRarity(rng, box), nil)
 			WardrobeService.giveItem(player, "Familiar", familiar)
 			table.insert(got, familiar)
+			Events.fire("FamiliarFound", player, familiar)
 		else
 			local part = Cosmetics.rollPart(rng, box.id)
 			WardrobeService.giveItem(player, "Part", part)
 			table.insert(got, part)
 		end
 	end
+	Events.fire("CofferOpened", player, box.id)
 	return true, "Opened " .. box.name, got
 end
 
@@ -22013,6 +23044,7 @@ local function craft(player: Player, kind: any, picks: any): (boolean, string, a
 	local made = Cosmetics.craft(kind, parts)
 	table.insert(w.garments, made)
 	changed(player)
+	Events.fire("Crafted", player, made)
 	return true, "Made " .. made.name, made.uid
 end
 
@@ -22093,7 +23125,7 @@ local function salvage(player: Player, kind: any, uid: any): (boolean, string)
 	else
 		value = Cosmetics.SalvageValue[Rarity.rank(item.rarity)] or 1
 	end
-	WardrobeService.addCoins(player, value, nil)
+	WardrobeService.addCoins(player, value, nil, { type = "Gameplay", sku = "Salvage" })
 	return true, "Salvaged " .. item.name .. " for " .. value .. " coins"
 end
 
@@ -22104,6 +23136,7 @@ local function giveStarter(player: Player, profile: DataService.Profile)
 	end
 	profile.starter = true
 	profile.coins += E.StarterCoins
+	Events.fire("Coins", player, E.StarterCoins, "Onboarding", "StarterCoins", profile.coins)
 	local bySlot = {}
 	for _, part in Cosmetics.starterParts() do
 		bySlot[part.slot] = part
@@ -22164,7 +23197,7 @@ return WardrobeService
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="62">
+        <Item class="ModuleScript" referent="68">
           <Properties>
             <string name="Name">WorldQuery</string>
             <string name="Source"><![CDATA[-- Raycasts against the world (never characters) and sweeps against combatant capsules.
@@ -22241,7 +23274,7 @@ return WorldQuery
 ]]></string>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="63">
+        <Item class="ModuleScript" referent="69">
           <Properties>
             <string name="Name">ZoneService</string>
             <string name="Source"><![CDATA[-- Lingering ground effects left by Cloud spells and the Lingering modifier, and the solid
@@ -22422,17 +23455,17 @@ return ZoneService
       </Item>
     </Item>
   </Item>
-  <Item class="StarterPlayer" referent="64">
+  <Item class="StarterPlayer" referent="70">
     <Properties>
       <string name="Name">StarterPlayer</string>
       <float name="CameraMaxZoomDistance">60</float>
       <float name="CharacterWalkSpeed">16</float>
     </Properties>
-    <Item class="StarterPlayerScripts" referent="65">
+    <Item class="StarterPlayerScripts" referent="71">
       <Properties>
         <string name="Name">StarterPlayerScripts</string>
       </Properties>
-      <Item class="LocalScript" referent="66">
+      <Item class="LocalScript" referent="72">
         <Properties>
           <string name="Name">Client</string>
           <string name="Source"><![CDATA[-- Mana Wars client entry point.
@@ -22460,6 +23493,7 @@ local FamiliarController = require(Controllers.FamiliarController)
 local DevController = require(Controllers.DevController)
 local AuctionController = require(Controllers.AuctionController)
 local ChatController = require(Controllers.ChatController)
+local AchievementsController = require(Controllers.AchievementsController)
 
 State.init()
 Widgets.initTooltip()
@@ -22478,6 +23512,7 @@ FamiliarController.init()
 DevController.init()
 AuctionController.init()
 ChatController.init()
+AchievementsController.init()
 
 InputController.onToggleInventory = InventoryController.toggle
 InputController.onToggleGrimoire = GrimoireController.toggle
@@ -22490,7 +23525,13 @@ LobbyController.onOpenWardrobe = function(tab)
 end
 LobbyController.onOpenAuction = function()
 	WardrobeController.close()
+	AchievementsController.close()
 	AuctionController.open()
+end
+LobbyController.onOpenAchievements = function()
+	WardrobeController.close()
+	AuctionController.close()
+	AchievementsController.toggle()
 end
 AuctionController.onOpenWardrobe = function()
 	AuctionController.close()
@@ -22501,11 +23542,284 @@ GrimoireController.onReplayTutorial = TutorialController.start
 print("[Mana Wars] client ready")
 ]]></string>
         </Properties>
-        <Item class="Folder" referent="67">
+        <Item class="Folder" referent="73">
           <Properties>
             <string name="Name">Controllers</string>
           </Properties>
-          <Item class="ModuleScript" referent="68">
+          <Item class="ModuleScript" referent="74">
+            <Properties>
+              <string name="Name">AchievementsController</string>
+              <string name="Source"><![CDATA[-- The Achievements window: every achievement with its progress bar and coin reward, plus the daily
+-- reward streak. Opened from the 🏆 button in the Plaza / library. The server sends the numbers
+-- (AchievementService.snapshot); unlocking and paying out happen on the server.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Achievements = require(ReplicatedStorage.Shared.Achievements)
+local UI = script.Parent.Parent.UI
+local Create = require(UI.Create)
+local Theme = require(UI.Theme)
+local Widgets = require(UI.Widgets)
+local State = require(script.Parent.State)
+
+local AchievementsController = {}
+
+local C = Theme.Colors
+
+local gui: ScreenGui
+local subtitle: TextLabel
+local dailyTitle: TextLabel
+local dailyText: TextLabel
+local list: ScrollingFrame
+local isOpen = false
+local receivedAt = os.clock()
+
+local function duration(seconds: number): string
+	seconds = math.max(0, math.floor(seconds))
+	local h, m = seconds // 3600, (seconds % 3600) // 60
+	if h > 0 then
+		return string.format("%dh %dm", h, m)
+	end
+	return string.format("%dm", math.max(1, m))
+end
+
+local function updateDaily()
+	local snapshot = State.achievements
+	if not snapshot then
+		return
+	end
+	local d = snapshot.daily
+	local left = (tonumber(d.nextIn) or 0) - (os.clock() - receivedAt)
+	dailyTitle.Text = string.format("Daily reward: +%d 💰 for every day you play", tonumber(d.coins) or 0)
+	local streak =
+		string.format("Streak: %d day%s (best %d)", d.streak or 0, if d.streak == 1 then "" else "s", d.best or 0)
+	if d.claimedToday then
+		dailyText.Text = streak .. "  ·  today's reward collected, the next one is ready in " .. duration(left)
+	else
+		dailyText.Text = streak .. "  ·  your reward for today is on its way"
+	end
+end
+
+local function row(a: Achievements.Achievement, value: number, unlockedAt: number?, order: number)
+	local done = unlockedAt ~= nil
+	local frame = Create("Frame", {
+		Name = "Achievement_" .. a.id,
+		Size = UDim2.new(1, -8, 0, 64),
+		BackgroundColor3 = if done then C.Panel3 else C.Panel2,
+		LayoutOrder = order,
+		Parent = list,
+	}, {
+		Create.corner(10),
+		Create.stroke(if done then C.Gold else C.Stroke, if done then 1.5 else 1, if done then 0.1 else 0.5),
+	})
+	local tile = Create("Frame", {
+		Size = UDim2.fromOffset(48, 48),
+		Position = UDim2.fromOffset(8, 8),
+		BackgroundColor3 = if done then C.GoldDeep else C.Ink,
+		BackgroundTransparency = if done then 0.2 else 0,
+		Parent = frame,
+	}, { Create.corner(10) })
+	Widgets.label({
+		Size = UDim2.fromScale(1, 1),
+		Text = a.icon,
+		TextSize = 28,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextTransparency = if done then 0 else 0.35,
+		Parent = tile,
+	})
+	Widgets.label({
+		Name = "Name",
+		Size = UDim2.new(1, -330, 0, 22),
+		Position = UDim2.fromOffset(68, 10),
+		Text = a.name,
+		Font = Theme.Bold,
+		TextSize = 17,
+		TextColor3 = if done then C.Gold else C.Text,
+		Parent = frame,
+	})
+	Widgets.label({
+		Name = "Description",
+		Size = UDim2.new(1, -330, 0, 18),
+		Position = UDim2.fromOffset(68, 34),
+		Text = a.description,
+		TextSize = 14,
+		TextColor3 = C.Dim,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = frame,
+	})
+	-- progress (or a tick) and the reward
+	if done then
+		Widgets.label({
+			Name = "Status",
+			Size = UDim2.fromOffset(170, 22),
+			Position = UDim2.new(1, -262, 0.5, -11),
+			Text = "✅ Unlocked",
+			Font = Theme.Bold,
+			TextSize = 15,
+			TextColor3 = C.Good,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Parent = frame,
+		})
+	else
+		local bar = Widgets.bar(C.Accent, UDim2.fromOffset(170, 18), frame)
+		bar.frame.Name = "Progress"
+		bar.frame.Position = UDim2.new(1, -262, 0.5, -9)
+		bar.set(math.clamp(value / a.goal, 0, 1))
+		bar.label.Text = string.format("%d / %d", math.min(value, a.goal), a.goal)
+	end
+	local reward = Widgets.label({
+		Name = "Reward",
+		Size = UDim2.fromOffset(72, 28),
+		Position = UDim2.new(1, -82, 0.5, -14),
+		Text = "💰 " .. a.reward,
+		Font = Theme.Black,
+		TextSize = 15,
+		TextColor3 = if done then C.Dim else C.Gold,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.2,
+		Parent = frame,
+	})
+	Create.corner(14).Parent = reward
+end
+
+local function render()
+	if not gui then
+		return
+	end
+	Widgets.clear(list, true)
+	local snapshot = State.achievements
+	local stats = if snapshot then snapshot.stats else {}
+	local unlocked = if snapshot then snapshot.unlocked else {}
+	local count, earned = 0, 0
+	for i, a in Achievements.List do
+		local at = unlocked[a.id]
+		if at then
+			count += 1
+			earned += a.reward
+		end
+		row(a, stats[a.stat] or 0, at, i)
+	end
+	subtitle.Text = string.format(
+		"%d of %d unlocked  ·  💰 %d of %d earned",
+		count,
+		#Achievements.List,
+		earned,
+		Achievements.totalReward()
+	)
+	updateDaily()
+end
+
+function AchievementsController.open()
+	isOpen = true
+	gui.Enabled = true
+	State.setMenu("achievements", true)
+	render()
+end
+
+function AchievementsController.close()
+	isOpen = false
+	gui.Enabled = false
+	State.setMenu("achievements", false)
+end
+
+function AchievementsController.toggle()
+	if isOpen then
+		AchievementsController.close()
+	else
+		AchievementsController.open()
+	end
+end
+
+function AchievementsController.isOpen(): boolean
+	return isOpen
+end
+
+function AchievementsController.init()
+	gui = Widgets.screen("Achievements", 11)
+	gui.Enabled = false
+	local window = Widgets.window(gui, {
+		title = "Achievements",
+		icon = "🏆",
+		subtitle = "",
+		size = Vector2.new(820, 620),
+		onClose = function()
+			AchievementsController.close()
+		end,
+	})
+	subtitle = window.subtitle
+	local body = window.body
+
+	-- the daily reward banner
+	local banner = Create("Frame", {
+		Name = "Daily",
+		Size = UDim2.new(1, 0, 0, 58),
+		BackgroundColor3 = C.Panel2,
+		Parent = body,
+	}, { Create.corner(10), Create.stroke(C.GoldDeep, 1.5, 0.2) })
+	Widgets.label({
+		Size = UDim2.fromOffset(52, 58),
+		Position = UDim2.fromOffset(6, 0),
+		Text = "📅",
+		TextSize = 30,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Parent = banner,
+	})
+	dailyTitle = Widgets.label({
+		Name = "DailyTitle",
+		Size = UDim2.new(1, -70, 0, 22),
+		Position = UDim2.fromOffset(62, 8),
+		Font = Theme.Black,
+		TextSize = 16,
+		TextColor3 = C.Gold,
+		Parent = banner,
+	})
+	dailyText = Widgets.label({
+		Name = "DailyText",
+		Size = UDim2.new(1, -70, 0, 18),
+		Position = UDim2.fromOffset(62, 32),
+		TextSize = 14,
+		TextColor3 = C.Dim,
+		Parent = banner,
+	})
+
+	list = Create("ScrollingFrame", {
+		Name = "List",
+		Size = UDim2.new(1, 0, 1, -68),
+		Position = UDim2.fromOffset(0, 68),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 6,
+		ScrollBarImageColor3 = C.Stroke,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(),
+		Parent = body,
+	}, { Create.list(Enum.FillDirection.Vertical, 6) })
+
+	State.AchievementsChanged:Connect(function()
+		receivedAt = os.clock()
+		if isOpen then
+			render()
+		end
+	end)
+	-- keep the "next reward in" countdown ticking while the window is open
+	local acc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		acc += dt
+		if isOpen and acc >= 1 then
+			acc = 0
+			updateDaily()
+		end
+	end)
+	render()
+end
+
+return AchievementsController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="75">
             <Properties>
               <string name="Name">AmbienceController</string>
               <string name="Source"><![CDATA[-- Per-map weather drawn around the camera while you're on the island:
@@ -22611,7 +23925,7 @@ return AmbienceController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="69">
+          <Item class="ModuleScript" referent="76">
             <Properties>
               <string name="Name">AuctionController</string>
               <string name="Source"><![CDATA[-- The Gilded Gavel: the auction house. Opened from the pavilion in the Plaza or the hub button.
@@ -23509,7 +24823,7 @@ return AuctionController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="70">
+          <Item class="ModuleScript" referent="77">
             <Properties>
               <string name="Name">ChatController</string>
               <string name="Source"><![CDATA[-- Proximity chat, client side. The server filters who receives each message (ChatService); here we
@@ -23557,7 +24871,7 @@ return ChatController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="71">
+          <Item class="ModuleScript" referent="78">
             <Properties>
               <string name="Name">ChestController</string>
               <string name="Source"><![CDATA[-- The loot window shown when you open a chest or a dead mage's satchel.
@@ -23809,7 +25123,7 @@ return ChestController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="72">
+          <Item class="ModuleScript" referent="79">
             <Properties>
               <string name="Name">DevController</string>
               <string name="Source"><![CDATA[-- The 🛠️ Dev panel: test everything without spending anything. It shows for players the server
@@ -24229,7 +25543,7 @@ return DevController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="73">
+          <Item class="ModuleScript" referent="80">
             <Properties>
               <string name="Name">FXController</string>
               <string name="Source"><![CDATA[-- Draws every spell. The server only sends compact events; all parts here are local
@@ -25355,7 +26669,7 @@ return FXController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="74">
+          <Item class="ModuleScript" referent="81">
             <Properties>
               <string name="Name">FamiliarBuilder</string>
               <string name="Source"><![CDATA[-- Builds familiar models out of parts (no meshes needed) and poses them every frame: flapping
@@ -26261,7 +27575,7 @@ return FamiliarBuilder
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="75">
+          <Item class="ModuleScript" referent="82">
             <Properties>
               <string name="Name">FamiliarController</string>
               <string name="Source"><![CDATA[-- Familiars following their mages. The server puts a "Familiar" attribute on each character
@@ -26593,7 +27907,7 @@ return FamiliarController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="76">
+          <Item class="ModuleScript" referent="83">
             <Properties>
               <string name="Name">GrimoireController</string>
               <string name="Source"><![CDATA[-- The Grimoire: an in-game encyclopedia that explains how to play and how to craft spells,
@@ -27361,7 +28675,7 @@ return GrimoireController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="77">
+          <Item class="ModuleScript" referent="84">
             <Properties>
               <string name="Name">HUDController</string>
               <string name="Source"><![CDATA[-- In-match HUD: health/shield, mana, wand hotbar with the spell deck, potions,
@@ -28152,7 +29466,7 @@ return HUDController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="78">
+          <Item class="ModuleScript" referent="85">
             <Properties>
               <string name="Name">InputController</string>
               <string name="Source"><![CDATA[-- Casting and hotkeys.
@@ -28396,7 +29710,7 @@ return InputController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="79">
+          <Item class="ModuleScript" referent="86">
             <Properties>
               <string name="Name">InventoryController</string>
               <string name="Source"><![CDATA[-- The Spellbook: manage wands, slot spells into them, and craft new spells in the Spellforge.
@@ -29572,7 +30886,7 @@ return InventoryController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="80">
+          <Item class="ModuleScript" referent="87">
             <Properties>
               <string name="Name">LobbyController</string>
               <string name="Source"><![CDATA[-- Out-of-match UI for the hub (Arcanum Plaza) and the library (Arcane Athenaeum): Join Game /
@@ -29605,6 +30919,7 @@ local LobbyController = {}
 LobbyController.onOpenGrimoire = nil :: (() -> ())?
 LobbyController.onOpenWardrobe = nil :: ((tab: string?) -> ())?
 LobbyController.onOpenAuction = nil :: (() -> ())?
+LobbyController.onOpenAchievements = nil :: (() -> ())?
 
 local C = Theme.Colors
 local player = Players.LocalPlayer
@@ -29617,6 +30932,7 @@ local classGrid: ScrollingFrame
 local classButton: TextButton
 local wardrobeButton: TextButton
 local auctionButton: TextButton
+local achievementsButton: TextButton
 local coinsPill: TextLabel
 local spectateBar: Frame
 local spectateName: TextLabel
@@ -30269,6 +31585,18 @@ function LobbyController.init()
 		parent = Dock.get(),
 	})
 	auctionButton.Name = "AuctionButton"
+	achievementsButton = Widgets.button("🏆  Achievements", {
+		size = UDim2.fromOffset(Dock.WIDTH, 38),
+		color = Color3.fromRGB(150, 110, 30),
+		layoutOrder = 7,
+		onClick = function()
+			if LobbyController.onOpenAchievements then
+				LobbyController.onOpenAchievements()
+			end
+		end,
+		parent = Dock.get(),
+	})
+	achievementsButton.Name = "AchievementsButton"
 	coinsPill = Widgets.label({
 		Name = "CoinsPill",
 		Text = "💰 0 Enchanted Coins",
@@ -30279,7 +31607,7 @@ function LobbyController.init()
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.3,
 		Size = UDim2.fromOffset(Dock.WIDTH, 32),
-		LayoutOrder = 7,
+		LayoutOrder = 8,
 		Parent = Dock.get(),
 	})
 	Create.corner(16).Parent = coinsPill
@@ -30302,6 +31630,7 @@ function LobbyController.init()
 		classButton.Visible = inLobby
 		wardrobeButton.Visible = inLobby and State.inHub()
 		auctionButton.Visible = wardrobeButton.Visible
+		achievementsButton.Visible = inLobby
 		coinsPill.Visible = inLobby
 		if not inLobby and classPanel.Visible then
 			setKitShop(false)
@@ -30341,7 +31670,7 @@ return LobbyController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="81">
+          <Item class="ModuleScript" referent="88">
             <Properties>
               <string name="Name">Sounds</string>
               <string name="Source"><![CDATA[-- Sound effects. These use sounds that ship with every Roblox client so the game works
@@ -30426,7 +31755,7 @@ return Sounds
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="82">
+          <Item class="ModuleScript" referent="89">
             <Properties>
               <string name="Name">State</string>
               <string name="Source"><![CDATA[-- Client-side cache of everything the UI shows: inventory, equipped wand state,
@@ -30469,6 +31798,9 @@ State.WandChanged = Signal.new()
 State.Toast = Signal.new()
 State.MenusChanged = Signal.new()
 State.WardrobeChanged = Signal.new()
+State.AchievementsChanged = Signal.new()
+-- achievement progress and the daily reward streak (see AchievementService.snapshot)
+State.achievements = nil :: { stats: { [string]: number }, unlocked: { [string]: number }, daily: { [string]: any } }?
 
 function State.now(): number
 	return workspace:GetServerTimeNow()
@@ -30566,6 +31898,12 @@ function State.init()
 			State.WardrobeChanged:Fire()
 		end
 	end)
+	Remotes.event("AchievementsUpdated").OnClientEvent:Connect(function(snapshot)
+		if type(snapshot) == "table" then
+			State.achievements = snapshot
+			State.AchievementsChanged:Fire()
+		end
+	end)
 	Remotes.event("Announce").OnClientEvent:Connect(function(kind, data)
 		if kind == "Toast" and type(data) == "table" and type(data.text) == "string" then
 			State.toast(data.text)
@@ -30577,7 +31915,7 @@ return State
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="83">
+          <Item class="ModuleScript" referent="90">
             <Properties>
               <string name="Name">StormController</string>
               <string name="Source"><![CDATA[-- Draws the shrinking Mana Storm wall locally from replicated attributes,
@@ -30688,7 +32026,7 @@ return StormController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="84">
+          <Item class="ModuleScript" referent="91">
             <Properties>
               <string name="Name">TutorialController</string>
               <string name="Source"><![CDATA[-- A hands-on tutorial in the Spell Lab (the hub on your first visit): open the Spellbook, forge a spell from parts,
@@ -31076,7 +32414,7 @@ return TutorialController
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="85">
+          <Item class="ModuleScript" referent="92">
             <Properties>
               <string name="Name">VFX</string>
               <string name="Source"><![CDATA[-- Building blocks for spell effects, and how each element looks.
@@ -31700,7 +33038,7 @@ return VFX
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="86">
+          <Item class="ModuleScript" referent="93">
             <Properties>
               <string name="Name">WardrobeController</string>
               <string name="Source"><![CDATA[-- The Tailor's Loom: open Coffers with Enchanted Coins, stitch parts into robes and hats, and
@@ -32785,11 +34123,11 @@ return WardrobeController
             </Properties>
           </Item>
         </Item>
-        <Item class="Folder" referent="87">
+        <Item class="Folder" referent="94">
           <Properties>
             <string name="Name">UI</string>
           </Properties>
-          <Item class="ModuleScript" referent="88">
+          <Item class="ModuleScript" referent="95">
             <Properties>
               <string name="Name">CosmeticInfo</string>
               <string name="Source"><![CDATA[-- Tooltip / detail text for robe and hat parts, finished garments and familiars.
@@ -33009,7 +34347,7 @@ return CosmeticInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="89">
+          <Item class="ModuleScript" referent="96">
             <Properties>
               <string name="Name">Create</string>
               <string name="Source"><![CDATA[-- Declarative-ish instance builder:
@@ -33108,7 +34446,7 @@ return Create
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="90">
+          <Item class="ModuleScript" referent="97">
             <Properties>
               <string name="Name">Dock</string>
               <string name="Source"><![CDATA[-- The stack of menu buttons down the left of the screen (Spellbook, Grimoire, class, wardrobe,
@@ -33149,7 +34487,7 @@ return Dock
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="91">
+          <Item class="ModuleScript" referent="98">
             <Properties>
               <string name="Name">ItemInfo</string>
               <string name="Source"><![CDATA[-- Builds tooltip / details content for every kind of item.
@@ -33317,7 +34655,7 @@ return ItemInfo
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="92">
+          <Item class="ModuleScript" referent="99">
             <Properties>
               <string name="Name">Theme</string>
               <string name="Source"><![CDATA[-- Colours and fonts for every screen. Tweak here to re-skin the whole UI.
@@ -33383,7 +34721,7 @@ return Theme
 ]]></string>
             </Properties>
           </Item>
-          <Item class="ModuleScript" referent="93">
+          <Item class="ModuleScript" referent="100">
             <Properties>
               <string name="Name">Widgets</string>
               <string name="Source"><![CDATA[-- Reusable UI pieces: item tiles, buttons, bars, info cards, the hover tooltip,
@@ -34448,20 +35786,20 @@ return Widgets
       </Item>
     </Item>
   </Item>
-  <Item class="TextChatService" referent="94">
+  <Item class="TextChatService" referent="101">
     <Properties>
       <string name="Name">TextChatService</string>
       <token name="ChatVersion">1</token>
     </Properties>
   </Item>
-  <Item class="Workspace" referent="95">
+  <Item class="Workspace" referent="102">
     <Properties>
       <string name="Name">Workspace</string>
       <float name="FallenPartsDestroyHeight">-150</float>
       <bool name="NeedsPivotMigration">false</bool>
       <bool name="StreamingEnabled">false</bool>
     </Properties>
-    <Item class="Terrain" referent="96">
+    <Item class="Terrain" referent="103">
       <Properties>
         <string name="Name">Terrain</string>
         <bool name="Decoration">true</bool>

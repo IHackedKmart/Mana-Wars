@@ -13,6 +13,7 @@ local Structures = require(script.Parent.Parent.Map.Structures)
 local Combatants = require(script.Parent.Combatants)
 local GameState = require(script.Parent.GameState)
 local InventoryService = require(script.Parent.InventoryService)
+local Events = require(script.Parent.Events)
 
 type Combatant = Combatants.Combatant
 type LootEntry = Items.LootEntry
@@ -107,6 +108,9 @@ local function open(player: Player, chest: Chest)
 		chest.opened = true
 		swingLid(chest, true)
 		chest.prompt.ActionText = if chest.isSatchel then "Loot" else "Search"
+	end
+	if not chest.viewers[player] and not chest.isSatchel then
+		Events.fire("ChestOpened", player, chest.tier)
 	end
 	chest.viewers[player] = true
 	sendContents(player, chest)
