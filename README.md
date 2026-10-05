@@ -69,7 +69,7 @@ Every player spawns here, and nothing pulls you into a match until you choose to
 - **Join the game.** Walk through the big **portal** at the north end, or press **▶️ PLAY** at the top of the screen, then pick a game mode. That puts you in its queue and takes you to the library.
 - **Spell Lab.** Outside a match you carry a sandbox kit: a practice staff, a twin-cast scepter, showcase spells and 3 copies of **every** spell part. Dummies never die, and practice spells can't hurt other players. The kit is swapped for your real starting kit when a match starts. **♻ Restock Spell Lab** in the Spellbook refills everything.
 - **Tutorial.** On your first visit a step-by-step tutorial teaches crafting by doing. You open the Spellbook, forge a spell, slot it into a wand, hit a dummy, then build a spell with a trigger and payload. Each step finishes itself when you do it, and the next button glows.
-- **Grimoire.** Press **H**, or use a lectern, to open an in-game encyclopedia. It covers how a match works, how crafting works, how wands work, every Form, Element, Modifier and Trigger, the premade spell library, the kits and their tiers and odds, coins, coffers and outfits, and the controls. You can also replay the tutorial from it.
+- **Grimoire.** Press **H**, or use a lectern, to open an in-game encyclopedia. It covers how a match works, how crafting works, how triggers and payloads work (its own chapter), how wands work, every Form, Element, Modifier and Trigger, the premade spell library, the kits and their tiers and odds, coins, coffers and outfits, and the controls. You can also replay the tutorial from it.
 - **👘 Wardrobe & Coffers / ⚖ Auction House** buttons on the left of the screen open the same windows as the stalls. Your coin count is shown under them.
 
 ## The queue: the Arcane Athenaeum
@@ -89,7 +89,13 @@ Every spell is built from parts:
 | **Form** (required) | what the spell physically is | Bolt, Spark, Orb, Lance (beam), Nova, Chain, Mine, Grenade, Cloud, Boomerang, Wisp, Meteor, Blink, Aegis, Sawblade, Swarm, Rampart (a wall), Tornado, Black Hole, Sentry (a turret)... |
 | **Element** | what it's made of | Fire burns, Frost slows (3 hits freezes), Lightning arcs, Poison stacks, Void heals you, Earth hits hard, Wind launches, Radiant marks targets through walls, Blood trades HP for power, Chaos rolls the dice, Chrono rewinds time |
 | **Modifiers** (up to 4) | how it behaves | Homing, Twin, Triple, Barrage, Explosive, Bounce, Pierce, Lingering, Orbit, Phasing, Vortex, Shatter, Echo, Skyfall, Stasis, Returning, Magnetic, Gigantic, Transpose, Hydra, Fractal... |
-| **Trigger + Payload** | cast a *whole other spell* on hit / on expiry / on a timer / every pulse / on every bounce / near an enemy / on a kill | Grenade → On Expire → Fire Spray = *Cluster Bomb* |
+| **Trigger + Payload** | release a *whole other spell* on hit / on expiry / on a timer / every pulse / on every bounce / near an enemy / on a kill | Grenade → On Expire → Fire Spray = *Cluster Bomb* |
+
+### Triggers and payloads
+
+A **payload** is a whole, finished spell packed inside another spell. The outer spell (the *carrier*) flies as usual, and its **Trigger** part decides *when* the payload comes out: when the carrier hits something, when it ends, half a second after casting, every pulse, on every bounce, when an enemy comes near, or when it kills someone. The payload is then cast from wherever the carrier is at that moment. Think of a firework: the rocket flies up, the fuse burns, and the burst goes off up there.
+
+To make one: have the spell you want released in your bag (forge it first if you need to), build the carrier in the Spellforge (a Form, plus any Element and Modifiers), and click a Trigger part. The bag switches to your spells and the **PAYLOAD** slot glows: click the spell you want inside and press **Forge Spell**. The payload leaves your bag because it now lives inside the new spell; **Dismantle** gives it back. A trigger always needs a payload and a payload always needs a trigger. The Grimoire's **Payloads** chapter walks through it with examples.
 
 Payloads can carry their own triggers, up to three layers deep. So a *Seeking Twin Ember Bolt* that bursts into a *Frost Nova*, which then spits *Triple Storm Sparks*, is a real spell you can build. That works out to about **376 million** single-layer spells, and around 10^18 once you add one trigger. Any spell can be **dismantled** back into its parts, so rare premade spells double as rare parts.
 
@@ -114,7 +120,7 @@ Swaps, pulls, rewinds and walls follow the same rules as damage: nothing works d
 
 Wands work like Noita: a wand casts its slotted spells left to right. Multicast wands fire several at once and shuffle wands fire them in random order. When a wand reaches the end of its spells, it recharges.
 
-**How to craft, step by step:** press **B** to open the Spellbook. Open the **Parts** tab of your bag (the middle column) and click a **Form** part, then optionally an **Element** and some **Modifiers**. Check the preview, then press **Forge Spell**. The new spell lands in your bag, already selected, so just click an empty wand slot to equip it. For a trigger spell, add a Trigger part, click any spell in your bag, and press **Use as payload** before forging.
+**How to craft, step by step:** press **B** to open the Spellbook. Open the **Parts** tab of your bag (the middle column) and click a **Form** part, then optionally an **Element** and some **Modifiers**. Check the preview, then press **Forge Spell**. The new spell lands in your bag, already selected, so just click an empty wand slot to equip it. For a trigger spell, add a Trigger part, then click the spell from your bag that it should release (see [Triggers and payloads](#triggers-and-payloads)).
 
 The full list of every part, spell, map and kit is in **[docs/CATALOG.md](docs/CATALOG.md)**.
 
@@ -163,7 +169,8 @@ The Spellbook has three columns: your **wands** on the left (each card shows its
 - **Slot a spell:** click a spell in your bag, then click a wand slot.
 - **Unslot a spell:** right-click a spell in a wand, or select it and press Unslot.
 - **Craft a spell:** click parts to drop them into the Spellforge, then press **Forge Spell**.
-- **Add a payload:** select a bag spell and press *Use as payload*.
+- **Add a payload:** after adding a Trigger part, click a spell in your bag (or select one and press *Use as payload*).
+- **A full bag:** the bag holds 30 spells. When it's full the Forge button says so: drop or dismantle a spell to make room (in the Spell Lab, **Restock Spell Lab** also resets it).
 
 ## Play it in Roblox Studio
 

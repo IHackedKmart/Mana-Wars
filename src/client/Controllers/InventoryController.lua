@@ -3,7 +3,9 @@
 --   * Click a spell in your bag, then click a wand slot to put it there (swaps if occupied).
 --   * Click a spell in a wand, then "Unslot" (or right-click it) to send it back to the bag.
 --   * Click spell parts to drop them into the Spellforge, then press Forge.
---   * Select a spell in your bag and press "Use as payload" to nest it inside a trigger spell.
+--   * Triggers and payloads: a Trigger part makes the spell release a second, finished spell (the
+--     payload) when something happens (on hit, when it ends...). After adding a trigger, the next
+--     spell clicked in the bag becomes the payload (or select one and press "Use as payload").
 --   * Dismantle any spell in your bag to get its parts back.
 
 local Players = game:GetService("Players")
@@ -178,6 +180,11 @@ local function addPartToDraft(id: string)
 		draft.element = id
 	elseif part.category == "Trigger" then
 		draft.trigger = id
+		if not draft.payloadUid then
+			-- next: the spell this trigger releases
+			bagTab = "Spells"
+			State.toast("Now pick the PAYLOAD: click the spell this trigger should release", C.Gold)
+		end
 	elseif part.category == "Modifier" then
 		if #draft.mods >= Config.Spell.MaxModifiers then
 			State.toast("A spell can hold " .. Config.Spell.MaxModifiers .. " modifiers", C.Bad)
@@ -453,7 +460,14 @@ local function buildBag()
 				selected = isSelected("Spell", spell.uid) or draft.payloadUid == spell.uid,
 				layoutOrder = i,
 				onClick = function()
-					if isSelected("Spell", spell.uid) then
+					if draft.trigger and not findBagSpell(draft.payloadUid) then
+						-- a trigger is waiting for its payload: this spell goes inside
+						draft.payloadUid = spell.uid
+						selected = { kind = "Spell", uid = spell.uid }
+						Sounds.play("Click")
+						State.toast(spell.name .. " is now the payload", C.Good)
+						refresh()
+					elseif isSelected("Spell", spell.uid) then
 						choose(nil)
 					else
 						choose({ kind = "Spell", uid = spell.uid })
@@ -474,7 +488,7 @@ local function buildBag()
 		Form = "what the spell is",
 		Element = "what it's made of",
 		Modifier = "how it behaves",
-		Trigger = "casts a payload spell",
+		Trigger = "releases a 2nd spell: the payload",
 	}
 	for _, category in SpellParts.Categories do
 		local owned = {}
@@ -569,6 +583,11 @@ local function buildBag()
 	end
 end
 
+-- What the Spellforge holds right now (the tutorial follows along).
+function InventoryController.draftState(): { form: string?, trigger: string?, payload: boolean }
+	return { form = draft.form, trigger = draft.trigger, payload = findBagSpell(draft.payloadUid) ~= nil }
+end
+
 -- Switches the bag to the tab holding a named element ("Part_Bolt", "Spell_..."), so the tutorial
 -- can point at it.
 function InventoryController.reveal(elementName: string)
@@ -586,6 +605,20 @@ end
 ---------------------------------------------------------------------------
 -- Spellforge
 ---------------------------------------------------------------------------
+
+-- What each empty Spellforge slot is for (shown when you hover it).
+local SLOT_HELP: { [string]: { title: string, body: string } } = {
+	Form = {
+		title = "Form (required)",
+		body = "What the spell is: a bolt, an orb, a nova, a mine... Every spell needs one.",
+	},
+	Element = { title = "Element (optional)", body = "What it's made of: fire burns, frost slows, lightning arcs..." },
+	Modifier = { title = "Modifier (optional)", body = "How it behaves: homing, explosive, triple, bounce..." },
+	Trigger = {
+		title = "Trigger (optional)",
+		body = "WHEN to release a second spell, the payload: on hit, when this spell ends, on a timer... A trigger always needs a payload.",
+	},
+}
 
 local function forgeSlot(
 	parent: Instance,
@@ -614,7 +647,10 @@ local function forgeSlot(
 			then function()
 				return ItemInfo.part(part.id)
 			end
-			else nil,
+			else function()
+				local help = SLOT_HELP[category]
+				return { title = help.title, color = Theme.CategoryColors[category], body = help.body }
+			end,
 		parent = holder,
 	}).Position =
 		UDim2.fromOffset(10, 0)
@@ -671,19 +707,22 @@ local function buildForge()
 	if payload then
 		pIcon, pColor = ItemInfo.spellVisual(payload.recipe)
 	end
+	local needsPayload = draft.trigger ~= nil and payload == nil
 	Widgets.tile({
 		size = 48,
 		icon = pIcon,
 		iconColor = pColor,
 		border = if payload then Theme.rarity(payload.rarity) else nil,
 		empty = payload == nil,
+		selected = needsPayload,
 		onClick = function()
 			if payload then
 				draft.payloadUid = nil
 			elseif selected and selected.kind == "Spell" and findBagSpell(selected.uid) then
 				draft.payloadUid = selected.uid
 			else
-				State.toast("Select a spell in your bag, then click here to make it the payload", C.Dim)
+				bagTab = "Spells"
+				State.toast("Click a spell in your bag to make it the payload (add a Trigger first)", C.Dim)
 			end
 			refresh()
 		end,
@@ -691,15 +730,22 @@ local function buildForge()
 			then function()
 				return ItemInfo.spell(payload, nil)
 			end
-			else nil,
+			else function()
+				return {
+					title = "Payload",
+					color = C.Gold,
+					body = "A whole finished spell from your bag, packed inside this one. The Trigger decides when it's released, "
+						.. "and it's cast from wherever this spell is at that moment. Add a Trigger, then click any spell in your bag.",
+				}
+			end,
 		parent = payloadHolder,
 	}).Position =
 		UDim2.fromOffset(10, 0)
 	Widgets.label({
-		Text = "PAYLOAD",
+		Text = if needsPayload then "PICK ONE" else "PAYLOAD",
 		TextSize = 10,
 		Font = Theme.Bold,
-		TextColor3 = C.Dim,
+		TextColor3 = if needsPayload then C.Gold else C.Dim,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Size = UDim2.new(1, 0, 0, 14),
 		Position = UDim2.fromOffset(0, 50),
@@ -730,18 +776,40 @@ local function buildForge()
 		Parent = forgeFrame,
 	}, { Create.corner(8), Create.padding(8, 6) })
 	local recipe = draftRecipe()
-	if not recipe then
+	local function guide(text: string, color: Color3)
 		Widgets.label({
-			Text = "Every spell needs a FORM (Bolt, Orb, Nova...). Add an ELEMENT and up to "
-				.. Config.Spell.MaxModifiers
-				.. " MODIFIERS. A TRIGGER casts a whole PAYLOAD spell when this one hits or ends.",
+			Text = text,
+			RichText = true,
 			TextWrapped = true,
 			TextSize = 12,
-			TextColor3 = C.Dim,
+			TextColor3 = color,
 			TextYAlignment = Enum.TextYAlignment.Top,
 			Size = UDim2.fromScale(1, 1),
 			Parent = preview,
 		})
+	end
+	if needsPayload then
+		guide(
+			"<b>Now pick the PAYLOAD.</b> A trigger releases a second spell, the payload, when it fires. "
+				.. "Click any spell in your bag (Spells tab) to pack it inside this one."
+				.. (if draft.form then "" else " This spell still needs a FORM too."),
+			C.Gold
+		)
+		recipe = nil
+	elseif payload and not draft.trigger then
+		guide(
+			"<b>Add a TRIGGER.</b> The payload needs one to decide when it's released: "
+				.. "On Hit, On Expire, Timer, Pulse... (Parts tab, Trigger parts)",
+			C.Gold
+		)
+		recipe = nil
+	elseif not recipe then
+		guide(
+			"Every spell needs a <b>FORM</b> (Bolt, Orb, Nova...). Add an <b>ELEMENT</b> and up to "
+				.. Config.Spell.MaxModifiers
+				.. " <b>MODIFIERS</b>. Optional: a <b>TRIGGER</b> + <b>PAYLOAD</b> makes this spell release a second spell when it hits or ends.",
+			C.Dim
+		)
 	else
 		local spec, err = SpellBuilder.compile(recipe)
 		if not spec then
@@ -793,39 +861,59 @@ local function buildForge()
 		end
 	end
 
-	local forgeButton = Widgets.button("Forge Spell", {
-		size = UDim2.new(0.66, -16, 0, 36),
-		position = UDim2.new(0, 12, 1, -46),
-		color = if recipe then C.Gold else C.Panel3,
-		textColor = if recipe then C.Ink else C.Dim,
-		textSize = 16,
-		onClick = function()
-			if not recipe then
-				State.toast("Add a Form part first", C.Bad)
-				return
-			end
-			local ok, _, newUid = invoke("Forge", {
-				form = draft.form,
-				element = draft.element,
-				mods = table.clone(draft.mods),
-				trigger = draft.trigger,
-				payloadUid = draft.payloadUid,
-			})
-			if ok then
-				Sounds.play("Forge")
-				if type(newUid) == "string" then
-					InventoryController.Forged:Fire(newUid)
+	-- (forging adds a spell to the bag, unless its payload comes out of the bag)
+	local inv = inventory()
+	local maxSpells = Config.Inventory.MaxSpells
+	local bagFull = inv ~= nil and #inv.spells >= maxSpells and payload == nil
+	local forgeButton =
+		Widgets.button(if bagFull then "Spell bag full (" .. maxSpells .. "/" .. maxSpells .. ")" else "Forge Spell", {
+			size = UDim2.new(0.66, -16, 0, 36),
+			position = UDim2.new(0, 12, 1, -46),
+			color = if recipe and not bagFull then C.Gold else C.Panel3,
+			textColor = if recipe and not bagFull then C.Ink else C.Dim,
+			textSize = if bagFull then 13 else 16,
+			onClick = function()
+				if bagFull then
+					State.toast(
+						"Your spell bag is full. Select a spell in the Spells tab and press Drop or Dismantle to make room"
+							.. (if State.practice() then ", or press Restock Spell Lab." else "."),
+						C.Bad
+					)
+					return
 				end
-				clearDraft()
-				if type(newUid) == "string" then
-					selected = { kind = "Spell", uid = newUid }
-					bagTab = "Spells"
+				if needsPayload then
+					State.toast("Pick a payload first: click a spell in your bag", C.Bad)
+					return
 				end
-				refresh()
-			end
-		end,
-		parent = forgeFrame,
-	})
+				if not recipe then
+					State.toast(
+						if payload then "Add a Trigger part for the payload" else "Add a Form part first",
+						C.Bad
+					)
+					return
+				end
+				local ok, _, newUid = invoke("Forge", {
+					form = draft.form,
+					element = draft.element,
+					mods = table.clone(draft.mods),
+					trigger = draft.trigger,
+					payloadUid = draft.payloadUid,
+				})
+				if ok then
+					Sounds.play("Forge")
+					if type(newUid) == "string" then
+						InventoryController.Forged:Fire(newUid)
+					end
+					clearDraft()
+					if type(newUid) == "string" then
+						selected = { kind = "Spell", uid = newUid }
+						bagTab = "Spells"
+					end
+					refresh()
+				end
+			end,
+			parent = forgeFrame,
+		})
 	forgeButton.Name = "ForgeButton"
 
 	Widgets.button("Clear", {

@@ -26,7 +26,7 @@ local player = Players.LocalPlayer
 type Step = {
 	title: string,
 	text: string,
-	highlight: string?, -- name of a GUI element to make glow
+	highlight: (string | () -> string?)?, -- name of a GUI element to make glow (or a function choosing one)
 	manual: boolean?, -- needs a Next button instead of finishing itself
 	enter: (() -> ())?,
 	done: (() -> boolean)?,
@@ -153,8 +153,19 @@ local steps: { Step } = {
 	},
 	{
 		title = "7. Spells inside spells",
-		text = "<b>Triggers</b> cast a whole second spell. In the Spellbook add <b>🔹 Bolt</b> + <b>🎇 On Hit</b>, then click any spell in your bag and press <b>Use as payload</b>. Forge it and see what happens!",
-		highlight = "Part_OnHit",
+		text = "A spell can carry a second spell inside it, called the <b>payload</b>, and release it when its <b>trigger</b> fires. In the Spellbook add <b>🔹 Bolt</b> + <b>🎇 On Hit</b>, then click any spell in your bag: it drops into the glowing PAYLOAD slot. Forge it and hit a dummy!",
+		-- (point at whatever comes next: the bolt, the trigger, the payload slot, then Forge)
+		highlight = function(): string?
+			local d = InventoryController.draftState()
+			if not d.form then
+				return "Part_Bolt"
+			elseif not d.trigger then
+				return "Part_OnHit"
+			elseif not d.payload then
+				return "Forge_PAYLOAD"
+			end
+			return "ForgeButton"
+		end,
 		enter = function()
 			lastForged = nil
 		end,
@@ -241,11 +252,13 @@ local function update()
 		return
 	end
 	-- make the next thing to click glow
-	if step.highlight then
+	local highlight = step.highlight
+	local targetName = if type(highlight) == "function" then highlight() else highlight
+	if targetName then
 		if InventoryController.isOpen() then
-			InventoryController.reveal(step.highlight) -- (switches the bag to the right tab)
+			InventoryController.reveal(targetName) -- (switches the bag to the right tab)
 		end
-		local target = findTarget(step.highlight)
+		local target = findTarget(targetName)
 		if target and (not glow or glow.Parent ~= target) then
 			clearGlow()
 			local g = Create("Frame", {

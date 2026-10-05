@@ -399,7 +399,8 @@ function InventoryService.giveDevLoadout(c: Combatant)
 		premades[i], premades[j] = premades[j], premades[i]
 	end
 	for _, id in premades do
-		if #c.inventory.spells >= INV.MaxSpells then
+		-- (leave room in the bag, so there's still space to forge new spells)
+		if #c.inventory.spells >= INV.MaxSpells - 10 then
 			break
 		end
 		table.insert(c.inventory.spells, LootTables.premadeSpell(id))
@@ -657,7 +658,12 @@ actions.Forge = function(c, args)
 		end
 	end
 	if not payloadIndex and #inv.spells >= INV.MaxSpells then
-		return false, "Your spell bag is full"
+		return false,
+			"Your spell bag is full ("
+				.. INV.MaxSpells
+				.. "/"
+				.. INV.MaxSpells
+				.. "). Drop or dismantle a spell to make room."
 	end
 	for id, n in need do
 		inv.parts[id] -= n

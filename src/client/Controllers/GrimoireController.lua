@@ -262,7 +262,7 @@ chapter("Crafting", "✨  Spellcrafting", function()
 			.. "<b>Modifiers</b> (up to "
 			.. Config.Spell.MaxModifiers
 			.. "): how it behaves. Homing, Twin, Triple, Explosive, Bounce, Pierce, Orbit... Add the same one twice to stack it.\n"
-			.. "<b>Trigger + Payload</b> (optional): makes your spell cast a <i>whole second spell</i> when it hits something, when it ends, after a timer, or every pulse."
+			.. "<b>Trigger + Payload</b> (optional): makes your spell release a <i>whole second spell</i> (the <b>payload</b>) when it hits something, when it ends, after a timer, or every pulse. See the <b>Payloads</b> chapter."
 	)
 	subheading("Forging a spell, step by step")
 	para(
@@ -277,12 +277,62 @@ chapter("Crafting", "✨  Spellcrafting", function()
 	recipeRow({ form = "Spark", element = "Arcane", mods = { "Homing", "Triple" } }, "Magic Missile")
 	recipeRow({ form = "Orb", element = "Frost", mods = { "Enlarge" } }, "Frost Orb")
 	recipeRow({ form = "Mine", element = "Poison", mods = { "Lingering" } }, "Tick Bomb")
-	subheading("Spells inside spells (triggers)")
+	subheading("Spells inside spells")
 	para(
-		"Add a <b>Trigger</b> part, then pick a <b>payload</b>: select any spell in your bag and press <b>Use as payload</b> (or click the PAYLOAD slot). When your spell hits or ends, it casts the payload from that spot. Payloads can carry their own triggers, up to "
-			.. Config.Spell.MaxDepth
-			.. " spells deep!"
+		"A spell can carry a second spell inside it, called the <b>payload</b>, and release it when its <b>Trigger</b> fires. The <b>Payloads</b> chapter explains it step by step."
 	)
+	subheading("Dismantling")
+	para(
+		"Select a spell in your bag and press <b>Dismantle</b> to break it back into parts (its payload comes back as its own spell). Rare spells from chests are a great source of rare parts!"
+	)
+	subheading("Mana")
+	para(
+		"Every part adds to the spell's <b>mana</b> cost, and payloads are paid for up front. If your wand runs out of mana it fizzles until it regenerates. The <b>Efficient</b> modifier makes the whole spell cheaper."
+	)
+end)
+
+chapter("Payloads", "📦  Payloads", function()
+	heading("Triggers & Payloads")
+	para(
+		"A <b>payload</b> is a whole, finished spell packed inside another spell. The outer spell carries it, and a <b>Trigger</b> part decides <i>when</i> it comes out. When the trigger fires, the payload is cast from wherever the outer spell is at that moment."
+	)
+	para(
+		"Think of a firework: the rocket flies up (your spell), the fuse burns (the trigger), and the burst goes off up there (the payload)."
+	)
+	subheading("The three pieces")
+	para(
+		"<b>1. The carrier:</b> the spell you're forging now. A Form, plus any Element and Modifiers, as usual.\n"
+			.. "<b>2. The trigger:</b> one Trigger part. It decides when the payload is released (see the list below).\n"
+			.. "<b>3. The payload:</b> any spell already in your bag, a looted one or one you forged earlier. It goes inside."
+	)
+	para(
+		"A trigger always needs a payload, and a payload always needs a trigger. You can't forge one without the other."
+	)
+	subheading("Making one, step by step")
+	para(
+		"<b>1.</b> Make sure the spell you want released is in your bag. Forge it first if you need to (for example, a Fire Nova).\n"
+			.. "<b>2.</b> In the Spellforge, build the carrier: click a <b>Form</b> (and an Element or Modifiers if you like).\n"
+			.. "<b>3.</b> Click a <b>Trigger</b> part. Your bag switches to its Spells tab and the PAYLOAD slot glows.\n"
+			.. "<b>4.</b> Click the spell you want inside. It drops into the <b>PAYLOAD</b> slot. (Clicking the slot again takes it out.)\n"
+			.. "<b>5.</b> Press <b>Forge Spell</b>. The payload spell leaves your bag: it now lives inside the new spell. <b>Dismantle</b> the new spell to get it back."
+	)
+	subheading("When each trigger fires")
+	local triggers = table.clone(SpellParts.ByCategory.Trigger)
+	table.sort(triggers, function(a, b)
+		return a.name < b.name
+	end)
+	local lines = {}
+	for _, part in triggers do
+		table.insert(lines, part.icon .. " <b>" .. part.name .. ":</b> " .. part.description)
+	end
+	para(table.concat(lines, "\n"))
+	subheading("Examples")
+	recipeRow({
+		form = "Bolt",
+		element = "Fire",
+		trigger = "OnHit",
+		payload = { form = "Nova", element = "Fire" },
+	}, "A bolt that bursts into a fire nova where it hits")
 	recipeRow({
 		form = "Grenade",
 		element = "Fire",
@@ -295,13 +345,13 @@ chapter("Crafting", "✨  Spellcrafting", function()
 		trigger = "OnHit",
 		payload = { form = "Nova", element = "Void" },
 	}, "Blink Strike")
-	subheading("Dismantling")
+	subheading("Good to know")
 	para(
-		"Select a spell in your bag and press <b>Dismantle</b> to break it back into parts (its payload comes back as its own spell). Rare spells from chests are a great source of rare parts!"
-	)
-	subheading("Mana")
-	para(
-		"Every part adds to the spell's <b>mana</b> cost, and payloads are paid for up front. If your wand runs out of mana it fizzles until it regenerates. The <b>Efficient</b> modifier makes the whole spell cheaper."
+		"<b>Payloads inside payloads:</b> the payload can have its own trigger and payload, up to "
+			.. Config.Spell.MaxDepth
+			.. " spells deep.\n"
+			.. "<b>Mana:</b> the whole thing is paid for when you cast, payload included, so big chains cost a lot.\n"
+			.. "<b>Triggers that repeat</b> (Pulse, On Bounce) release the payload several times from one cast."
 	)
 end)
 
@@ -419,7 +469,7 @@ chapter("Triggers", "🎇  Triggers", function()
 	partCatalog(
 		"Trigger",
 		"Triggers",
-		"A trigger needs a PAYLOAD spell. Select a spell in your bag and press 'Use as payload' in the Spellbook."
+		"A trigger decides WHEN a spell releases its payload (a second spell packed inside it). The Payloads chapter explains how to make one."
 	)
 end)
 

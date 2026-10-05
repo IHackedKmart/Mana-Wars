@@ -703,6 +703,7 @@ for _, chapterId in
 	{
 		"Welcome",
 		"Crafting",
+		"Payloads",
 		"Wands",
 		"Forms",
 		"Elements",
@@ -715,6 +716,9 @@ for _, chapterId in
 	}
 do
 	clickNamed(grimoire, chapterId)
+	if chapterId == "Payloads" then
+		shot("08b_grimoire_payloads")
+	end
 	local page = grimoire:FindFirstChild("Page", true)
 	check(page and #page:GetDescendants() > 5, "Grimoire chapter '" .. chapterId .. "' should have content")
 	checkWarnings("grimoire " .. chapterId)
@@ -803,6 +807,23 @@ expectStep(9, "trigger + payload")
 key(Enum.KeyCode.B)
 clickNamed(book, "Part_Bolt")
 clickNamed(book, "Part_OnHit")
+-- adding a trigger asks for its payload: the Spells tab opens and the PAYLOAD slot says so
+local function labelText(container, name: string): string
+	local holder = container:FindFirstChild(name, true)
+	if not holder then
+		return ""
+	end
+	-- (the slot's caption sits right under the slot; the tile's icon is a label inside the tile)
+	for _, inst in holder:GetChildren() do
+		if inst.ClassName == "TextLabel" then
+			return textOf(inst) or ""
+		end
+	end
+	return ""
+end
+check(labelText(book, "Forge_PAYLOAD") == "PICK ONE", "a trigger without a payload should ask for one")
+shot("02b_payload_pick")
+check(book:FindFirstChild("Spell_" .. me.inventory.spells[1].uid, true) ~= nil, "the bag should show its spells")
 local showcase = nil
 for _, spell in me.inventory.spells do
 	if spell.name == "Fireball" then
@@ -811,8 +832,10 @@ for _, spell in me.inventory.spells do
 end
 check(showcase ~= nil, "the Spell Lab bag should have showcase spells")
 if showcase then
+	-- clicking a spell while the trigger waits puts it straight into the PAYLOAD slot
 	clickNamed(book, "Spell_" .. showcase.uid)
-	click(book, "Use as payload")
+	check(labelText(book, "Forge_PAYLOAD") == "PAYLOAD", "clicking a spell should make it the payload")
+	shot("02c_payload_set")
 end
 click(book, "Forge Spell")
 checkWarnings("tutorial forge with payload")
@@ -1571,6 +1594,19 @@ do
 	Mock.step(0.2, true)
 	InventoryController.open()
 	shot("16_spellbook_full")
+	-- the dev loadout leaves room to forge; a truly full bag says so on the Forge button
+	local maxSpells = server.load("Shared/Config").Inventory.MaxSpells
+	check(#me.inventory.spells < maxSpells, "the dev loadout should leave room in the spell bag")
+	while #me.inventory.spells < maxSpells do
+		table.insert(me.inventory.spells, table.clone(me.inventory.spells[1]))
+		me.inventory.spells[#me.inventory.spells].uid = "fill" .. #me.inventory.spells
+	end
+	InventoryService.sync(me)
+	Mock.step(0.2, true)
+	local fullBook = gui("Spellbook")
+	clickNamed(fullBook, "Part_Bolt")
+	local forgeText = textOf(fullBook:FindFirstChild("ForgeButton", true)) or ""
+	check(string.find(forgeText, "Spell bag full", 1, true) ~= nil, "a full bag should show on the Forge button")
 	InventoryController.close()
 	player:SetAttribute("Alive", false)
 	me.inMatch = false
