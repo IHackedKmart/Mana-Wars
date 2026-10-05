@@ -226,7 +226,7 @@ Every kit (class) gives a starting wand or two, a few spells, some spell parts, 
 
 Everything in a kit (contents, tier, price, odds) lives in `src/shared/Classes.lua`. Dollar amounts assume the standard ~80 Robux per $0.99; you set the actual Robux price on each game pass. Roblox Premium members get every Copper kit free (`Config.Kits.PremiumFreeTier`, 0 turns it off). Bots only ever pick kits up to Gold.
 
-The bonus part is a random reward from a paid item, so the odds are shown in the kit shop and in the Grimoire before anyone buys, which is what Roblox's rules on paid random items ask for.
+The bonus part is a random reward from a paid item, so the odds are shown in the kit shop and in the Grimoire before anyone buys, which is what Roblox's rules on paid random items ask for. Some regions don't allow paid random items at all: the game asks Roblox (`PolicyService`) when each player joins, and where they're restricted, paid kits leave the random bonus part out and the kit shop says "not offered in your region" before anyone buys. The free Apprentice kit's bonus part isn't paid, so everyone gets it.
 
 ## Enchanted Coins, robes and the auction house
 

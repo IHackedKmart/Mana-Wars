@@ -608,6 +608,21 @@ function Classes.isFree(class: ClassDef): boolean
 end
 
 -- "75% Common · 25% Uncommon", rarest last.
+-- Whether a kit of this tier hands out its random bonus part. Paid kits only do where the
+-- player's region allows paid random items (PolicyService's ArePaidRandomItemsRestricted, checked
+-- by ClassService); the free kit always does.
+function Classes.bonusAllowed(tier: number, paidRandomAllowed: boolean): boolean
+	return tier == 0 or paidRandomAllowed
+end
+
+-- The bonus part line a shop shows for a tier: the odds, or why there's no bonus part.
+function Classes.bonusText(tier: number, paidRandomAllowed: boolean): string
+	if Classes.bonusAllowed(tier, paidRandomAllowed) then
+		return Classes.oddsText(tier)
+	end
+	return "not offered in your region"
+end
+
 function Classes.oddsText(tier: number): string
 	local odds = Classes.tierInfo(tier).bonusOdds
 	local parts = {}

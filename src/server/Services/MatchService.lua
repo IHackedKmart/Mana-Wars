@@ -425,7 +425,7 @@ local function handOutKits()
 		if c.player and c.player:GetAttribute("DevLoadout") == true then
 			InventoryService.giveDevLoadout(c) -- dev panel: everything, every match
 		end
-		local part = SpellParts.ById[bonus]
+		local part = if bonus then SpellParts.ById[bonus] else nil
 		if c.player and part then
 			FX.announceTo(c.player, "Toast", {
 				text = "Kit bonus: "

@@ -295,7 +295,9 @@ function InventoryService.takeAllAsLoot(c: Combatant): { LootEntry }
 end
 
 -- Hands out a class kit, including its random bonus spell part. Returns the bonus part's id.
-function InventoryService.giveKit(c: Combatant, classId: string): string
+-- Returns the random bonus part handed out (nil where a paid kit's random bonus isn't allowed:
+-- see Classes.bonusAllowed).
+function InventoryService.giveKit(c: Combatant, classId: string): string?
 	local class = Classes.ById[classId] or Classes.ById[Classes.Default]
 	c.classId = class.id
 	local inv = c.inventory
@@ -320,8 +322,14 @@ function InventoryService.giveKit(c: Combatant, classId: string): string
 	for id, n in class.kit.consumables or {} do
 		addConsumable(c, id, n)
 	end
-	local bonus = Classes.rollBonusPart(class, kitRng)
-	addPart(c, bonus, 1)
+	local bonus: string? = nil
+	-- (bots aren't buying anything; players only get a paid kit's random part where allowed)
+	local allowed = c.player == nil or c.player:GetAttribute("PaidRandomAllowed") == true
+	if Classes.bonusAllowed(class.tier, allowed) then
+		local part = Classes.rollBonusPart(class, kitRng)
+		addPart(c, part, 1)
+		bonus = part
+	end
 	inv.equipped = 1
 	InventoryService.refreshTools(c)
 	InventoryService.sync(c)

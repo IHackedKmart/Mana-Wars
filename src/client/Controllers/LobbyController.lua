@@ -87,7 +87,13 @@ local function kitInfo(class: Classes.ClassDef): ItemInfo.Info
 		table.insert(lines, "Potions: " .. table.concat(potions, ", "))
 	end
 	local tier = Classes.tierInfo(class.tier)
-	table.insert(lines, "Bonus: 1 random spell part each match (" .. Classes.oddsText(class.tier) .. ")")
+	local allowed = Players.LocalPlayer:GetAttribute("PaidRandomAllowed") == true
+	table.insert(
+		lines,
+		if Classes.bonusAllowed(class.tier, allowed)
+			then "Bonus: 1 random spell part each match (" .. Classes.oddsText(class.tier) .. ")"
+			else "Bonus: no random spell part (not offered in your region)"
+	)
 	return {
 		title = class.icon .. " " .. class.name,
 		color = Theme.rgb(class.color),
@@ -215,7 +221,9 @@ local function renderClasses()
 			Parent = row,
 		})
 		Widgets.label({
-			Text = "Bonus part each match:\n" .. Classes.oddsText(tier.id),
+			Name = "BonusOdds",
+			Text = "Bonus part each match:\n"
+				.. Classes.bonusText(tier.id, player:GetAttribute("PaidRandomAllowed") == true),
 			TextSize = 11,
 			TextWrapped = true,
 			TextColor3 = C.Dim,
@@ -748,6 +756,7 @@ function LobbyController.init()
 
 	player:GetAttributeChangedSignal("Class"):Connect(updateClassButton)
 	player:GetAttributeChangedSignal("OwnedKits"):Connect(updateClassButton)
+	player:GetAttributeChangedSignal("PaidRandomAllowed"):Connect(updateClassButton)
 	updateClassButton()
 
 	local lastTarget = 0

@@ -151,7 +151,13 @@ local BadgeMock = {
 }
 
 local ServerRunService = Mock.runService(true)
+local policy = { ArePaidRandomItemsRestricted = false }
 local server = Mock.realm({
+	PolicyService = {
+		GetPolicyInfoForPlayerAsync = function()
+			return policy
+		end,
+	},
 	RunService = ServerRunService,
 	Players = PlayersService,
 	TweenService = Mock.TweenService,
@@ -398,8 +404,19 @@ end
 ---------------------------------------------------------------------------
 
 -- 1. Spawn with a class kit: HUD should show the wand.
+server.load("Server/Services/ClassService").checkPolicy(player) -- (the region check for paid random items)
+check(player:GetAttribute("PaidRandomAllowed") == true, "the paid random items check should read PolicyService")
+-- where paid random items are restricted, paid kits leave out their random bonus part
+player:SetAttribute("PaidRandomAllowed", false)
+InventoryService.reset(me)
+check(InventoryService.giveKit(me, "Pyromancer") == nil, "no random bonus part from a paid kit where restricted")
+InventoryService.reset(me)
+local freeBonus = InventoryService.giveKit(me, "Apprentice")
+check(freeBonus ~= nil and (me.inventory.parts[freeBonus] or 0) >= 1, "the free kit's bonus part is always given")
+player:SetAttribute("PaidRandomAllowed", true)
+InventoryService.reset(me)
 local bonus = InventoryService.giveKit(me, "Pyromancer")
-check((me.inventory.parts[bonus] or 0) >= 1, "the kit should hand out its random bonus part")
+check(bonus ~= nil and (me.inventory.parts[bonus] or 0) >= 1, "the kit should hand out its random bonus part")
 Mock.step(0.5, true)
 checkWarnings("boot")
 check(State.inventory ~= nil, "client should receive the inventory")
@@ -625,6 +642,22 @@ local function kitStatus(id: string): string
 	return if status then textOf(status) or "" else ""
 end
 check(string.find(kitStatus("Stormcaller"), "R$240", 1, true) ~= nil, "unowned kits show their price")
+-- the bonus part odds, or (where paid random items are restricted) a note that there isn't one
+local function bonusLine(tierName: string): string
+	local row = kitShop:FindFirstChild("Tier_" .. tierName, true)
+	local label = row and row:FindFirstChild("BonusOdds", true)
+	return if label then textOf(label) or "" else ""
+end
+check(string.find(bonusLine("Copper"), "75% Common", 1, true) ~= nil, "the kit shop shows the bonus part odds")
+player:SetAttribute("PaidRandomAllowed", false)
+Mock.step(0.1, true)
+check(
+	string.find(bonusLine("Copper"), "not offered in your region", 1, true) ~= nil
+		and string.find(bonusLine("Novice"), "100% Common", 1, true) ~= nil,
+	"where paid random items are restricted, the shop says paid kits have no bonus part"
+)
+player:SetAttribute("PaidRandomAllowed", true)
+Mock.step(0.1, true)
 check(string.find(kitStatus("Apprentice"), "SELECTED", 1, true) ~= nil, "the free kit starts selected")
 -- not on sale (no game pass id yet)
 clickNamed(kitShop, "Kit_Archmage")

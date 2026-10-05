@@ -85,7 +85,13 @@ local Players = {
 
 local savedStats = {}
 local leaderboards: { [string]: { [string]: number } } = {}
+local policy = { ArePaidRandomItemsRestricted = false }
 local server = Mock.realm({
+	PolicyService = {
+		GetPolicyInfoForPlayerAsync = function()
+			return policy
+		end,
+	},
 	RunService = Mock.runService(true),
 	Players = Players,
 	ProximityPromptService = { PromptTriggered = Mock.signal() },
@@ -251,6 +257,9 @@ if math.abs(rootZ() - hubZ) > 120 then
 end
 if me and me.queued then
 	fail("new players should not start in the queue")
+end
+if player:GetAttribute("PaidRandomAllowed") ~= true then
+	fail("joining should check whether paid random items are allowed for the player")
 end
 if Mock.repAttributes.Phase ~= "Waiting" or #phasesSeen > 1 then
 	fail("no match should start while nobody is queued (phases: " .. table.concat(phasesSeen, " > ") .. ")")

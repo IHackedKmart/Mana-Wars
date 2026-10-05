@@ -2,9 +2,14 @@
 -- Roblox Premium members get the cheapest tier(s) free, and Studio unlocks everything for testing.
 -- Owned kits are published to the client as the "OwnedKits" attribute (comma separated ids).
 -- The kit a player picks is saved with their profile, so it's still picked next time they play.
+-- Each kit's random bonus spell part is a paid random item: where a player's region restricts
+-- those (PolicyService), paid kits leave it out and the shop says so ("PaidRandomAllowed").
 -- Kits are used in Survival Games and the Battle Royale; duels hand out their own random loadout.
 
 local MarketplaceService = game:GetService("MarketplaceService")
+local okPolicy, PolicyService = pcall(function()
+	return game:GetService("PolicyService")
+end)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -70,8 +75,30 @@ function ClassService.owns(player: Player, classId: string): boolean
 	return set ~= nil and set[classId] == true
 end
 
+-- Asks Roblox whether this player may get paid random items (yields). Until it answers, and if it
+-- can't, they're treated as not allowed, which is the safe side.
+function ClassService.checkPolicy(player: Player)
+	local allowed = false
+	if okPolicy and PolicyService then
+		for _ = 1, 2 do
+			local ok, info = pcall(function()
+				return (PolicyService :: any):GetPolicyInfoForPlayerAsync(player)
+			end)
+			if ok and type(info) == "table" then
+				allowed = info.ArePaidRandomItemsRestricted == false
+				break
+			end
+			task.wait(2)
+		end
+	end
+	player:SetAttribute("PaidRandomAllowed", allowed)
+end
+
 -- Looks up which kit game passes the player owns (yields: one web call per configured pass).
 function ClassService.refresh(player: Player)
+	if player:GetAttribute("PaidRandomAllowed") == nil then
+		task.spawn(ClassService.checkPolicy, player)
+	end
 	local set = owned[player] or {}
 	owned[player] = set
 	for _, class in Classes.List do

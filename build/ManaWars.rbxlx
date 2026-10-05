@@ -871,6 +871,21 @@ function Classes.isFree(class: ClassDef): boolean
 end
 
 -- "75% Common · 25% Uncommon", rarest last.
+-- Whether a kit of this tier hands out its random bonus part. Paid kits only do where the
+-- player's region allows paid random items (PolicyService's ArePaidRandomItemsRestricted, checked
+-- by ClassService); the free kit always does.
+function Classes.bonusAllowed(tier: number, paidRandomAllowed: boolean): boolean
+	return tier == 0 or paidRandomAllowed
+end
+
+-- The bonus part line a shop shows for a tier: the odds, or why there's no bonus part.
+function Classes.bonusText(tier: number, paidRandomAllowed: boolean): string
+	if Classes.bonusAllowed(tier, paidRandomAllowed) then
+		return Classes.oddsText(tier)
+	end
+	return "not offered in your region"
+end
+
 function Classes.oddsText(tier: number): string
 	local odds = Classes.tierInfo(tier).bonusOdds
 	local parts = {}
@@ -18571,9 +18586,14 @@ return ChestService
 -- Roblox Premium members get the cheapest tier(s) free, and Studio unlocks everything for testing.
 -- Owned kits are published to the client as the "OwnedKits" attribute (comma separated ids).
 -- The kit a player picks is saved with their profile, so it's still picked next time they play.
+-- Each kit's random bonus spell part is a paid random item: where a player's region restricts
+-- those (PolicyService), paid kits leave it out and the shop says so ("PaidRandomAllowed").
 -- Kits are used in Survival Games and the Battle Royale; duels hand out their own random loadout.
 
 local MarketplaceService = game:GetService("MarketplaceService")
+local okPolicy, PolicyService = pcall(function()
+	return game:GetService("PolicyService")
+end)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -18639,8 +18659,30 @@ function ClassService.owns(player: Player, classId: string): boolean
 	return set ~= nil and set[classId] == true
 end
 
+-- Asks Roblox whether this player may get paid random items (yields). Until it answers, and if it
+-- can't, they're treated as not allowed, which is the safe side.
+function ClassService.checkPolicy(player: Player)
+	local allowed = false
+	if okPolicy and PolicyService then
+		for _ = 1, 2 do
+			local ok, info = pcall(function()
+				return (PolicyService :: any):GetPolicyInfoForPlayerAsync(player)
+			end)
+			if ok and type(info) == "table" then
+				allowed = info.ArePaidRandomItemsRestricted == false
+				break
+			end
+			task.wait(2)
+		end
+	end
+	player:SetAttribute("PaidRandomAllowed", allowed)
+end
+
 -- Looks up which kit game passes the player owns (yields: one web call per configured pass).
 function ClassService.refresh(player: Player)
+	if player:GetAttribute("PaidRandomAllowed") == nil then
+		task.spawn(ClassService.checkPolicy, player)
+	end
 	local set = owned[player] or {}
 	owned[player] = set
 	for _, class in Classes.List do
@@ -21255,7 +21297,9 @@ function InventoryService.takeAllAsLoot(c: Combatant): { LootEntry }
 end
 
 -- Hands out a class kit, including its random bonus spell part. Returns the bonus part's id.
-function InventoryService.giveKit(c: Combatant, classId: string): string
+-- Returns the random bonus part handed out (nil where a paid kit's random bonus isn't allowed:
+-- see Classes.bonusAllowed).
+function InventoryService.giveKit(c: Combatant, classId: string): string?
 	local class = Classes.ById[classId] or Classes.ById[Classes.Default]
 	c.classId = class.id
 	local inv = c.inventory
@@ -21280,8 +21324,14 @@ function InventoryService.giveKit(c: Combatant, classId: string): string
 	for id, n in class.kit.consumables or {} do
 		addConsumable(c, id, n)
 	end
-	local bonus = Classes.rollBonusPart(class, kitRng)
-	addPart(c, bonus, 1)
+	local bonus: string? = nil
+	-- (bots aren't buying anything; players only get a paid kit's random part where allowed)
+	local allowed = c.player == nil or c.player:GetAttribute("PaidRandomAllowed") == true
+	if Classes.bonusAllowed(class.tier, allowed) then
+		local part = Classes.rollBonusPart(class, kitRng)
+		addPart(c, part, 1)
+		bonus = part
+	end
 	inv.equipped = 1
 	InventoryService.refreshTools(c)
 	InventoryService.sync(c)
@@ -22877,7 +22927,7 @@ local function handOutKits()
 		if c.player and c.player:GetAttribute("DevLoadout") == true then
 			InventoryService.giveDevLoadout(c) -- dev panel: everything, every match
 		end
-		local part = SpellParts.ById[bonus]
+		local part = if bonus then SpellParts.ById[bonus] else nil
 		if c.player and part then
 			FX.announceTo(c.player, "Toast", {
 				text = "Kit bonus: "
@@ -34775,7 +34825,13 @@ local function kitInfo(class: Classes.ClassDef): ItemInfo.Info
 		table.insert(lines, "Potions: " .. table.concat(potions, ", "))
 	end
 	local tier = Classes.tierInfo(class.tier)
-	table.insert(lines, "Bonus: 1 random spell part each match (" .. Classes.oddsText(class.tier) .. ")")
+	local allowed = Players.LocalPlayer:GetAttribute("PaidRandomAllowed") == true
+	table.insert(
+		lines,
+		if Classes.bonusAllowed(class.tier, allowed)
+			then "Bonus: 1 random spell part each match (" .. Classes.oddsText(class.tier) .. ")"
+			else "Bonus: no random spell part (not offered in your region)"
+	)
 	return {
 		title = class.icon .. " " .. class.name,
 		color = Theme.rgb(class.color),
@@ -34903,7 +34959,9 @@ local function renderClasses()
 			Parent = row,
 		})
 		Widgets.label({
-			Text = "Bonus part each match:\n" .. Classes.oddsText(tier.id),
+			Name = "BonusOdds",
+			Text = "Bonus part each match:\n"
+				.. Classes.bonusText(tier.id, player:GetAttribute("PaidRandomAllowed") == true),
 			TextSize = 11,
 			TextWrapped = true,
 			TextColor3 = C.Dim,
@@ -35436,6 +35494,7 @@ function LobbyController.init()
 
 	player:GetAttributeChangedSignal("Class"):Connect(updateClassButton)
 	player:GetAttributeChangedSignal("OwnedKits"):Connect(updateClassButton)
+	player:GetAttributeChangedSignal("PaidRandomAllowed"):Connect(updateClassButton)
 	updateClassButton()
 
 	local lastTarget = 0
