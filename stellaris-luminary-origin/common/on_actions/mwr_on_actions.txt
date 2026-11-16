@@ -1,0 +1,6 @@
+on_game_start_country = {
+	events = { mwr_luminary.1 }
+}
+on_leader_death = {
+	events = { mwr_luminary.5 }
+}

@@ -1,0 +1,18 @@
+# The Luminary: legendary ruler (Under One Rule) whose mind cannot be touched (Mindwardens)
+leader_trait_mwr_luminary = {
+	cost = 0
+	leader_trait = all
+	leader_class = { official commander scientist }
+	icon = "gfx/interface/icons/traits/leader_traits/leader_trait_legendary_leader.dds"
+	destiny_trait = yes
+	initial = no
+	randomized = no
+	councilor_modifier = { country_unity_produces_mult = 0.15 }
+	self_modifier = { species_leader_exp_gain = 0.25 }
+	modifier = {
+		pop_happiness = 0.10
+		pop_government_ethic_attraction = 0.25
+		country_edict_fund_add = 25
+	}
+	ai_categories = { politics }
+}

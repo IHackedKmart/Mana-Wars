@@ -1,0 +1,75 @@
+namespace = mwr_luminary
+
+# Setup: nuked capital, the Luminary takes the throne
+country_event = {
+	id = mwr_luminary.1
+	hide_window = yes
+	is_triggered_only = yes
+	trigger = { has_origin = origin_mwr_luminary }
+	immediate = {
+		capital_scope = {
+			change_pc = pc_nuked
+			add_modifier = { modifier = mwr_mindward_bastion days = -1 }
+			add_modifier = { modifier = mwr_whispering_scars days = -1 }
+			add_deposit = d_ruined_cities
+			add_deposit = d_ruined_cities
+		}
+		add_modifier = { modifier = mwr_oath_of_stars days = -1 }
+		ruler = {
+			add_trait = leader_trait_mwr_luminary
+			set_immortal = yes
+			set_leader_flag = mwr_the_luminary
+		}
+		country_event = { id = mwr_luminary.2 days = 2 }
+		country_event = { id = mwr_luminary.3 days = 3600 random = 720 }
+	}
+}
+
+country_event = {
+	id = mwr_luminary.2
+	title = mwr_luminary.2.name
+	desc = mwr_luminary.2.desc
+	picture = GFX_evt_burning_settlement
+	is_triggered_only = yes
+	option = { name = mwr_luminary.2.a }
+}
+
+country_event = {
+	id = mwr_luminary.3
+	title = mwr_luminary.3.name
+	desc = mwr_luminary.3.desc
+	picture = GFX_evt_psionic_storm
+	is_triggered_only = yes
+	trigger = { has_origin = origin_mwr_luminary }
+	option = {
+		name = mwr_luminary.3.a
+		capital_scope = { remove_modifier = mwr_whispering_scars }
+		add_resource = { unity = 500 }
+	}
+	option = {
+		name = mwr_luminary.3.b
+		capital_scope = { remove_modifier = mwr_whispering_scars }
+		add_tech_progress = { tech = tech_psionic_theory progress = 0.5 }
+	}
+}
+
+country_event = {
+	id = mwr_luminary.4
+	title = mwr_luminary.4.name
+	desc = mwr_luminary.4.desc
+	picture = GFX_evt_funeral
+	is_triggered_only = yes
+	option = {
+		name = mwr_luminary.4.a
+		remove_modifier = mwr_oath_of_stars
+		add_resource = { unity = 1000 }
+	}
+}
+
+leader_event = {
+	id = mwr_luminary.5
+	hide_window = yes
+	is_triggered_only = yes
+	trigger = { has_leader_flag = mwr_the_luminary }
+	immediate = { owner = { country_event = { id = mwr_luminary.4 } } }
+}

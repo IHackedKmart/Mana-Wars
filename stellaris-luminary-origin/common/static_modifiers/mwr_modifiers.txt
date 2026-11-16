@@ -1,0 +1,23 @@
+# Capital: warded vaults that sheltered the survivors from the Whisperers
+mwr_mindward_bastion = {
+	icon = "gfx/interface/icons/planet_modifiers/pm_frontier.dds"
+	icon_frame = 2
+	planet_stability_add = 10
+	planet_crime_reduction = 0.25
+	planet_jobs_unity_produces_mult = 0.10
+}
+# Country: the oath to follow the Luminary to the stars
+mwr_oath_of_stars = {
+	icon = "gfx/interface/icons/planet_modifiers/pm_frontier.dds"
+	icon_frame = 1
+	country_unity_produces_mult = 0.10
+	country_influence_produces_add = 1
+	planet_colony_development_speed_mult = 0.25
+}
+# Lingering hold of the otherworldly manipulators (cleared by event)
+mwr_whispering_scars = {
+	icon = "gfx/interface/icons/planet_modifiers/pm_frontier.dds"
+	icon_frame = 3
+	planet_stability_add = -5
+	planet_amenities_mult = -0.10
+}

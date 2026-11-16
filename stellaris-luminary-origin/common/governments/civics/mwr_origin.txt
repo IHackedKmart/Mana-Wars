@@ -1,0 +1,21 @@
+# Children of the Luminary: Mindwardens + Post-Apocalyptic + Under One Rule
+origin_mwr_luminary = {
+	is_origin = yes
+	icon = "gfx/interface/icons/origins/origins_post_apocalyptic.dds"
+	picture = GFX_origin_post_apocalyptic
+	playable = { always = yes }
+	potential = {
+		authority = { NOT = { value = auth_corporate } }
+		country_type = { NOT = { value = primitive } }
+	}
+	possible = {
+		authority = { value = auth_dictatorial value = auth_imperial text = civic_tooltip_dictatorial_or_imperial }
+		ethics = { NOT = { value = ethic_gestalt_consciousness } }
+		civics = { NOR = { value = civic_fanatic_purifiers } }
+	}
+	# Survivors of the nuclear catastrophe (Post-Apocalyptic)
+	traits = { trait = trait_survivor }
+	habitability_preference = pc_nuked
+	description = "civic_tooltip_mwr_luminary_effects"
+	random_weight = { base = 5 }
+}
