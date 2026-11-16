@@ -20,7 +20,10 @@ country_event = {
 			set_immortal = yes
 			set_leader_flag = mwr_the_luminary
 		}
-		country_event = { id = mwr_luminary.2 days = 2 }
+		country_event = { id = mwr_prologue.1 days = 1 }
+		start_situation = { type = situation_mwr_holdouts target = capital_scope }
+		start_situation = { type = situation_mwr_whisperers target = capital_scope }
+		country_event = { id = mwr_vaults.1 days = 1800 random = 720 }
 		country_event = { id = mwr_luminary.3 days = 3600 random = 720 }
 	}
 }
@@ -63,6 +66,7 @@ country_event = {
 		name = mwr_luminary.4.a
 		remove_modifier = mwr_oath_of_stars
 		add_resource = { unity = 1000 }
+		start_situation = { type = situation_mwr_fading_light target = capital_scope }
 	}
 }
 

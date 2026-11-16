@@ -1,0 +1,104 @@
+# The Last Holdouts (civil war remnants) - progress = pacification
+situation_mwr_holdouts = {
+	picture = GFX_evt_burning_settlement
+	icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+	start_progress = 10
+	monthly_progress = {
+		base = 0.5
+		modifier = { add = 0.5 owner = { has_country_flag = mwr_holdouts_crush } }
+		modifier = { add = 0.25 owner = { has_country_flag = mwr_holdouts_reconcile } }
+	}
+	approaches = {
+		situation_mwr_holdouts_crush = {
+			icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			default = yes
+			on_select = { owner = { set_country_flag = mwr_holdouts_crush remove_country_flag = mwr_holdouts_reconcile } }
+			modifier = { country_unity_produces_mult = -0.05 }
+		}
+		situation_mwr_holdouts_reconcile = {
+			icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			on_select = { owner = { set_country_flag = mwr_holdouts_reconcile remove_country_flag = mwr_holdouts_crush } }
+			modifier = { country_influence_produces_add = -1 }
+		}
+	}
+	stages = {
+		situation_mwr_holdouts_1 = { end = 40 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			modifier = { planet_stability_add = -10 planet_crime_add = 10 } }
+		situation_mwr_holdouts_2 = { end = 80 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			on_first_enter = { owner = { country_event = { id = mwr_holdouts.2 } } }
+			modifier = { planet_stability_add = -5 } }
+		situation_mwr_holdouts_3 = { end = 100 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			on_first_enter = { owner = { country_event = { id = mwr_holdouts.3 } } } }
+	}
+	on_progress_complete = { owner = { country_event = { id = mwr_holdouts.4 } } }
+}
+
+# The Whisperers (Mindwardens) - progress = how close the entities are to breaking through
+situation_mwr_whisperers = {
+	picture = GFX_evt_psionic_storm
+	icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+	start_progress = 20
+	monthly_progress = {
+		base = 0.3
+		modifier = { add = -0.6 owner = { has_country_flag = mwr_wards_strengthened } }
+		modifier = { add = -0.3 owner = { has_technology = tech_psionic_theory } }
+		modifier = { add = 0.3 owner = { NOT = { any_owned_leader = { has_leader_flag = mwr_the_luminary } } } }
+	}
+	approaches = {
+		situation_mwr_whisperers_maintain = {
+			icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			default = yes
+			on_select = { owner = { remove_country_flag = mwr_wards_strengthened } }
+		}
+		situation_mwr_whisperers_strengthen = {
+			icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			on_select = { owner = { set_country_flag = mwr_wards_strengthened } }
+			modifier = { country_energy_produces_mult = -0.10 country_unity_produces_mult = -0.05 }
+		}
+	}
+	stages = {
+		situation_mwr_whisperers_1 = { end = 33 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds" }
+		situation_mwr_whisperers_2 = { end = 66 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			on_first_enter = { owner = { country_event = { id = mwr_whisper.2 } } }
+			modifier = { planet_stability_add = -5 } }
+		situation_mwr_whisperers_3 = { end = 100 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			on_first_enter = { owner = { country_event = { id = mwr_whisper.3 } } }
+			modifier = { planet_stability_add = -15 planet_jobs_produces_mult = -0.10 } }
+	}
+	on_progress_complete = { owner = { country_event = { id = mwr_whisper.4 } } }
+	on_progress_zero = { owner = { country_event = { id = mwr_whisper.5 } } }
+}
+
+# The Fading Light (succession war after the Luminary dies) - progress = order restored
+situation_mwr_fading_light = {
+	picture = GFX_evt_funeral
+	icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+	start_progress = 50
+	monthly_progress = {
+		base = -0.5
+		modifier = { add = 1 owner = { has_country_flag = mwr_succ_legacy } }
+		modifier = { add = 1.5 owner = { has_country_flag = mwr_succ_force } }
+	}
+	approaches = {
+		situation_mwr_fading_light_legacy = {
+			icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			default = yes
+			on_select = { owner = { set_country_flag = mwr_succ_legacy remove_country_flag = mwr_succ_force } }
+			modifier = { country_influence_produces_add = -1 }
+		}
+		situation_mwr_fading_light_force = {
+			icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			on_select = { owner = { set_country_flag = mwr_succ_force remove_country_flag = mwr_succ_legacy } }
+			modifier = { pop_happiness = -0.10 country_naval_cap_mult = -0.10 }
+		}
+	}
+	stages = {
+		situation_mwr_fading_light_1 = { end = 30 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			modifier = { planet_stability_add = -15 } }
+		situation_mwr_fading_light_2 = { end = 70 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds"
+			modifier = { planet_stability_add = -5 } }
+		situation_mwr_fading_light_3 = { end = 100 icon = "gfx/interface/icons/situation_log/situation_log_situation.dds" }
+	}
+	on_progress_complete = { owner = { country_event = { id = mwr_succession.2 } } }
+	on_progress_zero = { owner = { country_event = { id = mwr_succession.3 } } }
+}

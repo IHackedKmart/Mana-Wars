@@ -4,3 +4,6 @@ on_game_start_country = {
 on_leader_death = {
 	events = { mwr_luminary.5 }
 }
+on_yearly_pulse_country = {
+	events = { mwr_promise.100 }
+}

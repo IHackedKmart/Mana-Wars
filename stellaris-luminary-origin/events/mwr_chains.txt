@@ -1,0 +1,117 @@
+############ PROLOGUE: The Madness, the Burning, the Conquest ############
+namespace = mwr_prologue
+
+country_event = { id = mwr_prologue.1 title = mwr_prologue.1.name desc = mwr_prologue.1.desc
+	picture = GFX_evt_psionic_storm is_triggered_only = yes
+	option = { name = mwr_prologue.1.a add_modifier = { modifier = mwr_purged_the_touched days = 7200 }
+		country_event = { id = mwr_prologue.2 days = 3 } }
+	option = { name = mwr_prologue.1.b add_modifier = { modifier = mwr_healed_the_touched days = 7200 }
+		country_event = { id = mwr_prologue.2 days = 3 } }
+}
+country_event = { id = mwr_prologue.2 title = mwr_prologue.2.name desc = mwr_prologue.2.desc
+	picture = GFX_evt_burning_settlement is_triggered_only = yes
+	option = { name = mwr_prologue.2.a add_resource = { minerals = 300 } country_event = { id = mwr_prologue.3 days = 3 } }
+	option = { name = mwr_prologue.2.b add_resource = { society_research = 300 } country_event = { id = mwr_prologue.3 days = 3 } }
+}
+country_event = { id = mwr_prologue.3 title = mwr_prologue.3.name desc = mwr_prologue.3.desc
+	picture = GFX_evt_ground_combat is_triggered_only = yes
+	option = { name = mwr_prologue.3.a add_modifier = { modifier = mwr_iron_conquest days = 7200 } country_event = { id = mwr_prologue.4 days = 3 } }
+	option = { name = mwr_prologue.3.b add_modifier = { modifier = mwr_gentle_conquest days = 7200 } country_event = { id = mwr_prologue.4 days = 3 } }
+	option = { name = mwr_prologue.3.c add_modifier = { modifier = mwr_wardcraft days = 7200 } country_event = { id = mwr_prologue.4 days = 3 } }
+}
+# The Unifying Promise: the Luminary swears three oaths
+country_event = { id = mwr_prologue.4 title = mwr_prologue.4.name desc = mwr_prologue.4.desc
+	picture = GFX_evt_throne_room is_triggered_only = yes
+	immediate = { set_country_flag = mwr_promises_active set_variable = { which = mwr_promise_year value = 0 } }
+	option = { name = mwr_prologue.4.a country_event = { id = mwr_luminary.2 days = 2 } }
+}
+
+############ THE UNIFYING PROMISE (checked yearly) ############
+namespace = mwr_promise
+
+country_event = { id = mwr_promise.100 hide_window = yes is_triggered_only = yes
+	trigger = { has_country_flag = mwr_promises_active }
+	immediate = {
+		change_variable = { which = mwr_promise_year value = 1 }
+		# Promise 1: Leave the ashes - 3 worlds within 20 years
+		if = { limit = { NOT = { has_country_flag = mwr_p1_done } num_owned_planets >= 3 }
+			set_country_flag = mwr_p1_done country_event = { id = mwr_promise.1 } }
+		else_if = { limit = { NOT = { has_country_flag = mwr_p1_done } check_variable = { which = mwr_promise_year value >= 20 } }
+			set_country_flag = mwr_p1_done set_country_flag = mwr_p_broken country_event = { id = mwr_promise.11 } }
+		# Promise 2: Never again - Psionic Theory within 30 years
+		if = { limit = { NOT = { has_country_flag = mwr_p2_done } has_technology = tech_psionic_theory }
+			set_country_flag = mwr_p2_done country_event = { id = mwr_promise.2 } }
+		else_if = { limit = { NOT = { has_country_flag = mwr_p2_done } check_variable = { which = mwr_promise_year value >= 30 } }
+			set_country_flag = mwr_p2_done set_country_flag = mwr_p_broken country_event = { id = mwr_promise.12 } }
+		# Promise 3: Rebuild - Healthy capital (heal the tomb world) within 40 years
+		if = { limit = { NOT = { has_country_flag = mwr_p3_done } capital_scope = { NOT = { has_modifier = mwr_whispering_scars } } num_owned_planets >= 6 }
+			set_country_flag = mwr_p3_done country_event = { id = mwr_promise.3 } }
+		else_if = { limit = { NOT = { has_country_flag = mwr_p3_done } check_variable = { which = mwr_promise_year value >= 40 } }
+			set_country_flag = mwr_p3_done set_country_flag = mwr_p_broken country_event = { id = mwr_promise.13 } }
+		if = { limit = { has_country_flag = mwr_p1_done has_country_flag = mwr_p2_done has_country_flag = mwr_p3_done }
+			remove_country_flag = mwr_promises_active country_event = { id = mwr_promise.20 } }
+	}
+}
+country_event = { id = mwr_promise.1 title = mwr_promise.1.name desc = mwr_promise.1.desc picture = GFX_evt_colony_ship is_triggered_only = yes
+	option = { name = mwr_promise.kept add_modifier = { modifier = mwr_promise_kept days = 3600 } add_resource = { unity = 300 } } }
+country_event = { id = mwr_promise.2 title = mwr_promise.2.name desc = mwr_promise.2.desc picture = GFX_evt_psionic_storm is_triggered_only = yes
+	option = { name = mwr_promise.kept add_modifier = { modifier = mwr_promise_kept days = 3600 } add_resource = { society_research = 1000 } } }
+country_event = { id = mwr_promise.3 title = mwr_promise.3.name desc = mwr_promise.3.desc picture = GFX_evt_city_planet is_triggered_only = yes
+	option = { name = mwr_promise.kept add_modifier = { modifier = mwr_promise_kept days = 3600 } add_resource = { influence = 150 } } }
+country_event = { id = mwr_promise.11 title = mwr_promise.11.name desc = mwr_promise.broken.desc picture = GFX_evt_unhappy is_triggered_only = yes
+	option = { name = mwr_promise.broken add_modifier = { modifier = mwr_promise_broken days = 1800 } } }
+country_event = { id = mwr_promise.12 title = mwr_promise.12.name desc = mwr_promise.broken.desc picture = GFX_evt_unhappy is_triggered_only = yes
+	option = { name = mwr_promise.broken add_modifier = { modifier = mwr_promise_broken days = 1800 } } }
+country_event = { id = mwr_promise.13 title = mwr_promise.13.name desc = mwr_promise.broken.desc picture = GFX_evt_unhappy is_triggered_only = yes
+	option = { name = mwr_promise.broken add_modifier = { modifier = mwr_promise_broken days = 1800 } } }
+country_event = { id = mwr_promise.20 title = mwr_promise.20.name desc = mwr_promise.20.desc picture = GFX_evt_throne_room is_triggered_only = yes
+	option = { name = mwr_promise.20.a trigger = { NOT = { has_country_flag = mwr_p_broken } }
+		add_modifier = { modifier = mwr_starborne_dream days = -1 } }
+	option = { name = mwr_promise.20.b trigger = { has_country_flag = mwr_p_broken }
+		add_resource = { unity = 500 } } }
+
+############ THE LAST HOLDOUTS ############
+namespace = mwr_holdouts
+country_event = { id = mwr_holdouts.2 title = mwr_holdouts.2.name desc = mwr_holdouts.2.desc picture = GFX_evt_ground_combat is_triggered_only = yes
+	option = { name = mwr_holdouts.2.a add_resource = { minerals = 200 } }
+	option = { name = mwr_holdouts.2.b add_resource = { unity = 200 } } }
+country_event = { id = mwr_holdouts.3 title = mwr_holdouts.3.name desc = mwr_holdouts.3.desc picture = GFX_evt_throne_room is_triggered_only = yes
+	option = { name = mwr_holdouts.3.a } }
+country_event = { id = mwr_holdouts.4 title = mwr_holdouts.4.name desc = mwr_holdouts.4.desc picture = GFX_evt_throne_room is_triggered_only = yes
+	immediate = { remove_country_flag = mwr_holdouts_crush remove_country_flag = mwr_holdouts_reconcile }
+	option = { name = mwr_holdouts.4.a capital_scope = { add_modifier = { modifier = mwr_world_unified days = -1 } } } }
+
+############ THE WHISPERERS ############
+namespace = mwr_whisper
+country_event = { id = mwr_whisper.2 title = mwr_whisper.2.name desc = mwr_whisper.2.desc picture = GFX_evt_psionic_storm is_triggered_only = yes
+	option = { name = mwr_whisper.2.a add_resource = { energy = -200 } }
+	option = { name = mwr_whisper.2.b capital_scope = { add_modifier = { modifier = mwr_whisper_dreams days = 1800 } } } }
+country_event = { id = mwr_whisper.3 title = mwr_whisper.3.name desc = mwr_whisper.3.desc picture = GFX_evt_psionic_storm is_triggered_only = yes
+	option = { name = mwr_whisper.3.a } }
+# Breakthrough: the Madness returns
+country_event = { id = mwr_whisper.4 title = mwr_whisper.4.name desc = mwr_whisper.4.desc picture = GFX_evt_burning_settlement is_triggered_only = yes
+	option = { name = mwr_whisper.4.a
+		every_owned_planet = { add_modifier = { modifier = mwr_whisper_madness days = 3600 } }
+		capital_scope = { start_situation = { type = situation_mwr_whisperers target = this } } } }
+# Wards sealed for good
+country_event = { id = mwr_whisper.5 title = mwr_whisper.5.name desc = mwr_whisper.5.desc picture = GFX_evt_throne_room is_triggered_only = yes
+	option = { name = mwr_whisper.5.a remove_country_flag = mwr_wards_strengthened
+		every_owned_planet = { add_modifier = { modifier = mwr_mindwarded days = -1 } } } }
+
+############ THE SEALED VAULTS (Post-Apocalyptic) ############
+namespace = mwr_vaults
+country_event = { id = mwr_vaults.1 title = mwr_vaults.1.name desc = mwr_vaults.1.desc picture = GFX_evt_underground_civilization is_triggered_only = yes
+	option = { name = mwr_vaults.1.a add_resource = { energy = -100 } country_event = { id = mwr_vaults.2 days = 360 } }
+	option = { name = mwr_vaults.1.b add_resource = { minerals = 250 } } }
+country_event = { id = mwr_vaults.2 title = mwr_vaults.2.name desc = mwr_vaults.2.desc picture = GFX_evt_underground_civilization is_triggered_only = yes
+	option = { name = mwr_vaults.2.a add_modifier = { modifier = mwr_vault_archives days = -1 } country_event = { id = mwr_vaults.3 days = 1800 } } }
+country_event = { id = mwr_vaults.3 title = mwr_vaults.3.name desc = mwr_vaults.3.desc picture = GFX_evt_city_planet is_triggered_only = yes
+	option = { name = mwr_vaults.3.a capital_scope = { add_modifier = { modifier = mwr_reclaimed_land days = -1 } } }
+	option = { name = mwr_vaults.3.b capital_scope = { add_deposit = d_ruined_cities } add_resource = { unity = 400 } } }
+
+############ THE FADING LIGHT (succession war) ############
+namespace = mwr_succession
+country_event = { id = mwr_succession.2 title = mwr_succession.2.name desc = mwr_succession.2.desc picture = GFX_evt_throne_room is_triggered_only = yes
+	option = { name = mwr_succession.2.a add_modifier = { modifier = mwr_legacy_of_light days = -1 } } }
+country_event = { id = mwr_succession.3 title = mwr_succession.3.name desc = mwr_succession.3.desc picture = GFX_evt_burning_settlement is_triggered_only = yes
+	option = { name = mwr_succession.3.a add_modifier = { modifier = mwr_shattered_legacy days = 3600 } } }
